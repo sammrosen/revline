@@ -31,7 +31,7 @@ export default function FIT1Page() {
         </div>
       </section>
 
-      {/* Who It's For Section */}
+      {/* Who It's For Section  */}
       <section className="border-b border-zinc-800/50">
         <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
           <div className="max-w-3xl mx-auto">
