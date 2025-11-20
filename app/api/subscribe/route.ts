@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { GROUP_ID_MAP } from '@/app/_config/mailerlite';
+import { addSubscriberToGroup, validateMailerLiteConfig } from '@/app/_lib/mailerlite';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, name, listId } = body;
+    const { email, name, source } = body;
 
     // Validate email
     if (!email || !email.includes('@')) {
@@ -15,105 +17,42 @@ export async function POST(request: NextRequest) {
 
     // Get API key from environment variables
     const apiKey = process.env.MAILERLITE_API_KEY;
-    
-    if (!apiKey) {
-      console.error('MAILERLITE_API_KEY is not set in environment variables');
+
+    // Map source identifier to group ID (server-side only)
+    const sourceKey = (source || 'DEFAULT').toUpperCase();
+    const groupId = GROUP_ID_MAP[sourceKey];
+
+    // Validate configuration
+    const configValidation = validateMailerLiteConfig(apiKey, groupId);
+    if (!configValidation.valid) {
+      console.error(`Configuration error for source ${sourceKey}:`, configValidation.error);
       return NextResponse.json(
         { error: 'Server configuration error' },
         { status: 500 }
       );
     }
 
-    // Use provided listId or default from env
-    const groupId = listId || process.env.MAILERLITE_GROUP_ID;
+    // Add subscriber to MailerLite group
+    const result = await addSubscriberToGroup({
+      email,
+      name,
+      groupId: groupId!,
+      apiKey: apiKey!,
+    });
 
-    if (!groupId) {
-      console.error('MAILERLITE_GROUP_ID is not set');
+    if (!result.success) {
       return NextResponse.json(
-        { error: 'Server configuration error' },
+        { error: result.error || 'Failed to subscribe' },
         { status: 500 }
-      );
-    }
-
-    // Call MailerLite API
-    // Docs: https://developers.mailerlite.com/docs/subscribers
-    const response = await fetch(
-      `https://connect.mailerlite.com/api/subscribers`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'X-Version': '2024-11-20', // Lock API version to current date
-        },
-        body: JSON.stringify({
-          email,
-          fields: {
-            name: name || '',
-          },
-          groups: [groupId],
-          status: 'active',
-        }),
-      }
-    );
-
-    // Log rate limit headers for monitoring
-    const rateLimit = response.headers.get('X-RateLimit-Limit');
-    const rateRemaining = response.headers.get('X-RateLimit-Remaining');
-    const retryAfter = response.headers.get('Retry-After');
-    
-    if (rateRemaining && parseInt(rateRemaining) < 10) {
-      console.warn(`MailerLite rate limit warning: ${rateRemaining}/${rateLimit} requests remaining`);
-    }
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      // MailerLite returns specific error messages
-      console.error('MailerLite API error:', {
-        status: response.status,
-        data,
-        rateLimit: { limit: rateLimit, remaining: rateRemaining }
-      });
-      
-      // Handle rate limiting
-      if (response.status === 429) {
-        return NextResponse.json(
-          { error: `Too many requests. Please try again in ${retryAfter || 60} seconds.` },
-          { status: 429 }
-        );
-      }
-
-      // Handle duplicate subscriber (422 validation error)
-      if (response.status === 422 && data.message?.toLowerCase().includes('already')) {
-        return NextResponse.json(
-          { message: 'You are already subscribed!' },
-          { status: 200 }
-        );
-      }
-
-      // Handle validation errors
-      if (response.status === 422) {
-        const errorMessage = data.message || 'Invalid email address or data';
-        return NextResponse.json(
-          { error: errorMessage },
-          { status: 400 }
-        );
-      }
-
-      return NextResponse.json(
-        { error: data.message || 'Failed to subscribe' },
-        { status: response.status }
       );
     }
 
     return NextResponse.json(
       { 
-        message: 'Successfully subscribed!',
+        message: result.message || 'Successfully subscribed!',
         subscriber: {
-          email: data.email,
-          id: data.id,
+          email,
+          id: result.subscriberId,
         }
       },
       { status: 200 }

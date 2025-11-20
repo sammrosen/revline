@@ -1,5 +1,5 @@
 // Uncomment to use email capture on this page:
-// import EmailCapture from '@/app/components/EmailCapture';
+// import EmailCapture from '@/app/_components/EmailCapture';
 
 export default function Home() {
   return (

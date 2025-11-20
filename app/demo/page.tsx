@@ -1,4 +1,4 @@
-import EmailCapture from '@/app/components/EmailCapture';
+import EmailCapture from '@/app/_components/EmailCapture';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -30,6 +30,7 @@ export default function DemoPage() {
             namePlaceholder="Your name"
             inline={false}
             className="max-w-md mx-auto"
+            source="demo"
           />
         </div>
 
