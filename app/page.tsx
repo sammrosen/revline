@@ -1,3 +1,6 @@
+// Uncomment to use email capture on this page:
+// import EmailCapture from '@/app/components/EmailCapture';
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-black text-zinc-50 font-sans">
@@ -30,6 +33,18 @@ export default function Home() {
               Work With Me
             </a>
           </div>
+
+          {/* Email Capture Example - Uncomment to add email collection in hero */}
+          {/* 
+          <div className="pt-12">
+            <EmailCapture 
+              buttonText="Get Early Access"
+              placeholder="Enter your email for updates"
+              inline={true}
+              className="flex justify-center"
+            />
+          </div>
+          */}
         </div>
       </section>
 
@@ -305,6 +320,26 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Email Capture Example - Newsletter/Waitlist Section */}
+      {/* Uncomment to add a pre-footer email capture section
+      <section className="py-20 px-6 border-t border-zinc-900/50">
+        <div className="max-w-4xl mx-auto text-center space-y-8">
+          <h3 className="text-3xl md:text-4xl font-bold">
+            Join the Waitlist
+          </h3>
+          <p className="text-lg text-zinc-400">
+            Get notified when we launch new automation templates and tools.
+          </p>
+          <EmailCapture 
+            buttonText="Join Waitlist"
+            placeholder="Your email address"
+            inline={true}
+            className="flex justify-center"
+          />
+        </div>
+      </section>
+      */}
 
       {/* Footer */}
       <footer className="border-t border-zinc-900/50 py-20 px-6">

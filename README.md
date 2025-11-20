@@ -52,6 +52,112 @@ Right now, pages are self-contained for quick iteration. When you're ready to ma
 - **Tailwind CSS v4** - Utility-first styling
 - **TypeScript** - Type safety
 
+## Integrations
+
+This project includes serverless integrations for email capture, payments, and booking that can be used across any landing page.
+
+### MailerLite (Email Capture)
+
+**Setup:**
+
+1. Get your API key from [MailerLite Dashboard](https://dashboard.mailerlite.com/integrations/api)
+2. Find your Group/List ID in your MailerLite dashboard under Groups
+3. Add to `.env.local`:
+   ```bash
+   MAILERLITE_API_KEY=your_api_key_here
+   MAILERLITE_GROUP_ID=your_group_id_here
+   ```
+
+**Usage:**
+
+Import and use the `EmailCapture` component anywhere on your landing pages:
+
+```tsx
+import EmailCapture from '@/app/components/EmailCapture';
+
+// Simple inline form
+<EmailCapture 
+  buttonText="Get Early Access"
+  placeholder="Enter your email"
+/>
+
+// Stacked form with custom list
+<EmailCapture 
+  buttonText="Join Waitlist"
+  placeholder="Your email address"
+  listId="custom_list_id"
+  inline={false}
+/>
+```
+
+**Props:**
+- `buttonText` (optional) - CTA button text, default: "Subscribe"
+- `placeholder` (optional) - Input placeholder, default: "Enter your email"
+- `listId` (optional) - Override default MailerLite group ID
+- `inline` (optional) - Horizontal layout (true) or stacked (false), default: true
+- `className` (optional) - Additional CSS classes for the container
+
+The component handles:
+- Email validation
+- Loading states
+- Success/error messages
+- Duplicate subscriber detection
+- Auto-reset after 5 seconds
+
+### Stripe (Payments)
+
+**Setup:**
+
+1. Create a [Stripe Payment Link](https://dashboard.stripe.com/payment-links) or Checkout Session
+2. Copy the URL
+
+**Usage:**
+
+Simply replace the `href="#"` in any button/link with your Stripe URL:
+
+```tsx
+// Before (TODO)
+<a href="#">Buy Now</a>
+
+// After
+<a href="https://buy.stripe.com/your-link-here">Buy Now</a>
+```
+
+For test mode, use test payment links. For production, use live payment links.
+
+### Calendly (Booking)
+
+**Setup:**
+
+1. Get your Calendly scheduling link from [Calendly Dashboard](https://calendly.com/)
+2. Copy the URL (e.g., `https://calendly.com/yourname/30min`)
+
+**Usage:**
+
+Replace the `href="#"` in any booking button with your Calendly URL:
+
+```tsx
+// Before (TODO)
+<a href="#">Book a Call</a>
+
+// After
+<a href="https://calendly.com/yourname/30min">Book a Call</a>
+```
+
+**Advanced:** For embedded Calendly widgets, add the [Calendly embed script](https://help.calendly.com/hc/en-us/articles/223147027-Embed-options-overview) to your page.
+
+### Environment Variables
+
+Required for production deployment:
+
+```bash
+MAILERLITE_API_KEY=your_mailerlite_api_key
+MAILERLITE_GROUP_ID=your_mailerlite_group_id
+```
+
+**Vercel Deployment:**
+Add these in Project Settings → Environment Variables
+
 ## Development
 
 Run the development server:
