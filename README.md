@@ -1,36 +1,93 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Marketing Site & Landing Pages
 
-## Getting Started
+This is a Next.js marketing site built for hosting multiple landing pages over time. Features clean, minimal design aesthetics for different business offerings.
 
-First, run the development server:
+## What This Is
+
+A centralized repo for marketing pages and landing pages. Built with Next.js 16, React 19, and Tailwind CSS v4.
+
+**Current Pages:**
+- `/` - Sam Rosen Business (automation systems for small businesses)
+  - Ultra-minimal James Smith-style aesthetic
+  - Pure black/white with minimal accents
+  - Lots of negative space
+  - Bold, large typography
+  - "Engineered, not hype" vibe
+  
+- `/fit1` - FIT1 coaching program (elite training + app hybrid)
+  - Dark premium fitness aesthetic
+  - Zinc color palette
+  - Detailed sections with clear hierarchy
+  - Testimonials, pricing, FAQ structure
+
+## How to Create Multiple Landing Pages
+
+This repo uses Next.js App Router, where each route is defined by folder structure:
+
+### Adding a New Landing Page
+
+1. Create a new folder in `app/`:
+   ```
+   app/summer-promo/page.tsx  → accessible at /summer-promo
+   app/fit2/page.tsx          → accessible at /fit2
+   app/challenge/page.tsx     → accessible at /challenge
+   ```
+
+2. Copy the structure from `app/page.tsx` as a starting point
+3. Customize the content for your new offer
+4. Deploy and share the specific URL
+
+### Future Modularity
+
+Right now, pages are self-contained for quick iteration. When you're ready to make it more modular:
+
+- Extract common sections (Hero, CTA, FAQ, Testimonials) into `app/components/`
+- Create reusable component props for different content
+- Build a section library you can mix and match
+
+## Tech Stack
+
+- **Next.js 16** - React framework with App Router
+- **React 19** - UI library
+- **Tailwind CSS v4** - Utility-first styling
+- **TypeScript** - Type safety
+
+## Development
+
+Run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to see the site.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The page auto-updates as you edit files.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## TODO Items in Code
 
-## Learn More
+Search for `TODO` comments in the code to find places that need updating:
 
-To learn more about Next.js, take a look at the following resources:
+**Root Page (/) - Automation Business:**
+- Replace `/demo` with actual demo page route (when built)
+- Replace `href="#"` with Calendly booking link for "Work With Me" button
+- Add real client testimonials when available
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**FIT1 Page (/fit1) - Coaching:**
+- Replace `href="#"` with actual Calendly booking link
+- Replace `href="#"` with checkout/payment link
+- Update email address from `coach@example.com`
+- Add real testimonials and coach bio
+- Update pricing if needed
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deployment
 
-## Deploy on Vercel
+Deploy to Vercel:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npm run build
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Or push to GitHub and connect to Vercel for automatic deployments.
+
+See [Next.js deployment docs](https://nextjs.org/docs/app/building-your-application/deploying) for more options.
