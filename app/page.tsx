@@ -40,7 +40,9 @@ export default function Home() {
             <EmailCapture 
               buttonText="Get Early Access"
               placeholder="Enter your email for updates"
-              inline={true}
+              collectName={true}
+              namePlaceholder="Your name"
+              inline={false}
               className="flex justify-center"
             />
           </div>
@@ -334,7 +336,9 @@ export default function Home() {
           <EmailCapture 
             buttonText="Join Waitlist"
             placeholder="Your email address"
-            inline={true}
+            collectName={true}
+            namePlaceholder="Your name"
+            inline={false}
             className="flex justify-center"
           />
         </div>

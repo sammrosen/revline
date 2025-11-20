@@ -61,12 +61,30 @@ This project includes serverless integrations for email capture, payments, and b
 **Setup:**
 
 1. Get your API key from [MailerLite Dashboard](https://dashboard.mailerlite.com/integrations/api)
+   - Navigate to Integrations → MailerLite API → Generate new token
+   - Give it a descriptive name (e.g., "Landing Page Dev")
+   - **Optional but recommended:** Set IP restrictions for added security
+   - Store the key securely - it won't be shown again
+
 2. Find your Group/List ID in your MailerLite dashboard under Groups
+   - The Group ID is visible in the URL when viewing a group
+   - Example: `https://dashboard.mailerlite.com/groups/123456789` → ID is `123456789`
+
 3. Add to `.env.local`:
    ```bash
    MAILERLITE_API_KEY=your_api_key_here
    MAILERLITE_GROUP_ID=your_group_id_here
    ```
+
+**Development & Testing Best Practices:**
+
+MailerLite doesn't have a sandbox/test mode, so follow these practices:
+
+- **Create a Test Group:** Make a dedicated "Test" or "Development" group in MailerLite for development
+- **Use Test Emails:** Use your own email addresses or test emails during development
+- **Monitor Rate Limits:** API allows 120 requests/minute - our implementation logs warnings
+- **Local Testing:** API works on `localhost` - just add your keys to `.env.local` and restart dev server
+- **Clean Up:** Regularly clean test subscribers from your development group
 
 **Usage:**
 
@@ -81,10 +99,12 @@ import EmailCapture from '@/app/components/EmailCapture';
   placeholder="Enter your email"
 />
 
-// Stacked form with custom list
+// Stacked form with name collection
 <EmailCapture 
   buttonText="Join Waitlist"
   placeholder="Your email address"
+  collectName={true}
+  namePlaceholder="Your name"
   listId="custom_list_id"
   inline={false}
 />
@@ -92,7 +112,9 @@ import EmailCapture from '@/app/components/EmailCapture';
 
 **Props:**
 - `buttonText` (optional) - CTA button text, default: "Subscribe"
-- `placeholder` (optional) - Input placeholder, default: "Enter your email"
+- `placeholder` (optional) - Email input placeholder, default: "Enter your email"
+- `collectName` (optional) - Show name field, default: false
+- `namePlaceholder` (optional) - Name input placeholder, default: "Your name"
 - `listId` (optional) - Override default MailerLite group ID
 - `inline` (optional) - Horizontal layout (true) or stacked (false), default: true
 - `className` (optional) - Additional CSS classes for the container
@@ -155,8 +177,22 @@ MAILERLITE_API_KEY=your_mailerlite_api_key
 MAILERLITE_GROUP_ID=your_mailerlite_group_id
 ```
 
+**Security Best Practices:**
+
+- **Never commit** `.env.local` to git (already in `.gitignore`)
+- **Server-side only:** API keys are never exposed to the client
+- API routes run serverless functions on Vercel - fully secure
+- Use separate API keys for dev/staging/production environments
+- Set IP restrictions on production API keys for extra security
+
 **Vercel Deployment:**
-Add these in Project Settings → Environment Variables
+Add environment variables in Project Settings → Environment Variables
+
+**Rate Limiting:**
+- MailerLite allows 120 requests/minute
+- Our API route monitors rate limit headers
+- Logs warnings when approaching limits
+- Returns clear error messages if limit exceeded
 
 ## Development
 

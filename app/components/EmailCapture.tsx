@@ -8,6 +8,8 @@ interface EmailCaptureProps {
   listId?: string;
   className?: string;
   inline?: boolean;
+  collectName?: boolean;
+  namePlaceholder?: string;
 }
 
 export default function EmailCapture({
@@ -16,8 +18,11 @@ export default function EmailCapture({
   listId,
   className = '',
   inline = true,
+  collectName = false,
+  namePlaceholder = 'Your name',
 }: EmailCaptureProps) {
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
 
@@ -41,6 +46,7 @@ export default function EmailCapture({
         },
         body: JSON.stringify({
           email,
+          name: name || undefined,
           listId,
         }),
       });
@@ -51,6 +57,7 @@ export default function EmailCapture({
         setStatus('success');
         setMessage(data.message || 'Successfully subscribed!');
         setEmail('');
+        setName('');
         
         // Reset success message after 5 seconds
         setTimeout(() => {
@@ -74,6 +81,17 @@ export default function EmailCapture({
   return (
     <div className={`${className}`}>
       <form onSubmit={handleSubmit} className={containerClass}>
+        {collectName && (
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={namePlaceholder}
+            disabled={status === 'loading'}
+            className="flex-1 px-6 py-4 bg-zinc-900 border border-zinc-800 text-zinc-50 placeholder-zinc-500 focus:outline-none focus:border-zinc-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Name"
+          />
+        )}
         <input
           type="email"
           value={email}
