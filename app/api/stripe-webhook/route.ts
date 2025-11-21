@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
         );
       }
       
-      const stripe = new Stripe(stripeApiKey, { apiVersion: '2024-11-20.acacia' });
+      const stripe = new Stripe(stripeApiKey, { apiVersion: '2025-11-17.clover' });
       event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
     } catch (err) {
       const error = err as Error;
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
     // Add customer to MailerLite group
     const result = await addSubscriberToGroup({
       email,
-      name,
+      name: name || undefined,
       groupId: customerGroupId!,
       apiKey: apiKey!,
     });
