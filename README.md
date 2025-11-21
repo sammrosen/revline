@@ -137,7 +137,7 @@ To add a new source for email segmentation:
 
 1. Create a new group in MailerLite (e.g., "Client - NewClient")
 2. Add the group ID to your `.env.local`:
-   ```bash
+   ```bashstripe 
    MAILERLITE_GROUP_ID_NEWCLIENT=new_client_group_id
    ```
 3. Add the mapping to `app/_config/mailerlite.ts`:

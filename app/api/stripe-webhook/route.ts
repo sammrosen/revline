@@ -53,8 +53,17 @@ export async function POST(request: NextRequest) {
     let event: Stripe.Event;
     
     try {
-      // Initialize a minimal Stripe instance (API key not needed for webhook verification)
-      const stripe = new Stripe('', { apiVersion: '2024-11-20.acacia' });
+      // Initialize Stripe instance (API key required by SDK, even for webhook verification)
+      const stripeApiKey = process.env.STRIPE_API_KEY;
+      if (!stripeApiKey) {
+        console.error('STRIPE_API_KEY not configured');
+        return NextResponse.json(
+          { error: 'Server configuration error' },
+          { status: 500 }
+        );
+      }
+      
+      const stripe = new Stripe(stripeApiKey, { apiVersion: '2024-11-20.acacia' });
       event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
     } catch (err) {
       const error = err as Error;
