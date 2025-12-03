@@ -20,7 +20,7 @@ export default function SemiPrivatePage() {
                   <svg className="w-6 h-6 text-zinc-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span>Semi-private sessions (3–5 people per group)</span>
+                  <span>Semi-private sessions (up to 4 per session)</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <svg className="w-6 h-6 text-zinc-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -38,7 +38,7 @@ export default function SemiPrivatePage() {
                   <svg className="w-6 h-6 text-zinc-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span>Limited to 10–15 spots</span>
+                  <span>Limited to 12 spots</span>
                 </li>
               </ul>
               <a
@@ -143,7 +143,7 @@ export default function SemiPrivatePage() {
               </p>
             </div>
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-              <h3 className="text-xl font-bold mb-3">Accountability Without the Bootcamp Vibes</h3>
+              <h3 className="text-xl font-bold mb-3">Accountability Built In</h3>
               <p className="text-zinc-400">
                 Set training days, small group, coach watching, people expect you. Structure without the intimidation.
               </p>
@@ -184,7 +184,7 @@ export default function SemiPrivatePage() {
               </div>
               <h3 className="text-lg font-bold mb-2">Join Your Group</h3>
               <p className="text-zinc-400 text-sm">
-                Assigned to a small group (3–5 people) with set training days at the club.
+                Assigned to a small group (up to 4 per session) with set training days at the club.
               </p>
             </div>
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
@@ -193,7 +193,7 @@ export default function SemiPrivatePage() {
               </div>
               <h3 className="text-lg font-bold mb-2">Follow the Block</h3>
               <p className="text-zinc-400 text-sm">
-                Show up, follow the program, progress each week. Simple nutrition guidance alongside your training.
+                Show up, follow the program, progress each week. Progressions are personalized too. Simple nutrition guidance alongside your training.
               </p>
             </div>
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
@@ -286,34 +286,9 @@ export default function SemiPrivatePage() {
         </div>
       </section>
 
-      {/* Social Proof */}
+      {/* About */}
       <section className="border-b border-zinc-800/50">
         <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Real coaching. Real structure. Real results.
-            </h2>
-          </div>
-          <div className="grid md:grid-cols-3 gap-8 mb-12">
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-              <p className="text-zinc-300 mb-4 italic">
-                &quot;Finally found a program that actually works. The structure keeps me consistent and the small group keeps me accountable.&quot;
-              </p>
-              <p className="font-semibold text-zinc-50">— Testimonial Coming Soon</p>
-            </div>
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-              <p className="text-zinc-300 mb-4 italic">
-                &quot;The block-based approach makes so much sense. I can see my progress week to week instead of just guessing.&quot;
-              </p>
-              <p className="font-semibold text-zinc-50">— Testimonial Coming Soon</p>
-            </div>
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-              <p className="text-zinc-300 mb-4 italic">
-                &quot;Best investment I&apos;ve made in my training. Simple, effective, and I actually stick with it.&quot;
-              </p>
-              <p className="font-semibold text-zinc-50">— Testimonial Coming Soon</p>
-            </div>
-          </div>
           <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-8 max-w-3xl mx-auto">
             <h3 className="text-2xl font-bold mb-4">Who&apos;s running this?</h3>
             <p className="text-zinc-400 leading-relaxed">
@@ -327,51 +302,111 @@ export default function SemiPrivatePage() {
       <section className="border-b border-zinc-800/50 bg-zinc-900/30">
         <div className="max-w-4xl mx-auto px-6 py-20 md:py-28">
           <div className="bg-zinc-900 border-2 border-zinc-700 rounded-2xl p-8 md:p-12">
-            <h2 className="text-3xl font-bold mb-6 text-center">
-              New Year Semi-Private Program – Limited Spots
+            <h2 className="text-3xl font-bold mb-4 text-center">
+              What You Get When You Sign Up
             </h2>
-            <ul className="space-y-4 mb-8">
-              <li className="flex items-start gap-3">
-                <svg className="w-6 h-6 text-zinc-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-zinc-300">Semi-private training at Sports West (3–5 people per group)</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <svg className="w-6 h-6 text-zinc-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-zinc-300">[X] training days per week (to be finalized)</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <svg className="w-6 h-6 text-zinc-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-zinc-300">Structured block-based program</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <svg className="w-6 h-6 text-zinc-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-zinc-300">Simple nutrition guidance</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <svg className="w-6 h-6 text-zinc-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-zinc-300">Check-ins / accountability baked in</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <svg className="w-6 h-6 text-zinc-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-zinc-300">Limited to 10–15 total participants</span>
-              </li>
-            </ul>
-            <div className="text-center mb-6">
-              <p className="text-zinc-400">Pricing discussed in your planning session</p>
+            <p className="text-center text-zinc-400 mb-8">
+              Challenge sessions: Tuesday/Thursday/Saturday mornings
+            </p>
+            
+            <div className="space-y-6 mb-8">
+              <div className="border-b border-zinc-800 pb-4">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="text-lg font-semibold text-zinc-50">Custom Nutrition Guidance</h3>
+                  <span className="text-zinc-500">$149</span>
+                </div>
+                <ul className="space-y-1 text-zinc-400 text-sm ml-4">
+                  <li>• Maintenance calorie calculation</li>
+                  <li>• Personalized deficit/surplus selector</li>
+                  <li>• Goal timeline generation</li>
+                  <li>• Daily/per meal portioning system</li>
+                </ul>
+              </div>
+
+              <div className="border-b border-zinc-800 pb-4">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="text-lg font-semibold text-zinc-50">Custom Grocery Lists</h3>
+                  <span className="text-zinc-500">$79</span>
+                </div>
+                <ul className="space-y-1 text-zinc-400 text-sm ml-4">
+                  <li>• Pulls from stores you shop at</li>
+                  <li>• Adjusts to your calorie target</li>
+                  <li>• Updates as goals change</li>
+                </ul>
+              </div>
+
+              <div className="border-b border-zinc-800 pb-4">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="text-lg font-semibold text-zinc-50">Local Restaurant Guide</h3>
+                  <span className="text-zinc-500">$99</span>
+                </div>
+                <ul className="space-y-1 text-zinc-400 text-sm ml-4">
+                  <li>• Reads menus from local Reno restaurants</li>
+                  <li>• Gives you the best options wherever you&apos;re eating</li>
+                </ul>
+              </div>
+
+              <div className="border-b border-zinc-800 pb-4">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="text-lg font-semibold text-zinc-50">Customized Progressions</h3>
+                  <span className="text-zinc-500">$199</span>
+                </div>
+                <ul className="space-y-1 text-zinc-400 text-sm ml-4">
+                  <li>• Performance trends</li>
+                  <li>• Recovery built in</li>
+                  <li>• Progression every week</li>
+                  <li>• Accountability built in</li>
+                </ul>
+              </div>
+
+              <div className="border-b border-zinc-800 pb-4">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="text-lg font-semibold text-zinc-50">Accountability</h3>
+                  <span className="text-zinc-500">$150</span>
+                </div>
+                <ul className="space-y-1 text-zinc-400 text-sm ml-4">
+                  <li>• Progress review</li>
+                  <li>• Session accountability</li>
+                </ul>
+              </div>
+
+              <div className="border-b border-zinc-800 pb-4">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="text-lg font-semibold text-zinc-50">2x Workouts/Week with Trainer</h3>
+                  <span className="text-zinc-500">$400</span>
+                </div>
+                <ul className="space-y-1 text-zinc-400 text-sm ml-4">
+                  <li>• Tuesday/Thursday/Saturday mornings</li>
+                  <li>• $50 sessions, twice a week, 4 weeks</li>
+                </ul>
+              </div>
+
+              <div className="pb-4">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="text-lg font-semibold text-zinc-50">1 Year Access to Online Programming and Progressions</h3>
+                  <span className="text-zinc-500">$600</span>
+                </div>
+                <ul className="space-y-1 text-zinc-400 text-sm ml-4">
+                  <li>• Programs within the Cyclic Strength app</li>
+                  <li>• Auto progression engine</li>
+                  <li>• Metrics and history</li>
+                  <li>• Blocked training from your phone</li>
+                </ul>
+              </div>
             </div>
-            <div className="text-center">
+
+            <div className="border-t border-zinc-700 pt-6">
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-xl font-semibold text-zinc-400">Total Value</span>
+                <span className="text-2xl font-bold text-zinc-500 line-through">$1,676</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-2xl font-bold text-zinc-50">Your Price</span>
+                <span className="text-4xl font-bold text-white">$400</span>
+              </div>
+            </div>
+
+            <div className="text-center mt-8">
               <a
                 href="#booking-form"
                 className="inline-flex items-center justify-center px-8 py-4 text-lg font-semibold text-zinc-950 bg-zinc-50 rounded-lg hover:bg-zinc-200 transition-all duration-200 shadow-lg shadow-zinc-950/50"

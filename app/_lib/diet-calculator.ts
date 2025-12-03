@@ -218,7 +218,7 @@ export function calculateDietPlan(inputs: DietCalculatorInputs): DietCalculatorO
       max: proteinMax,
       mid: proteinMid,
     },
-    carbsGrams,
+    carbsGrams: carbGrams,
     fatGrams,
     handPortionsDay: {
       proteinPalms: proteinPalmsDay,
