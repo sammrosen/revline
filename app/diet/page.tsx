@@ -70,7 +70,7 @@ export default function DietPage() {
       {/* Footer */}
       <footer className="border-t border-zinc-900/50 py-12 px-6">
         <div className="max-w-6xl mx-auto text-center text-zinc-600 text-sm">
-          <p>© 2024 Cyclic Strength. All rights reserved.</p>
+          {/* Footer content removed */}
         </div>
       </footer>
     </div>

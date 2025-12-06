@@ -348,7 +348,6 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t border-zinc-900/50 py-20 px-6">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6 text-zinc-600 text-sm">
-          <p>© 2024 Sam Rosen. All rights reserved.</p>
           <div className="flex gap-8">
             <a href="#" className="hover:text-zinc-400 transition-colors duration-200">Privacy</a>
             <a href="#" className="hover:text-zinc-400 transition-colors duration-200">Terms</a>
