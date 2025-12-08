@@ -1,4 +1,5 @@
 import EmailCapture from '@/app/_components/EmailCapture';
+import Link from 'next/link';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -18,7 +19,7 @@ export default function DemoPage() {
             Enter your email to experience the automated flow.
           </p>
           <p className="text-base text-zinc-500">
-            You'll see exactly how leads move from capture to nurture — automatically.
+            You&apos;ll see exactly how leads move from capture to nurture — automatically.
           </p>
         </div>
 
@@ -35,12 +36,12 @@ export default function DemoPage() {
         </div>
 
         <div className="pt-8">
-          <a 
+          <Link
             href="/"
             className="text-sm text-zinc-600 hover:text-zinc-400 transition-colors duration-200"
           >
             ← Back to home
-          </a>
+          </Link>
         </div>
       </div>
     </div>
