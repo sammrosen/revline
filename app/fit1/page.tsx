@@ -484,10 +484,7 @@ export default function FIT1Page() {
       {/* Footer */}
       <footer className="border-t border-zinc-800/50">
         <div className="max-w-6xl mx-auto px-6 py-12">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-zinc-500 text-sm">
-              © 2024 Elite Training Systems. All rights reserved.
-            </p>
+          <div className="flex flex-col md:flex-row justify-center items-center gap-4">
             <div className="flex gap-6 text-sm text-zinc-500">
               <a href="#" className="hover:text-zinc-400 transition-colors">Privacy Policy</a>
               <a href="#" className="hover:text-zinc-400 transition-colors">Terms of Service</a>

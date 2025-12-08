@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
     // Add customer to MailerLite group
     const result = await addSubscriberToGroup({
       email,
-      name: name || undefined,
+      name: name ?? undefined,
       groupId: customerGroupId!,
       apiKey: apiKey!,
     });

@@ -106,7 +106,6 @@ function getMacroSplit(weeklyChangeLb: number): { fatShare: number; carbShare: n
 export function calculateDietPlan(inputs: DietCalculatorInputs): DietCalculatorOutput {
   // 1. Unit conversions
   const weightKg = inputs.currentWeightLb / 2.20462;
-  const goalWeightKg = inputs.goalWeightLb / 2.20462;
   
   let heightCm: number;
   if (inputs.heightCm !== undefined) {
