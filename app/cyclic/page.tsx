@@ -5,66 +5,77 @@ export const metadata: Metadata = {
   description: 'Design programs, log workouts, track progress, and get personalized coaching. The all-in-one strength training platform that adapts to you.',
 };
 
-// Make this configurable - you can change this URL
-const SIGNUP_URL = process.env.NEXT_PUBLIC_CYCLIC_SIGNUP_URL || 'https://cyclicstrength.com';
+const SIGNUP_URL = 'https://cyclicstrength.com/signup';
 
 export default function CyclicPage() {
   return (
-    <div className="min-h-screen bg-black text-white font-sans antialiased">
-      {/* Hero Section */}
-      <section className="min-h-screen flex items-center justify-center px-6 py-20">
-        <div className="max-w-4xl mx-auto text-center space-y-12">
-          {/* Badge */}
-          <div className="inline-block px-4 py-2 border border-zinc-800 bg-zinc-950">
-            <span className="text-sm text-zinc-400">Beta Access</span>
-          </div>
+    <div className="relative min-h-screen bg-[#050505] text-white font-sans antialiased overflow-hidden">
+      {/* Ambient lighting + texture */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 bg-gradient-to-b from-[#070910] via-[#020204] to-black" />
+        <div className="absolute inset-0 blur-3xl bg-[radial-gradient(circle_at_18%_18%,rgba(37,99,235,0.11),transparent_34%),radial-gradient(circle_at_80%_16%,rgba(59,130,246,0.09),transparent_30%),radial-gradient(circle_at_32%_80%,rgba(37,99,235,0.07),transparent_38%),radial-gradient(circle_at_70%_68%,rgba(37,99,235,0.06),transparent_40%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(226,232,240,0.035)_0,rgba(226,232,240,0.01)_34%,transparent_55%)] opacity-[0.26] mix-blend-screen" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(148,163,184,0.04)_1px,transparent_1px)] bg-[size:140px_140px] opacity-[0.06]" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.04)_1px,transparent_1px)] bg-[size:140px_140px] opacity-[0.06]" />
+        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-white/8 via-white/0 to-transparent opacity-[0.18]" />
+        <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-white/8 via-white/0 to-transparent opacity-[0.12]" />
+      </div>
 
-          <div className="space-y-6">
-            <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight">
-              Train Smarter.<br />Not Harder.
-            </h1>
-            <p className="text-xl md:text-2xl text-zinc-400 max-w-2xl mx-auto leading-relaxed">
-              Custom program design, intelligent workout logging, and an adaptive coaching engine that learns from your performance and recovery data.
-            </p>
-          </div>
+      <div className="relative">
+        {/* Hero Section */}
+        <section className="min-h-screen flex items-center justify-center px-6 py-20">
+          <div className="max-w-4xl mx-auto text-center space-y-12">
+            {/* Badge */}
+            <div className="inline-block px-4 py-2 border border-zinc-800 bg-zinc-950">
+              <span className="text-sm text-zinc-400">Beta Access</span>
+            </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-            <a
-              href={SIGNUP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-black bg-white hover:bg-zinc-100 transition-colors"
-            >
-              Start Free Trial
-              <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </a>
-          </div>
+            <div className="space-y-6">
+              <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight">
+                Train Smarter.<br />Not Harder.
+              </h1>
+              <p className="text-xl md:text-2xl text-zinc-400 max-w-2xl mx-auto leading-relaxed">
+                Custom program design, intelligent workout logging, and an adaptive coaching engine that learns from your performance and recovery data.
+              </p>
+            </div>
 
-          {/* Trust indicators */}
-          <div className="pt-12 flex flex-wrap items-center justify-center gap-6 text-sm text-zinc-500">
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <span>2 weeks free</span>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+              <a
+                href={SIGNUP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-black bg-white hover:bg-zinc-100 transition-colors"
+              >
+                Start Free Trial
+                <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </a>
             </div>
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-              <span>Secure & private</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-              </svg>
-              <span>Cancel anytime</span>
+
+            {/* Trust indicators */}
+            <div className="pt-12 flex flex-wrap items-center justify-center gap-6 text-sm text-zinc-500">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>2 weeks free</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <span>Secure & private</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+                <span>Cancel anytime</span>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
       {/* Problem Section */}
       <section className="py-24 px-6 border-t border-zinc-900">
@@ -286,42 +297,43 @@ export default function CyclicPage() {
         </div>
       </section>
 
-      {/* Final CTA Section */}
-      <section className="py-24 px-6 border-t border-zinc-900">
-        <div className="max-w-4xl mx-auto text-center space-y-8">
-          <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
-            Ready to Train Smarter?
-          </h2>
-          <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
-            Join beta access and start tracking your training with intelligence. 2 weeks free, then $20/month.
-          </p>
-          <div className="flex justify-center pt-4">
-            <a
-              href={SIGNUP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-black bg-white hover:bg-zinc-100 transition-colors"
-            >
-              Start Free Trial
-              <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </a>
+        {/* Final CTA Section */}
+        <section className="py-24 px-6 border-t border-zinc-900">
+          <div className="max-w-4xl mx-auto text-center space-y-8">
+            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
+              Ready to Train Smarter?
+            </h2>
+            <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
+              Join beta access and start tracking your training with intelligence. 2 weeks free, then $20/month.
+            </p>
+            <div className="flex justify-center pt-4">
+              <a
+                href={SIGNUP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-black bg-white hover:bg-zinc-100 transition-colors"
+              >
+                Start Free Trial
+                <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </a>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Footer */}
-      <footer className="border-t border-zinc-900 py-12 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6 text-zinc-500 text-sm">
-          <a href={SIGNUP_URL} target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 transition-colors">
-            Cyclic Strength
-          </a>
-          <p>
-            Beta Access — Join early and help shape the future of training.
-          </p>
-        </div>
-      </footer>
+        {/* Footer */}
+        <footer className="border-t border-zinc-900 py-12 px-6">
+          <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6 text-zinc-500 text-sm">
+            <a href={SIGNUP_URL} target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 transition-colors">
+              Cyclic Strength
+            </a>
+            <p>
+              Beta Access — Join early and help shape the future of training.
+            </p>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }
