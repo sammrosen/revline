@@ -1,11 +1,50 @@
 import type { Metadata } from 'next';
 
+const SIGNUP_URL = 'https://cyclicstrength.com/signup';
+
 export const metadata: Metadata = {
-  title: 'Cyclic Strength | Intelligent Training Platform',
-  description: 'Design programs, log workouts, track progress, and get personalized coaching. The all-in-one strength training platform that adapts to you.',
+  title: 'Cyclic Strength | The Training System That Evolves With You',
+  description:
+    'Adaptive strength training that updates automatically from your real performance and recovery. Built for serious lifters, safe for beginners.',
 };
 
-const SIGNUP_URL = 'https://cyclicstrength.com/signup';
+const featureList = [
+  {
+    title: 'Training That Adjusts Automatically',
+    body:
+      'Every week is built from your real data — not generic templates. Your volume, intensity, and exercise selection evolve with your performance.',
+  },
+  {
+    title: 'Intelligent Workout Logging',
+    body:
+      'Track effort, RPE, failure, session difficulty, joint stress, enjoyment — the engine uses all of it to decide what you should do next.',
+  },
+  {
+    title: 'Beginner-Friendly, Advanced-Ready',
+    body:
+      'Beginners follow a clear structure without thinking. Serious lifters get adaptive programming that feels like having a coach in their pocket.',
+  },
+  {
+    title: 'Recovery-Aware Programming',
+    body:
+      'Bad sleep? Rough week? Great stretch of training? Your plan adjusts automatically to keep you moving forward without burning out.',
+  },
+  {
+    title: 'Long-Term, Continuous Progression',
+    body: 'Stop restarting programs every 8–12 weeks. Your training adapts block to block, indefinitely.',
+  },
+];
+
+const pricingBullets = [
+  'Adaptive training engine',
+  'Unlimited training blocks',
+  'Full performance tracking',
+  'Long-term progression logic',
+  'Recovery-adjusted programming',
+  'All feature updates',
+  'No contracts',
+  '14-day money-back guarantee',
+];
 
 export default function CyclicPage() {
   return (
@@ -22,267 +61,105 @@ export default function CyclicPage() {
       </div>
 
       <div className="relative">
-        {/* Hero Section */}
+        {/* Hero */}
         <section className="min-h-screen flex items-center justify-center px-6 py-20">
-          <div className="max-w-4xl mx-auto text-center space-y-12">
-            {/* Badge */}
-            <div className="inline-block px-4 py-2 border border-zinc-800 bg-zinc-950">
-              <span className="text-sm text-zinc-400">Beta Access</span>
-            </div>
-
+          <div className="max-w-4xl mx-auto text-center space-y-10">
             <div className="space-y-6">
               <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight">
-                Train Smarter.<br />Not Harder.
+                The Training System That Evolves With You — Automatically.
               </h1>
-              <p className="text-xl md:text-2xl text-zinc-400 max-w-2xl mx-auto leading-relaxed">
-                Custom program design, intelligent workout logging, and an adaptive coaching engine that learns from your performance and recovery data.
+              <p className="text-xl md:text-2xl text-zinc-300 max-w-3xl mx-auto leading-relaxed">
+                Your workouts, progressions, and programming adapt every week based on your real performance and recovery. No more guesswork, no more templates — just continuous, intelligent progression.
+              </p>
+              <p className="text-lg text-zinc-400 max-w-2xl mx-auto">
+                Whether you're new to lifting or years into the game, Cyclic Strength builds the exact training you need next.
+              </p>
+              <p className="text-lg text-zinc-400 max-w-2xl mx-auto">
+                2-Week Free Trial • Cancel Anytime • Money-Back Guarantee
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+            <div className="aspect-video w-full max-w-3xl mx-auto border border-zinc-900 bg-zinc-950 flex items-center justify-center text-zinc-600 text-sm">
+              Video placeholder — VSL goes here
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-2">
               <a
                 href={SIGNUP_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-black bg-white hover:bg-zinc-100 transition-colors"
               >
-                Start Free Trial
+                Start Your Free Trial
                 <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </a>
             </div>
+          </div>
+        </section>
 
-            {/* Trust indicators */}
-            <div className="pt-12 flex flex-wrap items-center justify-center gap-6 text-sm text-zinc-500">
-              <div className="flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        {/* Subhead / Context */}
+        <section className="py-20 px-6 border-t border-zinc-900">
+          <div className="max-w-4xl mx-auto space-y-6 text-center">
+            <p className="text-lg md:text-xl text-zinc-300 leading-relaxed">
+              Most fitness apps give you static workouts or generic progression rules. Cyclic Strength tracks how you actually train — your sets, reps, load, RPE, joint stress, enjoyment, and recovery — then updates your program automatically to keep you improving.
+            </p>
+            <p className="text-lg md:text-xl text-zinc-300 leading-relaxed">
+              If you’re starting from zero, you just follow the plan. If you’re advanced, the engine adapts with the precision of a real coach.
+            </p>
+          </div>
+        </section>
+
+        {/* What you get */}
+        <section className="py-20 px-6 border-t border-zinc-900">
+          <div className="max-w-5xl mx-auto space-y-12">
+            <div className="text-center space-y-3">
+              <h2 className="text-4xl md:text-5xl font-bold tracking-tight">What Cyclic Strength Does For You</h2>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-8">
+              {featureList.map((item) => (
+                <div key={item.title} className="p-8 border border-zinc-900 bg-zinc-950 space-y-3">
+                  <h3 className="text-xl font-semibold">{item.title}</h3>
+                  <p className="text-zinc-300 leading-relaxed">{item.body}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-center">
+              <a
+                href={SIGNUP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-black bg-white hover:bg-zinc-100 transition-colors"
+              >
+                Start Your Free Trial
+                <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
-                <span>2 weeks free</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                <span>Secure & private</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                </svg>
-                <span>Cancel anytime</span>
-              </div>
+              </a>
             </div>
           </div>
         </section>
 
-      {/* Problem Section */}
-      <section className="py-24 px-6 border-t border-zinc-900">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-              Tired of Guessing?
-            </h2>
-            <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
-              Most training apps are just digital notebooks. Cyclic Strength is an intelligent training partner.
-            </p>
-          </div>
-          <div className="grid md:grid-cols-2 gap-8 text-lg">
-            <div className="space-y-4">
-              <p className="text-zinc-400">Forgetting what you lifted last week</p>
-              <p className="text-zinc-400">Not knowing if you&apos;re recovered enough</p>
-              <p className="text-zinc-400">Training blind without real data</p>
-            </div>
-            <div className="space-y-4">
-              <p className="text-zinc-400">Programs that don&apos;t adapt to you</p>
-              <p className="text-zinc-400">No insight into what&apos;s actually working</p>
-              <p className="text-zinc-400">Juggling spreadsheets and notes</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section id="features" className="py-24 px-6 border-t border-zinc-900">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-              Three Core Pillars
-            </h2>
-            <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
-              Everything you need to train intelligently, all in one platform.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {/* Custom Program Design */}
-            <div className="p-8 border border-zinc-900 bg-zinc-950">
-              <div className="mb-6">
-                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-bold mb-3">Custom Program Design</h3>
-              <p className="text-zinc-400 leading-relaxed">
-                Build sophisticated training programs with multiple days, movements, sets, and targets. Organize by muscle groups, training phases, and your specific goals.
-              </p>
+        {/* Pricing */}
+        <section className="py-20 px-6 border-t border-zinc-900">
+          <div className="max-w-3xl mx-auto border border-zinc-900 bg-zinc-950 p-10 md:p-12 space-y-8">
+            <div className="space-y-3 text-center">
+              <h2 className="text-4xl md:text-5xl font-bold tracking-tight">Train Smarter for $20/month (Beta)</h2>
+              <p className="text-lg text-zinc-400">14-day free trial. Cancel anytime.</p>
             </div>
 
-            {/* Performance & Recovery Tracking */}
-            <div className="p-8 border border-zinc-900 bg-zinc-950">
-              <div className="mb-6">
-                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-bold mb-3">Performance & Recovery Tracking</h3>
-              <p className="text-zinc-400 leading-relaxed">
-                Track volume, intensity, and strength trends over time. Monitor recovery metrics, joint pain, muscle pump, and understand exactly what&apos;s driving your progress.
-              </p>
-            </div>
-
-            {/* Adaptive Coaching Engine */}
-            <div className="p-8 border border-zinc-900 bg-zinc-950">
-              <div className="mb-6">
-                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-bold mb-3">Adaptive Coaching Engine</h3>
-              <p className="text-zinc-400 leading-relaxed">
-                The more you train, the smarter it gets. Our algorithms learn from your performance data, recovery feedback, and training patterns to provide personalized recommendations that evolve with you.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works Section */}
-      <section className="py-24 px-6 border-t border-zinc-900">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-              How It Works
-            </h2>
-            <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
-              Start training intelligently in minutes, not weeks.
-            </p>
-          </div>
-
-          <div className="space-y-8">
-            <div className="flex gap-6">
-              <div className="shrink-0 w-12 h-12 border border-zinc-900 bg-zinc-950 flex items-center justify-center text-zinc-400 font-mono text-lg">
-                01
-              </div>
-              <div>
-                <h3 className="text-xl font-bold mb-2">Design Your Program or Start Training</h3>
-                <p className="text-zinc-400 leading-relaxed">
-                  Create a custom training program with multiple days, movements, sets, and targets. Or simply start training and let the adaptive engine progress you automatically based on your performance.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-6">
-              <div className="shrink-0 w-12 h-12 border border-zinc-900 bg-zinc-950 flex items-center justify-center text-zinc-400 font-mono text-lg">
-                02
-              </div>
-              <div>
-                <h3 className="text-xl font-bold mb-2">Log Your Workouts</h3>
-                <p className="text-zinc-400 leading-relaxed">
-                  Track every set with weight, reps, and RIR (Reps In Reserve). Provide feedback on recovery, joint pain, muscle pump, and difficulty level. The more data you log, the smarter the system becomes.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-6">
-              <div className="shrink-0 w-12 h-12 border border-zinc-900 bg-zinc-950 flex items-center justify-center text-zinc-400 font-mono text-lg">
-                03
-              </div>
-              <div>
-                <h3 className="text-xl font-bold mb-2">Track Your Progress</h3>
-                <p className="text-zinc-400 leading-relaxed">
-                  See your volume, intensity, and strength trends over time. Identify patterns, understand what&apos;s driving your progress, and spot potential issues before they become problems.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-6">
-              <div className="shrink-0 w-12 h-12 border border-zinc-900 bg-zinc-950 flex items-center justify-center text-zinc-400 font-mono text-lg">
-                04
-              </div>
-              <div>
-                <h3 className="text-xl font-bold mb-2">Get Smarter Coaching</h3>
-                <p className="text-zinc-400 leading-relaxed">
-                  As you train, the algorithms learn your patterns, recovery capacity, and what works best for you. Receive personalized recommendations that adapt based on your training data, recovery feedback, and performance trends.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing Section */}
-      <section className="py-24 px-6 border-t border-zinc-900">
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-              Simple, Transparent Pricing
-            </h2>
-            <p className="text-xl text-zinc-400">
-              Start your free trial today.
-            </p>
-          </div>
-
-          <div className="border border-zinc-900 bg-zinc-950 p-12">
-            <div className="text-center mb-10">
-              <div className="inline-block px-4 py-2 border border-zinc-800 bg-black mb-6">
-                <span className="text-sm text-zinc-300">2 Weeks Free Trial</span>
-              </div>
-              <div className="flex items-baseline justify-center gap-2 mb-2">
-                <span className="text-5xl md:text-6xl font-bold">$20</span>
-                <span className="text-xl text-zinc-400">/month</span>
-              </div>
-              <p className="text-zinc-500">After your free trial</p>
-            </div>
-
-            <div className="space-y-4 mb-10">
-              <div className="flex items-start gap-3">
-                <svg className="w-5 h-5 text-white mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <div>
-                  <p className="text-white font-medium">Unlimited program design</p>
-                  <p className="text-zinc-500 text-sm mt-1">Create as many custom programs as you want</p>
+            <div className="space-y-4 text-zinc-200">
+              {pricingBullets.map((line) => (
+                <div key={line} className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-white mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <p className="text-zinc-300">{line}</p>
                 </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <svg className="w-5 h-5 text-white mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <div>
-                  <p className="text-white font-medium">Advanced performance tracking</p>
-                  <p className="text-zinc-500 text-sm mt-1">Volume, intensity, strength trends, and recovery metrics</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <svg className="w-5 h-5 text-white mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <div>
-                  <p className="text-white font-medium">Adaptive coaching engine</p>
-                  <p className="text-zinc-500 text-sm mt-1">Personalized recommendations that learn from your training</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <svg className="w-5 h-5 text-white mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <div>
-                  <p className="text-white font-medium">Cancel anytime</p>
-                  <p className="text-zinc-500 text-sm mt-1">No long-term commitments or hidden fees</p>
-                </div>
-              </div>
+              ))}
             </div>
 
             <a
@@ -294,26 +171,35 @@ export default function CyclicPage() {
               Start Your Free Trial
             </a>
           </div>
-        </div>
-      </section>
+        </section>
 
-        {/* Final CTA Section */}
-        <section className="py-24 px-6 border-t border-zinc-900">
-          <div className="max-w-4xl mx-auto text-center space-y-8">
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
-              Ready to Train Smarter?
-            </h2>
-            <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
-              Join beta access and start tracking your training with intelligence. 2 weeks free, then $20/month.
+        {/* Guarantee */}
+        <section className="py-20 px-6 border-t border-zinc-900">
+          <div className="max-w-3xl mx-auto text-center space-y-6">
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight">14-Day “Train With It or Don’t Pay” Guarantee</h2>
+            <p className="text-lg text-zinc-300 leading-relaxed">
+              If Cyclic Strength doesn’t immediately simplify your training and give you a better path forward, email me and I’ll refund you. No forms. No hoops. No pressure.
             </p>
-            <div className="flex justify-center pt-4">
+          </div>
+        </section>
+
+        {/* Final CTA */}
+        <section className="py-20 px-6 border-t border-zinc-900">
+          <div className="max-w-4xl mx-auto text-center space-y-6">
+            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
+              The Training System That Evolves With You — Automatically.
+            </h2>
+            <p className="text-lg text-zinc-300">
+              2-Week Free Trial • Cancel Anytime • $20/month after trial.
+            </p>
+            <div className="flex justify-center">
               <a
                 href={SIGNUP_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-black bg-white hover:bg-zinc-100 transition-colors"
               >
-                Start Free Trial
+                Start Your Free Trial
                 <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
@@ -323,14 +209,20 @@ export default function CyclicPage() {
         </section>
 
         {/* Footer */}
-        <footer className="border-t border-zinc-900 py-12 px-6">
-          <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6 text-zinc-500 text-sm">
-            <a href={SIGNUP_URL} target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 transition-colors">
-              Cyclic Strength
-            </a>
-            <p>
-              Beta Access — Join early and help shape the future of training.
-            </p>
+        <footer className="border-t border-zinc-900 py-10 px-6">
+          <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-zinc-500">
+            <span className="text-zinc-400">Cyclic Strength</span>
+            <div className="flex items-center gap-6">
+              <a href="https://cyclicstrength.com/terms" className="hover:text-zinc-300 transition-colors">
+                Terms
+              </a>
+              <a href="https://cyclicstrength.com/privacy" className="hover:text-zinc-300 transition-colors">
+                Privacy
+              </a>
+              <a href="mailto:sam@cyclicstrength.com" className="hover:text-zinc-300 transition-colors">
+                Contact: sam@cyclicstrength.com
+              </a>
+            </div>
           </div>
         </footer>
       </div>
