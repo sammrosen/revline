@@ -1,0 +1,154 @@
+// RevOps MVP Database Schema
+// Source of truth for clients, integrations, leads, events, and admin auth
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// CLIENT MANAGEMENT
+// =============================================================================
+
+model Client {
+  id        String       @id @default(uuid())
+  name      String
+  slug      String       @unique // Used for ?source= routing (e.g., "sam", "demo")
+  status    ClientStatus @default(ACTIVE)
+  timezone  String?
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  integrations ClientIntegration[]
+  leads        Lead[]
+  events       Event[]
+
+  @@map("clients")
+}
+
+enum ClientStatus {
+  ACTIVE
+  PAUSED
+}
+
+// =============================================================================
+// INTEGRATION SECRETS & CONFIG
+// =============================================================================
+
+model ClientIntegration {
+  id              String          @id @default(uuid())
+  clientId        String          @map("client_id")
+  integration     IntegrationType
+  encryptedSecret String          @map("encrypted_secret")
+  meta            Json? // Non-sensitive config: group_ids, product_map, etc.
+  healthStatus    HealthStatus    @default(GREEN) @map("health_status")
+  lastSeenAt      DateTime?       @map("last_seen_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, integration])
+  @@map("client_integrations")
+}
+
+enum IntegrationType {
+  MAILERLITE
+  STRIPE
+  CALENDLY
+  MANYCHAT
+}
+
+enum HealthStatus {
+  GREEN
+  YELLOW
+  RED
+}
+
+// =============================================================================
+// LEAD TRACKING (Ops state only, not a CRM)
+// =============================================================================
+
+model Lead {
+  id          String    @id @default(uuid())
+  clientId    String    @map("client_id")
+  email       String
+  source      String? // e.g., "landing", "ig_dm"
+  stage       LeadStage @default(CAPTURED)
+  errorState  String?   @map("error_state")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  lastEventAt DateTime  @default(now()) @map("last_event_at")
+
+  client Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  events Event[]
+
+  @@index([clientId, stage])
+  @@index([clientId, lastEventAt])
+  @@map("leads")
+}
+
+enum LeadStage {
+  CAPTURED
+  BOOKED
+  PAID
+  DEAD
+}
+
+// =============================================================================
+// EVENT LEDGER (Append-only, primary debugging surface)
+// =============================================================================
+
+model Event {
+  id           String      @id @default(uuid())
+  clientId     String      @map("client_id")
+  leadId       String?     @map("lead_id")
+  system       EventSystem
+  eventType    String      @map("event_type")
+  success      Boolean
+  errorMessage String?     @map("error_message")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  lead   Lead?  @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt])
+  @@index([success, createdAt])
+  @@map("events")
+}
+
+enum EventSystem {
+  BACKEND
+  MAILERLITE
+  STRIPE
+  CALENDLY
+  MANYCHAT
+  CRON
+}
+
+// =============================================================================
+// ADMIN AUTHENTICATION (Single admin, internal only)
+// =============================================================================
+
+model Admin {
+  id           String   @id @default(uuid())
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  sessions AdminSession[]
+
+  @@map("admins")
+}
+
+model AdminSession {
+  id        String   @id @default(uuid())
+  adminId   String   @map("admin_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("admin_sessions")
+}

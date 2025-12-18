@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { CUSTOMER_GROUP_MAP } from '@/app/_config/mailerlite';
-import { addSubscriberToGroup, validateMailerLiteConfig } from '@/app/_lib/mailerlite';
-
-/**
- * Get the webhook signing secret for a specific source/trainer
- */
-function getWebhookSecret(source: string): string | undefined {
-  const sourceKey = source.toUpperCase();
-  const envKey = `STRIPE_WEBHOOK_SECRET_${sourceKey}`;
-  return process.env[envKey];
-}
+import { getActiveClient } from '@/app/_lib/client-gate';
+import { getClientIntegration, touchIntegration } from '@/app/_lib/integrations';
+import { emitEvent, EventSystem, upsertLead, updateLeadStage } from '@/app/_lib/event-logger';
+import { addSubscriberToGroup } from '@/app/_lib/mailerlite';
+import { IntegrationType } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,12 +20,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the webhook secret for this source
-    const webhookSecret = getWebhookSecret(source);
-    if (!webhookSecret) {
-      console.error(`No webhook secret configured for source: ${source}`);
+    const clientSlug = source.toLowerCase();
+
+    // Look up client and check if active
+    const client = await getActiveClient(clientSlug);
+    if (!client) {
+      // Client not found or paused - still return 200 to prevent Stripe retries
+      console.error(`Client not found or paused: ${clientSlug}`);
       return NextResponse.json(
-        { error: 'Webhook not configured for this source' },
+        { received: true, error: 'Client unavailable' },
+        { status: 200 }
+      );
+    }
+
+    // Get Stripe integration (webhook secret)
+    const stripeIntegration = await getClientIntegration(client.id, IntegrationType.STRIPE);
+    if (!stripeIntegration) {
+      console.error(`Stripe not configured for client: ${clientSlug}`);
+      return NextResponse.json(
+        { error: 'Webhook not configured' },
         { status: 500 }
       );
     }
@@ -48,35 +55,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify webhook signature and construct event using Stripe SDK
-    // This is the official recommended approach for webhook verification
+    // Verify webhook signature
     let event: Stripe.Event;
-    
     try {
-      // Initialize Stripe instance (API key required by SDK, even for webhook verification)
-      const stripeApiKey = process.env.STRIPE_API_KEY;
+      // We need a Stripe API key for constructEvent - get it from meta or use a default
+      const stripeMeta = stripeIntegration.meta as { apiKey?: string } | null;
+      const stripeApiKey = stripeMeta?.apiKey || process.env.STRIPE_API_KEY;
+      
       if (!stripeApiKey) {
-        console.error('STRIPE_API_KEY not configured');
+        console.error('No Stripe API key available');
         return NextResponse.json(
           { error: 'Server configuration error' },
           { status: 500 }
         );
       }
-      
-      const stripe = new Stripe(stripeApiKey, { apiVersion: '2025-11-17.clover' });
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+
+      const stripe = new Stripe(stripeApiKey);
+      event = stripe.webhooks.constructEvent(body, signature, stripeIntegration.secret);
     } catch (err) {
       const error = err as Error;
       console.error('Webhook signature verification failed:', error.message);
+      
+      await emitEvent({
+        clientId: client.id,
+        system: EventSystem.STRIPE,
+        eventType: 'stripe_webhook_invalid_signature',
+        success: false,
+        errorMessage: error.message,
+      });
+
       return NextResponse.json(
         { error: `Webhook Error: ${error.message}` },
         { status: 400 }
       );
     }
 
+    // Touch Stripe integration - signature verified successfully
+    await touchIntegration(client.id, IntegrationType.STRIPE);
+
     // Only handle checkout.session.completed events
     if (event.type !== 'checkout.session.completed') {
-      console.log(`Ignoring event type: ${event.type}`);
       return NextResponse.json({ received: true }, { status: 200 });
     }
 
@@ -87,49 +105,85 @@ export async function POST(request: NextRequest) {
 
     if (!email) {
       console.error('No customer email found in checkout session:', session.id);
+      
+      await emitEvent({
+        clientId: client.id,
+        system: EventSystem.STRIPE,
+        eventType: 'stripe_payment_failed',
+        success: false,
+        errorMessage: 'No customer email in session',
+      });
+
       return NextResponse.json(
         { error: 'No customer email in session' },
         { status: 400 }
       );
     }
 
-    // Check for program/product metadata to support multiple products per source
-    const program = session.metadata?.program;
-    const logContext = program 
-      ? `${source}/${program}` 
-      : source;
+    // Create/update lead and mark as paid
+    const leadId = await upsertLead({
+      clientId: client.id,
+      email,
+      source: 'stripe',
+    });
+    await updateLeadStage(leadId, 'PAID');
 
-    console.log(`Processing checkout for ${email} from: ${logContext}`);
+    // Emit payment success event
+    await emitEvent({
+      clientId: client.id,
+      leadId,
+      system: EventSystem.STRIPE,
+      eventType: 'stripe_payment_succeeded',
+      success: true,
+    });
 
-    // Get MailerLite configuration
-    const apiKey = process.env.MAILERLITE_API_KEY;
-    const sourceKey = source.toUpperCase();
-    
-    // Try to find a program-specific group first, fall back to source-only
-    let customerGroupId: string | undefined;
-    
-    if (program) {
-      const programKey = program.toUpperCase();
-      const combinedKey = `${sourceKey}_${programKey}`;
-      customerGroupId = CUSTOMER_GROUP_MAP[combinedKey];
-      
-      if (customerGroupId) {
-        console.log(`Using program-specific group: ${combinedKey}`);
-      } else {
-        console.log(`No program-specific group found for ${combinedKey}, falling back to ${sourceKey}`);
-        customerGroupId = CUSTOMER_GROUP_MAP[sourceKey];
-      }
-    } else {
-      customerGroupId = CUSTOMER_GROUP_MAP[sourceKey];
+    // Get MailerLite integration for adding customer to group
+    const mailerliteIntegration = await getClientIntegration(client.id, IntegrationType.MAILERLITE);
+    if (!mailerliteIntegration) {
+      console.error(`MailerLite not configured for client: ${clientSlug}`);
+      return NextResponse.json(
+        {
+          received: true,
+          processed: true,
+          warning: 'MailerLite not configured',
+        },
+        { status: 200 }
+      );
     }
 
-    // Validate configuration
-    const configValidation = validateMailerLiteConfig(apiKey, customerGroupId);
-    if (!configValidation.valid) {
-      console.error(`MailerLite config error for ${source}:`, configValidation.error);
+    // Check for program/product metadata for multi-product routing
+    const program = session.metadata?.program;
+    const mlMeta = mailerliteIntegration.meta as {
+      groupIds?: { customer?: string; [key: string]: string | undefined };
+    } | null;
+
+    // Try program-specific group first, fall back to default customer group
+    let customerGroupId: string | undefined;
+    if (program && mlMeta?.groupIds?.[`customer_${program}`]) {
+      customerGroupId = mlMeta.groupIds[`customer_${program}`];
+    } else {
+      customerGroupId = mlMeta?.groupIds?.customer;
+    }
+
+    if (!customerGroupId) {
+      console.error(`No customer group ID configured for client: ${clientSlug}`);
+      
+      await emitEvent({
+        clientId: client.id,
+        leadId,
+        system: EventSystem.MAILERLITE,
+        eventType: 'mailerlite_subscribe_failed',
+        success: false,
+        errorMessage: 'No customer group configured',
+      });
+
       return NextResponse.json(
-        { error: 'MailerLite configuration error' },
-        { status: 500 }
+        {
+          received: true,
+          processed: true,
+          warning: 'Customer group not configured',
+        },
+        { status: 200 }
       );
     }
 
@@ -137,16 +191,24 @@ export async function POST(request: NextRequest) {
     const result = await addSubscriberToGroup({
       email,
       name: name ?? undefined,
-      groupId: customerGroupId!,
-      apiKey: apiKey!,
+      groupId: customerGroupId,
+      apiKey: mailerliteIntegration.secret,
     });
 
     if (!result.success) {
       console.error(`Failed to add ${email} to MailerLite:`, result.error);
-      // Return 200 to acknowledge receipt but log the error
-      // This prevents Stripe from retrying indefinitely
+      
+      await emitEvent({
+        clientId: client.id,
+        leadId,
+        system: EventSystem.MAILERLITE,
+        eventType: 'mailerlite_subscribe_failed',
+        success: false,
+        errorMessage: result.error,
+      });
+
       return NextResponse.json(
-        { 
+        {
           received: true,
           warning: 'Webhook received but MailerLite sync failed',
         },
@@ -154,7 +216,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`Successfully added ${email} to MailerLite group for ${logContext}`);
+    // Success
+    await touchIntegration(client.id, IntegrationType.MAILERLITE);
+    await emitEvent({
+      clientId: client.id,
+      leadId,
+      system: EventSystem.MAILERLITE,
+      eventType: 'mailerlite_subscribe_success',
+      success: true,
+    });
 
     return NextResponse.json(
       {
@@ -166,12 +236,10 @@ export async function POST(request: NextRequest) {
       },
       { status: 200 }
     );
-
   } catch (error) {
     console.error('Stripe webhook error:', error);
-    // Return 200 to prevent Stripe retries for unrecoverable errors
     return NextResponse.json(
-      { 
+      {
         received: true,
         error: 'Internal error processing webhook',
       },
@@ -179,4 +247,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
