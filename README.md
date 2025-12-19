@@ -1,6 +1,34 @@
-# Marketing Site & Landing Pages
+# SRB Landing + RevOps Platform
 
-This is a Next.js marketing site built for hosting multiple landing pages over time. Features clean, minimal design aesthetics for different business offerings.
+This is a Next.js marketing site with an **internal RevOps management system** for running multi-client automation services.
+
+## 🚀 RevOps MVP (NEW)
+
+**Database-driven client management system** for operating landing pages + automations as a managed service.
+
+📖 **[Read the RevOps Documentation →](./docs/README.md)**
+
+**Quick links:**
+- [Setup Guide](./docs/SETUP.md) - Get started locally + deploy to production
+- [Architecture](./docs/ARCHITECTURE.md) - How the system works
+- [Operations](./docs/OPERATIONS.md) - Daily usage, onboarding clients, troubleshooting
+- [Status](./docs/STATUS.md) - Implementation status vs original spec
+
+**What it enables:**
+- Onboard clients without editing `.env`
+- Encrypted per-client secrets in Postgres
+- Event logging for all automation actions
+- Instant pause/unpause clients
+- Health monitoring every 15 minutes
+- Admin dashboard to view events and manage clients
+
+**Ready for:** Cold email outreach to agencies
+
+---
+
+## Marketing Site & Landing Pages
+
+Features clean, minimal design aesthetics for different business offerings.
 
 ## What This Is
 

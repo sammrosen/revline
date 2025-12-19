@@ -97,12 +97,20 @@ export default async function ClientDetailPage({
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <Link
-            href="/admin/clients"
-            className="text-zinc-400 hover:text-white text-sm mb-2 inline-block"
-          >
-            ← Back to Clients
-          </Link>
+          <div className="flex gap-4 mb-2">
+            <Link
+              href="/admin/clients"
+              className="text-zinc-400 hover:text-white text-sm inline-block"
+            >
+              ← Back to Clients
+            </Link>
+            <Link
+              href="/admin/onboarding"
+              className="text-zinc-400 hover:text-white text-sm inline-block"
+            >
+              📋 Onboarding Guide
+            </Link>
+          </div>
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-2xl font-bold">{client.name}</h1>

@@ -94,12 +94,20 @@ export default async function AdminClientsPage() {
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold">Clients</h1>
-          <Link
-            href="/admin/clients/new"
-            className="px-4 py-2 bg-white text-black rounded hover:bg-zinc-200 transition-colors text-sm font-medium"
-          >
-            Add Client
-          </Link>
+          <div className="flex gap-3">
+            <Link
+              href="/admin/onboarding"
+              className="px-4 py-2 border border-zinc-700 text-white rounded hover:border-zinc-600 transition-colors text-sm font-medium"
+            >
+              Onboarding Guide
+            </Link>
+            <Link
+              href="/admin/clients/new"
+              className="px-4 py-2 bg-white text-black rounded hover:bg-zinc-200 transition-colors text-sm font-medium"
+            >
+              Add Client
+            </Link>
+          </div>
         </div>
 
         {clients.length === 0 ? (
