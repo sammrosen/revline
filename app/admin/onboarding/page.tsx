@@ -32,8 +32,11 @@ export default async function OnboardingGuidePage() {
             <ul className="space-y-2 text-sm text-zinc-300">
               <li>• Business name (display name)</li>
               <li>• Slug for routing (lowercase, underscores OK - e.g., "acme_fitness")</li>
-              <li>• Timezone (optional, e.g., "America/New_York")</li>
+              <li>• Timezone <span className="text-red-400">*required</span> - IANA format (searchable in UI)</li>
             </ul>
+            <p className="text-xs text-zinc-500 mt-3">
+              💡 Timezone is used for health check business hours (4am-11pm client time) to avoid false "silent" alerts
+            </p>
           </div>
 
           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 mb-4">

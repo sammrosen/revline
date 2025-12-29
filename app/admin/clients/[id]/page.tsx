@@ -5,6 +5,9 @@ import { HealthStatus } from '@prisma/client';
 import Link from 'next/link';
 import { ClientActions } from '../client-actions';
 import { AddIntegrationForm } from './add-integration-form';
+import { IntegrationActions } from './integration-actions';
+import { DeleteClientButton } from './delete-client-button';
+import { LeadsView } from './leads-view';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,14 +30,7 @@ async function getClient(id: string) {
         orderBy: { createdAt: 'desc' },
       },
       leads: {
-        where: {
-          stage: 'CAPTURED',
-          lastEventAt: {
-            lt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-          },
-        },
-        take: 20,
-        orderBy: { lastEventAt: 'asc' },
+        orderBy: { createdAt: 'desc' },
         select: {
           id: true,
           email: true,
@@ -90,8 +86,6 @@ export default async function ClientDetailPage({
     notFound();
   }
 
-  const stuckLeads = client.leads;
-
   return (
     <div className="min-h-screen p-8">
       <div className="max-w-6xl mx-auto">
@@ -116,7 +110,10 @@ export default async function ClientDetailPage({
               <h1 className="text-2xl font-bold">{client.name}</h1>
               <p className="text-zinc-400 font-mono">{client.slug}</p>
             </div>
-            <ClientActions clientId={client.id} currentStatus={client.status} />
+            <div className="flex gap-3">
+              <ClientActions clientId={client.id} currentStatus={client.status} />
+              <DeleteClientButton clientId={client.id} clientName={client.name} />
+            </div>
           </div>
         </div>
 
@@ -130,8 +127,18 @@ export default async function ClientDetailPage({
                 className="bg-zinc-900 border border-zinc-800 rounded-lg p-4"
               >
                 <div className="flex justify-between items-start mb-2">
-                  <span className="font-medium">{integration.integration}</span>
-                  <HealthBadge status={integration.healthStatus} />
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{integration.integration}</span>
+                    <HealthBadge status={integration.healthStatus} />
+                  </div>
+                  <IntegrationActions 
+                    clientId={client.id} 
+                    integration={{
+                      id: integration.id,
+                      integration: integration.integration,
+                      meta: integration.meta
+                    }} 
+                  />
                 </div>
                 <div className="text-sm text-zinc-400">
                   Last seen: {formatDate(integration.lastSeenAt)}
@@ -147,36 +154,10 @@ export default async function ClientDetailPage({
           <AddIntegrationForm clientId={client.id} />
         </div>
 
-        {/* Stuck Leads */}
-        {stuckLeads.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-lg font-semibold mb-4 text-yellow-400">
-              Stuck Leads ({stuckLeads.length})
-            </h2>
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-zinc-800 text-left text-zinc-400">
-                    <th className="px-4 py-2 font-medium">Email</th>
-                    <th className="px-4 py-2 font-medium">Source</th>
-                    <th className="px-4 py-2 font-medium">Last Event</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stuckLeads.map((lead) => (
-                    <tr key={lead.id} className="border-b border-zinc-800 last:border-0">
-                      <td className="px-4 py-2 font-mono">{lead.email}</td>
-                      <td className="px-4 py-2 text-zinc-400">{lead.source || '—'}</td>
-                      <td className="px-4 py-2 text-zinc-400">
-                        {formatDate(lead.lastEventAt)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        {/* Customer Funnel */}
+        <div className="mb-8">
+          <LeadsView leads={client.leads} />
+        </div>
 
         {/* Recent Events */}
         <div>

@@ -19,7 +19,7 @@ model Client {
   name      String
   slug      String       @unique // Used for ?source= routing (e.g., "sam", "demo")
   status    ClientStatus @default(ACTIVE)
-  timezone  String?
+  timezone  String       @default("America/New_York") // IANA timezone for health check business hours
   createdAt DateTime     @default(now()) @map("created_at")
 
   integrations ClientIntegration[]

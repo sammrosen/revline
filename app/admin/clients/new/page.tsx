@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { TimezoneSelector } from './timezone-selector';
 
 export default function NewClientPage() {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
-  const [timezone, setTimezone] = useState('');
+  const [timezone, setTimezone] = useState('America/New_York'); // Default to ET
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
@@ -39,7 +40,7 @@ export default function NewClientPage() {
         body: JSON.stringify({
           name,
           slug,
-          timezone: timezone || undefined,
+          timezone,
         }),
       });
 
@@ -105,15 +106,16 @@ export default function NewClientPage() {
 
           <div>
             <label className="block text-sm text-zinc-400 mb-2">
-              Timezone (optional)
+              Timezone <span className="text-red-400">*</span>
             </label>
-            <input
-              type="text"
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-              className="w-full px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-600 text-white"
-              placeholder="America/New_York"
+            <TimezoneSelector 
+              value={timezone} 
+              onChange={setTimezone}
+              required
             />
+            <p className="text-xs text-zinc-500 mt-1">
+              Used for health check business hours (4am-11pm client time)
+            </p>
           </div>
 
           {error && <p className="text-red-400 text-sm">{error}</p>}

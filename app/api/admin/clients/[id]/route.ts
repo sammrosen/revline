@@ -91,3 +91,43 @@ export async function PATCH(
   return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
 }
 
+// DELETE /api/admin/clients/[id] - Delete client (cascade deletes integrations, leads, events)
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const adminId = await getAuthenticatedAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  try {
+    // Get client name for logging
+    const client = await prisma.client.findUnique({
+      where: { id },
+      select: { name: true },
+    });
+
+    if (!client) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    }
+
+    // Hard delete - Prisma cascade will handle related records (integrations, leads, events)
+    await prisma.client.delete({
+      where: { id },
+    });
+
+    console.log(`[ADMIN] Deleted client: ${client.name} (${id})`);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Delete client error:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete client' },
+      { status: 500 }
+    );
+  }
+}
+

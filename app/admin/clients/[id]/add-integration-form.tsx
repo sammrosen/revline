@@ -77,7 +77,10 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-      <h3 className="font-medium mb-4">Add Integration</h3>
+      <h3 className="font-medium mb-2">Add or Replace Integration</h3>
+      <p className="text-xs text-zinc-400 mb-4">
+        💡 Adding the same type will <span className="font-semibold">replace</span> the existing one (useful for secret rotation)
+      </p>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm text-zinc-400 mb-1">Type</label>

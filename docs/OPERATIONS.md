@@ -52,8 +52,12 @@ Daily usage, client onboarding, troubleshooting, and maintenance.
 2. Enter:
    - **Name**: "Acme Fitness"
    - **Slug**: `acme_fitness` (lowercase, underscores OK)
-   - **Timezone**: `America/New_York` (optional)
+   - **Timezone**: `America/New_York` (searchable dropdown - type to filter)
 3. Click "Create Client"
+
+**Why timezone is required:**
+- Health checks use it to determine business hours (4am-11pm client time)
+- Prevents false "silent integration" alerts during off-hours
 
 ### Step 2: Collect Integration Secrets
 
@@ -271,14 +275,27 @@ If approaching plan limit: Clean up old events or upgrade database.
 2. `SRB_ENCRYPTION_KEY` (to decrypt secrets)
 3. Restore database, verify key matches
 
-### Rotating Secrets
+### Managing Integrations
 
-**Client integration secrets (e.g., MailerLite API key rotated):**
+**Rotating secrets (e.g., MailerLite API key rotated):**
 1. Get new secret from client
-2. Go to admin → client → "Add Integration"
+2. Go to admin → client → "Add or Replace Integration"
 3. Select same integration type
 4. Paste new secret
-5. Saves over existing (upsert)
+5. Saves over existing (automatic upsert)
+
+**Editing meta config (group IDs, product maps, etc.):**
+1. Go to admin → client → find integration
+2. Click "Edit Meta" button
+3. Update JSON directly
+4. Save changes
+5. **No secret re-entry required** (only meta is updated)
+
+**Deleting an integration:**
+1. Go to admin → client → find integration
+2. Click "Delete" button
+3. Type `DELETE` to confirm
+4. **Warning:** Webhooks will stop working immediately
 
 **Master encryption key:**
 - Not supported yet
@@ -361,6 +378,36 @@ Returns JSON with issues found (if any).
 ---
 
 ## Common Admin Tasks
+
+### Deleting a Client
+
+**⚠️ DESTRUCTIVE ACTION - Cannot be undone**
+
+When to delete:
+- Client permanently churned
+- Test/demo client no longer needed
+- Duplicate entry
+
+**How to delete:**
+1. Go to admin → click client
+2. Click "Delete Client" (top right)
+3. Review what will be deleted:
+   - Client record
+   - All integrations (encrypted secrets)
+   - All leads and customer data
+   - All event history
+4. Type the **exact client name** to confirm
+5. Click "Permanently Delete"
+
+**Effect:**
+- Cascade deletion (all related data removed)
+- Webhooks will return 404 immediately
+- Forms will error (source not found)
+- **Cannot be recovered** (unless database backup exists)
+
+**Alternative to deletion:**
+- Consider pausing instead (reversible)
+- Only delete when certain client won't return
 
 ### Adding a new integration type (e.g., Calendly)
 

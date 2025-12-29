@@ -66,9 +66,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, slug, timezone } = body;
 
-    if (!name || !slug) {
+    if (!name || !slug || !timezone) {
       return NextResponse.json(
-        { error: 'Name and slug are required' },
+        { error: 'Name, slug, and timezone are required' },
         { status: 400 }
       );
     }
