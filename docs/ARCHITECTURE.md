@@ -162,6 +162,8 @@ flowchart TB
 
 **Meta examples:**
 
+**Important:** Meta is stored as plain JSON (not encrypted) and visible in admin UI. Only store non-sensitive configuration here. All secrets/API keys go in the encrypted_secret field.
+
 MailerLite:
 ```json
 {
@@ -176,12 +178,26 @@ MailerLite:
 Stripe:
 ```json
 {
-  "apiKey": "sk_live_xxx",
   "productMap": {
     "price_abc": "premium_offer"
   }
 }
 ```
+
+Note: Stripe meta is rarely needed since webhook handler uses MailerLite groups. Can be empty `{}` or contain optional product routing.
+
+Calendly (optional):
+```json
+{
+  "schedulingUrls": {
+    "discovery": "https://calendly.com/yourname/30min",
+    "strategy": "https://calendly.com/yourname/60min"
+  },
+  "addToBookedSegment": false
+}
+```
+
+Note: Webhook signing key is stored in encrypted_secret field, not in meta.
 
 ---
 

@@ -98,9 +98,9 @@ export default async function OnboardingGuidePage() {
                 <code className="text-white">MAILERLITE</code>
               </div>
               <div>
-                <p className="text-zinc-400 mb-1">Secret:</p>
+                <p className="text-zinc-400 mb-1">Secret (API Key):</p>
                 <code className="text-white">mlsk_xxxxxxxxxxxxx</code>
-                <p className="text-xs text-zinc-500 mt-1">⚠️ Encrypted on save, never shown again</p>
+                <p className="text-xs text-zinc-500 mt-1">🔒 Encrypted on save, never shown again</p>
               </div>
               <div>
                 <p className="text-zinc-400 mb-1">Meta (JSON):</p>
@@ -112,11 +112,19 @@ export default async function OnboardingGuidePage() {
   }
 }`}
                 </pre>
+                <div className="mt-2 p-2 bg-blue-950/30 border border-blue-900/50 rounded">
+                  <p className="text-xs text-blue-300">
+                    💡 <strong>Meta stores non-sensitive config only</strong> (group IDs, URLs, flags).
+                  </p>
+                  <p className="text-xs text-blue-300 mt-1">
+                    ⚠️ <strong>Never put API keys or secrets in meta</strong> - they go in the Secret field above.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 mb-4">
             <h3 className="font-medium mb-3 text-purple-400">Stripe Integration</h3>
             <div className="space-y-3 text-sm">
               <div>
@@ -124,17 +132,60 @@ export default async function OnboardingGuidePage() {
                 <code className="text-white">STRIPE</code>
               </div>
               <div>
-                <p className="text-zinc-400 mb-1">Secret:</p>
+                <p className="text-zinc-400 mb-1">Secret (Webhook Secret):</p>
                 <code className="text-white">whsec_xxxxxxxxxxxxx</code>
-                <p className="text-xs text-zinc-500 mt-1">⚠️ Encrypted on save, never shown again</p>
+                <p className="text-xs text-zinc-500 mt-1">🔒 Encrypted on save, never shown again</p>
+              </div>
+              <div>
+                <p className="text-zinc-400 mb-1">Meta (JSON, optional):</p>
+                <pre className="bg-zinc-950 p-3 rounded text-xs text-zinc-300 overflow-x-auto">
+{`{}`}
+                </pre>
+                <div className="mt-2 p-2 bg-blue-950/30 border border-blue-900/50 rounded">
+                  <p className="text-xs text-blue-300">
+                    💡 <strong>Stripe webhook uses MailerLite groups</strong> (configured above).
+                  </p>
+                  <p className="text-xs text-blue-300 mt-1">
+                    You can leave meta empty or add optional product routing.
+                  </p>
+                  <p className="text-xs text-red-300 mt-1">
+                    ⚠️ <strong>Do NOT put Stripe API keys in meta</strong> - they are not needed for webhooks.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+            <h3 className="font-medium mb-3 text-cyan-400">Calendly Integration (Optional)</h3>
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-zinc-400 mb-1">Type:</p>
+                <code className="text-white">CALENDLY</code>
+              </div>
+              <div>
+                <p className="text-zinc-400 mb-1">Secret (Webhook Signing Key):</p>
+                <code className="text-white">your_signing_key_from_calendly</code>
+                <p className="text-xs text-zinc-500 mt-1">🔒 Encrypted on save, never shown again</p>
               </div>
               <div>
                 <p className="text-zinc-400 mb-1">Meta (JSON, optional):</p>
                 <pre className="bg-zinc-950 p-3 rounded text-xs text-zinc-300 overflow-x-auto">
 {`{
-  "apiKey": "sk_live_xxxxx"
+  "schedulingUrls": {
+    "discovery": "https://calendly.com/yourname/30min"
+  },
+  "addToBookedSegment": false
 }`}
                 </pre>
+                <div className="mt-2 p-2 bg-blue-950/30 border border-blue-900/50 rounded">
+                  <p className="text-xs text-blue-300">
+                    💡 <strong>Calendly requires webhook subscription setup</strong> via their API.
+                  </p>
+                  <p className="text-xs text-blue-300 mt-1">
+                    Store scheduling URLs and config flags in meta (optional). Webhook signing key must go in Secret field above.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

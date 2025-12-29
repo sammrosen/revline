@@ -25,10 +25,12 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </a>
-            {/* TODO: Replace href with Calendly link */}
+            {/* TODO: Replace with your actual Calendly URL */}
             <a
-              href="#"
+              href="https://calendly.com/yourname/30min?utm_source=sam&utm_medium=landing_page&utm_campaign=hero_cta"
               className="inline-flex items-center justify-center px-10 py-5 text-base font-medium text-zinc-50 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/50 transition-all duration-300"
+              target="_blank"
+              rel="noopener noreferrer"
             >
               Work With Me
             </a>
@@ -312,10 +314,12 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </a>
-            {/* TODO: Replace href with Calendly link */}
+            {/* TODO: Replace with your actual Calendly URL */}
             <a
-              href="#"
+              href="https://calendly.com/yourname/30min?utm_source=sam&utm_medium=landing_page&utm_campaign=cta_section"
               className="inline-flex items-center justify-center px-10 py-5 text-base font-medium text-zinc-50 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/50 transition-all duration-300"
+              target="_blank"
+              rel="noopener noreferrer"
             >
               Work With Me
             </a>

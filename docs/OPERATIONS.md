@@ -87,7 +87,7 @@ Click on the client → "Add Integration"
 **MailerLite:**
 ```
 Type: MAILERLITE
-Secret: mlsk_xxxxxxxxxxxxx  (pasted once, encrypted on save)
+Secret: mlsk_xxxxxxxxxxxxx  (API key - encrypted on save)
 Meta:
 {
   "groupIds": {
@@ -97,15 +97,32 @@ Meta:
 }
 ```
 
+**Important:** Meta stores non-sensitive config only (group IDs, URLs, flags). Never put API keys or secrets in meta - they go in the Secret field.
+
 **Stripe:**
 ```
 Type: STRIPE
-Secret: whsec_xxxxxxxxxxxxx
+Secret: whsec_xxxxxxxxxxxxx  (webhook secret - encrypted on save)
+Meta (optional - usually empty):
+{}
+```
+
+**Note:** Stripe webhook uses MailerLite groups (configured above). You don't need Stripe API keys for webhooks. Leave meta empty or add optional product routing if needed.
+
+**Calendly (Optional):**
+```
+Type: CALENDLY
+Secret: your_signing_key_from_calendly  (webhook signing key - encrypted on save)
 Meta (optional):
 {
-  "apiKey": "sk_live_xxxxx"
+  "schedulingUrls": {
+    "discovery": "https://calendly.com/yourname/30min"
+  },
+  "addToBookedSegment": false
 }
 ```
+
+**Note:** Calendly integration requires webhook subscription setup via their API. Store scheduling URLs and optional config flags in meta. The webhook signing key must go in the Secret field (encrypted).
 
 Secrets are **never shown again** after saving.
 

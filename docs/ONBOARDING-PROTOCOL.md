@@ -146,7 +146,84 @@ Customer Groups (for Stripe purchases):
    - Add to Google Calendar
    - Zoom/Google Meet auto-generation
 
-### 2.4 Environment Variables Setup
+### 2.4 ManyChat Setup
+
+**Configure Instagram Automation:**
+
+ManyChat drives traffic from Instagram to your landing pages. No webhook integration needed - it simply sends users to the landing page where EmailCapture handles everything.
+
+**Prerequisites:**
+- Client has Instagram Business Account
+- ManyChat Pro subscription ($15-25/month) - required for Instagram automation
+- Landing page URL ready
+
+**Setup Steps:**
+
+1. **Connect Instagram to ManyChat**
+   - Client provides Instagram Business Account credentials (or admin access)
+   - Log into [ManyChat](https://manychat.com/)
+   - Go to Settings → Instagram
+   - Click "Connect Instagram Account"
+   - Authorize ManyChat
+
+2. **Create Comment Automation**
+   - Navigate to Automation → Instagram
+   - Click "+ New Rule"
+   - Choose "Comment" trigger
+   - Set trigger keywords: "INTERESTED", "INFO", "SIGN UP", "DETAILS"
+   - Add first action: Send public comment reply
+     ```
+     Hey! 👋 
+     I'll send you all the info right now.
+     Check your DMs in 5 seconds!
+     ```
+   - Add delay: 5 seconds
+   - Add second action: Send DM with landing page link
+     ```
+     Here's the link to learn more and get started:
+     
+     👉 [CLIENT NAME] Landing Page
+     
+     Just enter your email on that page and I'll send you everything!
+     ```
+   - Add button: "Visit Page" → Landing page URL
+   - Save and activate
+
+3. **Configure Landing Page URL**
+   - Format: `https://yourdomain.com/clientname?utm_source=instagram&utm_medium=manychat`
+   - Include UTM parameters for tracking
+   - Test URL works before setting in ManyChat
+
+4. **Create DM Automation (Optional)**
+   - For users who DM directly
+   - Same message as comment automation
+   - Send landing page link
+
+5. **Test End-to-End Flow**
+   - Comment on client's IG post with keyword
+   - Verify auto-reply in comments
+   - Check DM received
+   - Click landing page link
+   - Enter test email
+   - Verify email in MailerLite
+
+**Landing Page Requirements:**
+- Must have EmailCapture component with correct `source` prop
+- Source should match client slug in admin dashboard
+- MailerLite groups must be configured for client
+
+**Important Notes:**
+- ManyChat is NOT integrated via webhook
+- It's purely a traffic source pointing to landing pages
+- Email capture happens on landing page, not in ManyChat
+- See `docs/MANYCHAT-SETUP.md` for detailed guide
+
+**Common Issues:**
+- Auto-reply not working: Check IG account is Business type, ManyChat is connected
+- DM not received: Instagram rate limits, user DMs turned off
+- Link not working: Verify URL, test in browser first
+
+### 2.5 Environment Variables Setup
 
 **For Development (.env.local):**
 ```bash
@@ -397,6 +474,16 @@ npm run dev
 6. Check your email for automation sequence
 7. Test with duplicate email (should handle gracefully)
 
+**Test ManyChat Flow (If Configured):**
+1. Navigate to client's Instagram post
+2. Comment with trigger keyword (e.g., "INTERESTED")
+3. Verify auto-reply appears in comments
+4. Check your Instagram DMs for the message
+5. Click the landing page link in the DM
+6. Verify it lands on the correct page with UTM parameters
+7. Test email capture from this flow
+8. Confirm subscriber added to MailerLite with correct source
+
 **Test Calendly Link:**
 1. Click "Book a Call" CTA
 2. Verify it opens Calendly
@@ -443,6 +530,15 @@ stripe trigger checkout.session.completed --override metadata.program=program1
 - Verify end-to-end flow
 
 ### 4.3 Automation Testing Checklist
+
+**ManyChat Flow (If Configured):**
+- [ ] Comment trigger keywords work correctly
+- [ ] Auto-reply appears in IG comments
+- [ ] DM sent to user within seconds
+- [ ] Landing page link in DM works
+- [ ] UTM parameters captured correctly
+- [ ] Email capture from ManyChat traffic works
+- [ ] Subscriber added to correct MailerLite group
 
 **Lead Capture Flow:**
 - [ ] Email form submits successfully
@@ -683,6 +779,9 @@ Contact [Your Name] at [Your Email]
 - [ ] Client consultation completed
 - [ ] MailerLite groups created (Lead + Customer)
 - [ ] MailerLite automations built (Welcome + Nurture + Onboarding)
+- [ ] ManyChat Pro account set up (if using IG automation)
+- [ ] Instagram Business Account connected to ManyChat
+- [ ] ManyChat comment automation configured
 - [ ] Stripe product created
 - [ ] Stripe payment link created with metadata
 - [ ] Stripe webhook configured (test mode)
@@ -700,6 +799,8 @@ Contact [Your Name] at [Your Email]
 - [ ] Set page metadata (title, description)
 
 **Testing:**
+- [ ] ManyChat IG comment automation works (if configured)
+- [ ] Landing page loads from ManyChat DM link
 - [ ] Local email capture works
 - [ ] MailerLite receives test subscriber
 - [ ] Email automation triggers

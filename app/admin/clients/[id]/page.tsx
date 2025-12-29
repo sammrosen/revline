@@ -8,6 +8,7 @@ import { AddIntegrationForm } from './add-integration-form';
 import { IntegrationActions } from './integration-actions';
 import { DeleteClientButton } from './delete-client-button';
 import { LeadsView } from './leads-view';
+import { HealthCheckButton } from './health-check-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -111,6 +112,7 @@ export default async function ClientDetailPage({
               <p className="text-zinc-400 font-mono">{client.slug}</p>
             </div>
             <div className="flex gap-3">
+              <HealthCheckButton clientId={client.id} />
               <ClientActions clientId={client.id} currentStatus={client.status} />
               <DeleteClientButton clientId={client.id} clientName={client.name} />
             </div>

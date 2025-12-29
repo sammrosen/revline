@@ -13,10 +13,12 @@ export default function FIT1Page() {
               Personalized coaching, data-driven programs, and a mobile app built for serious lifters who refuse to settle for generic plans.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              {/* TODO: Replace href with Calendly link */}
+              {/* TODO: Replace with your actual Calendly URL */}
               <a
-                href="#"
+                href="https://calendly.com/yourname/fit1-assessment?utm_source=fit1&utm_medium=landing_page&utm_campaign=hero_cta"
                 className="inline-flex items-center justify-center px-8 py-4 text-lg font-semibold text-zinc-950 bg-zinc-50 rounded-lg hover:bg-zinc-200 transition-all duration-200 shadow-lg shadow-zinc-950/50"
+                target="_blank"
+                rel="noopener noreferrer"
               >
                 Book Your FIT1 Assessment
               </a>
@@ -464,10 +466,12 @@ export default function FIT1Page() {
             Join lifters who train with purpose, track what matters, and build strength that lasts.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            {/* TODO: Replace href with Calendly link */}
+            {/* TODO: Replace with your actual Calendly URL */}
             <a
-              href="#"
+              href="https://calendly.com/yourname/fit1-assessment?utm_source=fit1&utm_medium=landing_page&utm_campaign=cta_section"
               className="inline-flex items-center justify-center px-10 py-5 text-lg font-semibold text-zinc-950 bg-zinc-50 rounded-lg hover:bg-zinc-200 transition-all duration-200 shadow-2xl shadow-zinc-950/50"
+              target="_blank"
+              rel="noopener noreferrer"
             >
               Book Your FIT1 Assessment
             </a>
