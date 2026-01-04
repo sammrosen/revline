@@ -19,9 +19,9 @@ interface LeadsViewProps {
 const STAGES: { value: LeadStage | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All Leads' },
   { value: 'CAPTURED', label: 'Captured' },
-  { value: 'SUBSCRIBED', label: 'Subscribed' },
-  { value: 'PAID', label: 'Paid' },
   { value: 'BOOKED', label: 'Booked' },
+  { value: 'PAID', label: 'Paid' },
+  { value: 'DEAD', label: 'Dead' },
 ];
 
 function formatDate(date: Date | string) {
@@ -36,9 +36,9 @@ function formatDate(date: Date | string) {
 function StageBadge({ stage }: { stage: LeadStage }) {
   const colors = {
     CAPTURED: 'bg-blue-500/20 text-blue-400',
-    SUBSCRIBED: 'bg-purple-500/20 text-purple-400',
-    PAID: 'bg-green-500/20 text-green-400',
     BOOKED: 'bg-emerald-500/20 text-emerald-400',
+    PAID: 'bg-green-500/20 text-green-400',
+    DEAD: 'bg-red-500/20 text-red-400',
   };
 
   return (
@@ -58,9 +58,9 @@ export function LeadsView({ leads }: LeadsViewProps) {
   const stageCounts = {
     ALL: leads.length,
     CAPTURED: leads.filter(l => l.stage === 'CAPTURED').length,
-    SUBSCRIBED: leads.filter(l => l.stage === 'SUBSCRIBED').length,
-    PAID: leads.filter(l => l.stage === 'PAID').length,
     BOOKED: leads.filter(l => l.stage === 'BOOKED').length,
+    PAID: leads.filter(l => l.stage === 'PAID').length,
+    DEAD: leads.filter(l => l.stage === 'DEAD').length,
   };
 
   return (
