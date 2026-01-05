@@ -18,13 +18,16 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "type-check": "tsc --noEmit",
-    "ci": "npm run lint && npm run test && npm run build"
+    "ci": "npm run lint && npm run type-check && npm run test && npm run build",
+    "pre-push": "npm run lint && npm run type-check && npm run test && npm run build"
   },
   "dependencies": {
     "@prisma/client": "^6.19.1",
     "argon2": "^0.44.0",
     "next": "^16.1.1",
+    "otpauth": "^9.4.1",
     "prisma": "^6.19.1",
+    "qrcode": "^1.5.4",
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "resend": "^6.6.0",
@@ -33,6 +36,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^2.1.0",

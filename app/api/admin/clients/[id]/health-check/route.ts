@@ -297,6 +297,11 @@ async function testMailerLiteAPI(clientId: string): Promise<TestResult> {
   try {
     const mlIntegration = await prisma.clientIntegration.findFirst({
       where: { clientId, integration: 'MAILERLITE' },
+      select: {
+        encryptedSecret: true,
+        keyVersion: true,
+        meta: true,
+      },
     });
     
     if (!mlIntegration) {
@@ -309,7 +314,7 @@ async function testMailerLiteAPI(clientId: string): Promise<TestResult> {
       };
     }
     
-    const apiKey = await decryptSecret(mlIntegration.encryptedSecret);
+    const apiKey = decryptSecret(mlIntegration.encryptedSecret, mlIntegration.keyVersion);
     
     const response = await withTimeout(
       fetch('https://connect.mailerlite.com/api/groups', {
@@ -334,7 +339,7 @@ async function testMailerLiteAPI(clientId: string): Promise<TestResult> {
     
     const data = await response.json() as { data?: Array<{ id: string }> };
     const groups = data.data || [];
-    const meta = mlIntegration.meta as { groupIds?: { lead?: string; customer?: string } } | null;
+    const meta = mlIntegration.meta as { groupIds?: { lead?: string; customer?: string } } | null | undefined;
     
     // Verify configured groups exist
     if (meta?.groupIds) {

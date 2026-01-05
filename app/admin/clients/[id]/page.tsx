@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ClientActions } from '../client-actions';
 import { DeleteClientButton } from './delete-client-button';
 import { HealthCheckButton } from './health-check-button';
+import { TestNotificationButton } from './test-notification-button';
 import { ClientTabs } from './client-tabs';
 
 export const dynamic = 'force-dynamic';
@@ -81,6 +82,7 @@ export default async function ClientDetailPage({
             </div>
             <div className="flex gap-3">
               <HealthCheckButton clientId={client.id} />
+              <TestNotificationButton clientId={client.id} />
               <ClientActions clientId={client.id} currentStatus={client.status} />
               <DeleteClientButton clientId={client.id} clientName={client.name} />
             </div>

@@ -2,6 +2,7 @@ import { prisma } from '@/app/_lib/db';
 import { HealthStatus } from '@prisma/client';
 import Link from 'next/link';
 import { ClientActions } from './client-actions';
+import { LogoutButton } from '../_components/logout-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,7 +89,15 @@ export default async function AdminClientsPage() {
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold">Clients</h1>
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
+            <LogoutButton />
+            <Link
+              href="/admin/settings"
+              className="px-4 py-2 border border-zinc-700 text-zinc-400 rounded hover:border-zinc-600 hover:text-white transition-colors text-sm font-medium"
+              title="Settings"
+            >
+              ⚙️
+            </Link>
             <Link
               href="/admin/onboarding"
               className="px-4 py-2 border border-zinc-700 text-white rounded hover:border-zinc-600 transition-colors text-sm font-medium"

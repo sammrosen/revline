@@ -44,8 +44,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Encrypt the secret
-    const encryptedSecret = encryptSecret(plaintextSecret);
+    // Encrypt the secret (returns encrypted secret and key version)
+    const { encryptedSecret, keyVersion } = encryptSecret(plaintextSecret);
 
     // Upsert the integration (update if exists, create if not)
     const clientIntegration = await prisma.clientIntegration.upsert({
@@ -57,12 +57,14 @@ export async function POST(request: NextRequest) {
       },
       update: {
         encryptedSecret,
+        keyVersion,
         meta: meta || undefined,
       },
       create: {
         clientId,
         integration,
         encryptedSecret,
+        keyVersion,
         meta: meta || undefined,
       },
     });

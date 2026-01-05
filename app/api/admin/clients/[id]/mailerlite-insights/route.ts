@@ -62,6 +62,11 @@ export async function GET(
       clientId,
       integration: IntegrationType.MAILERLITE,
     },
+    select: {
+      encryptedSecret: true,
+      keyVersion: true,
+      meta: true,
+    },
   });
 
   if (!mlIntegration) {
@@ -72,8 +77,8 @@ export async function GET(
   }
 
   try {
-    // Decrypt API key
-    const apiKey = await decryptSecret(mlIntegration.encryptedSecret);
+    // Decrypt API key using the stored key version
+    const apiKey = decryptSecret(mlIntegration.encryptedSecret, mlIntegration.keyVersion);
 
     // Fetch data from MailerLite API
     const [groups, automations] = await Promise.all([

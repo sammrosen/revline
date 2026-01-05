@@ -2,7 +2,7 @@
  * Next.js Proxy
  * 
  * Handles two main responsibilities:
- * 1. Protects all /admin/* routes (except /admin/login) with authentication.
+ * 1. Protects all /admin/* routes (except /admin/login and /admin/setup) with authentication.
  *    Checks session cookie and redirects to login if not authenticated.
  * 2. Routes custom domains to specific pages.
  * 
@@ -10,6 +10,7 @@
  * - All admin routes protected automatically
  * - No manual auth checks needed in pages
  * - Passes adminId via headers for server components
+ * - /admin/setup only accessible when no admin exists (checked in the route itself)
  */
 
 import { NextResponse } from 'next/server';
@@ -37,8 +38,17 @@ export async function proxy(request: NextRequest) {
   const isAdminApi = pathname.startsWith('/api/admin');
 
   if (isAdminPage || isAdminApi) {
-    // Allow access to login pages
-    if (pathname === '/admin/login' || pathname === '/api/admin/login') {
+    // Allow access to login, setup, and logout pages without authentication
+    const publicAdminPaths = [
+      '/admin/login',
+      '/api/admin/login',
+      '/api/admin/login/verify-2fa',
+      '/admin/setup',
+      '/api/admin/setup',
+      '/api/admin/logout',
+    ];
+    
+    if (publicAdminPaths.includes(pathname)) {
       // Continue to domain routing check below
     } else {
       // Get session cookie

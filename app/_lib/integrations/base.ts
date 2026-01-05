@@ -57,6 +57,7 @@ export abstract class BaseIntegrationAdapter<TMeta extends IntegrationMeta = Int
       },
       select: {
         encryptedSecret: true,
+        keyVersion: true,
         meta: true,
       },
     });
@@ -65,7 +66,7 @@ export abstract class BaseIntegrationAdapter<TMeta extends IntegrationMeta = Int
       return null;
     }
 
-    const secret = decryptSecret(row.encryptedSecret);
+    const secret = decryptSecret(row.encryptedSecret, row.keyVersion);
     const meta = row.meta as TMeta | null;
 
     return { secret, meta };

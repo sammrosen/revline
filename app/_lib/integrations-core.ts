@@ -31,6 +31,7 @@ export async function getClientSecret(
     },
     select: {
       encryptedSecret: true,
+      keyVersion: true,
     },
   });
 
@@ -38,7 +39,7 @@ export async function getClientSecret(
     return null;
   }
 
-  return decryptSecret(row.encryptedSecret);
+  return decryptSecret(row.encryptedSecret, row.keyVersion);
 }
 
 /**
@@ -62,6 +63,7 @@ export async function getClientIntegration(
     },
     select: {
       encryptedSecret: true,
+      keyVersion: true,
       meta: true,
     },
   });
@@ -71,7 +73,7 @@ export async function getClientIntegration(
   }
 
   return {
-    secret: decryptSecret(row.encryptedSecret),
+    secret: decryptSecret(row.encryptedSecret, row.keyVersion),
     meta: row.meta as IntegrationMeta | null,
   };
 }
