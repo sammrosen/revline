@@ -12,6 +12,8 @@ export default defineConfig({
   },
   engine: "classic",
   datasource: {
-    url: env("DATABASE_URL"),
+    // Use a dummy URL for generate operations (doesn't need real DB)
+    // For actual DB operations, DATABASE_URL must be set
+    url: env("DATABASE_URL") || "postgresql://dummy:dummy@localhost:5432/dummy",
   },
 });
