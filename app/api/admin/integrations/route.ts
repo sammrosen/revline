@@ -3,7 +3,24 @@ import { getAdminIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { encryptSecret } from '@/app/_lib/crypto';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
-import { IntegrationType } from '@prisma/client';
+import { IntegrationType, Prisma } from '@prisma/client';
+import { IntegrationSecret, SecretInput } from '@/app/_lib/types';
+import { randomUUID } from 'crypto';
+
+/**
+ * Encrypt an array of secret inputs into IntegrationSecret objects
+ */
+function encryptSecrets(inputs: SecretInput[]): IntegrationSecret[] {
+  return inputs.map(input => {
+    const { encryptedSecret, keyVersion } = encryptSecret(input.plaintextValue);
+    return {
+      id: randomUUID(),
+      name: input.name,
+      encryptedValue: encryptedSecret,
+      keyVersion,
+    };
+  });
+}
 
 // POST /api/admin/integrations - Add a new integration for a client
 export async function POST(request: NextRequest) {
@@ -15,12 +32,39 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { clientId, integration, plaintextSecret, meta } = body;
+    const { clientId, integration, secrets: secretInputs, meta } = body;
 
     // Validate required fields
-    if (!clientId || !integration || !plaintextSecret) {
+    if (!clientId || !integration) {
       return NextResponse.json(
-        { error: 'clientId, integration, and plaintextSecret are required' },
+        { error: 'clientId and integration are required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate secrets
+    if (!secretInputs || !Array.isArray(secretInputs) || secretInputs.length === 0) {
+      return NextResponse.json(
+        { error: 'secrets array is required with at least one secret' },
+        { status: 400 }
+      );
+    }
+
+    // Validate each secret input
+    for (const secret of secretInputs) {
+      if (!secret.name || !secret.plaintextValue) {
+        return NextResponse.json(
+          { error: 'Each secret must have a name and plaintextValue' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Check for duplicate secret names
+    const names = secretInputs.map((s: SecretInput) => s.name);
+    if (new Set(names).size !== names.length) {
+      return NextResponse.json(
+        { error: 'Secret names must be unique within an integration' },
         { status: 400 }
       );
     }
@@ -44,8 +88,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Encrypt the secret
-    const encryptedSecret = encryptSecret(plaintextSecret);
+    // Encrypt all secrets
+    const encryptedSecrets = encryptSecrets(secretInputs);
 
     // Upsert the integration (update if exists, create if not)
     const clientIntegration = await prisma.clientIntegration.upsert({
@@ -56,13 +100,13 @@ export async function POST(request: NextRequest) {
         },
       },
       update: {
-        encryptedSecret,
+        secrets: encryptedSecrets as unknown as Prisma.InputJsonValue,
         meta: meta || undefined,
       },
       create: {
         clientId,
         integration,
-        encryptedSecret,
+        secrets: encryptedSecrets as unknown as Prisma.InputJsonValue,
         meta: meta || undefined,
       },
     });
@@ -79,8 +123,9 @@ export async function POST(request: NextRequest) {
       {
         id: clientIntegration.id,
         integration: clientIntegration.integration,
+        // Return secret summaries (names only, never values)
+        secrets: encryptedSecrets.map(s => ({ id: s.id, name: s.name })),
         createdAt: clientIntegration.createdAt,
-        // Never return the secret
       },
       { status: 201 }
     );
@@ -92,7 +137,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-
-
-

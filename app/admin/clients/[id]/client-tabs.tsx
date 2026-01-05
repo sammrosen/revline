@@ -6,8 +6,14 @@ import { IntegrationActions } from './integration-actions';
 import { AddIntegrationForm } from './add-integration-form';
 import { LeadsView } from './leads-view';
 import MailerLiteInsights from './mailerlite-insights';
+import { getStripeProductNames } from './stripe-config-editor';
 
 type TabType = 'integrations' | 'leads' | 'events' | 'insights';
+
+interface SecretSummary {
+  id: string;
+  name: string;
+}
 
 interface Integration {
   id: string;
@@ -15,6 +21,7 @@ interface Integration {
   healthStatus: HealthStatus;
   lastSeenAt: Date | null;
   meta: unknown;
+  secrets: unknown;
   createdAt: Date;
 }
 
@@ -41,6 +48,15 @@ interface ClientTabsProps {
   integrations: Integration[];
   events: Event[];
   leads: Lead[];
+}
+
+// Parse secrets from JSON, returning only id and name (never values)
+function parseSecrets(secrets: unknown): SecretSummary[] {
+  if (!secrets || !Array.isArray(secrets)) return [];
+  return secrets.map((s: { id?: string; name?: string }) => ({
+    id: s.id || '',
+    name: s.name || '',
+  })).filter(s => s.id && s.name);
 }
 
 function HealthBadge({ status }: { status: HealthStatus }) {
@@ -70,6 +86,12 @@ function formatDate(date: Date | string | null) {
 
 export function ClientTabs({ clientId, integrations, events, leads }: ClientTabsProps) {
   const [activeTab, setActiveTab] = useState<TabType>('integrations');
+
+  // Extract Stripe product names for MailerLite routing dropdown
+  const stripeIntegration = integrations.find(i => i.integration === 'STRIPE');
+  const stripeProducts = stripeIntegration?.meta 
+    ? getStripeProductNames(JSON.stringify(stripeIntegration.meta))
+    : [];
 
   const tabs: { id: TabType; label: string; count?: number }[] = [
     { id: 'integrations', label: 'Integrations', count: integrations.length },
@@ -109,37 +131,69 @@ export function ClientTabs({ clientId, integrations, events, leads }: ClientTabs
       <div className="min-h-[400px]">
         {activeTab === 'integrations' && (
           <div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
               {integrations.map((integration) => (
                 <div
                   key={integration.id}
-                  className="bg-zinc-900 border border-zinc-800 rounded-lg p-4"
+                  className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex flex-col gap-4 relative"
                 >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{integration.integration}</span>
+                  {/* Header: Title and Actions */}
+                  <div className="flex flex-row justify-between items-center gap-4 relative">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-bold tracking-tight text-white">{integration.integration}</span>
                       <HealthBadge status={integration.healthStatus} />
                     </div>
-                    <IntegrationActions
-                      integration={{
-                        id: integration.id,
-                        integration: integration.integration,
-                        meta: integration.meta,
-                      }}
-                    />
+                    <div className="flex justify-end">
+                      <IntegrationActions
+                        integration={{
+                          id: integration.id,
+                          integration: integration.integration,
+                          meta: integration.meta,
+                          secrets: parseSecrets(integration.secrets),
+                        }}
+                        stripeProducts={integration.integration === 'MAILERLITE' ? stripeProducts : undefined}
+                      />
+                    </div>
                   </div>
-                  <div className="text-sm text-zinc-400">
-                    Last seen: {formatDate(integration.lastSeenAt)}
-                  </div>
-                  {integration.meta != null && (
-                    <pre className="mt-2 text-xs bg-zinc-950 p-2 rounded overflow-x-auto">
-                      {JSON.stringify(integration.meta, null, 2)}
-                    </pre>
-                  )}
+
+                  {/* Body: Last seen and JSON Toggle row */}
+                  <details className="group relative">
+                    <summary className="flex items-center justify-between text-zinc-400 border-t border-zinc-800/50 pt-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                      <div className="text-[10px] sm:text-xs">
+                        <span className="text-zinc-500 uppercase tracking-widest text-[9px] mr-1">Last seen:</span>
+                        {formatDate(integration.lastSeenAt)}
+                      </div>
+                      
+                      {integration.meta != null && (
+                        <div className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1.5 py-1">
+                          <span className="font-medium uppercase tracking-wider text-[9px]">JSON</span>
+                          <svg 
+                            className="w-2.5 h-2.5 transition-transform duration-200 group-open:rotate-180 text-zinc-600 group-hover:text-zinc-400" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      )}
+                    </summary>
+
+                    {integration.meta != null && (
+                      <div className="mt-4 border-t border-zinc-800/50 pt-3 overflow-hidden">
+                        <pre className="text-[10px] sm:text-xs bg-zinc-950 border border-zinc-800 p-3 rounded-md overflow-x-auto max-h-64 font-mono text-zinc-400 leading-relaxed scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+                          {JSON.stringify(integration.meta, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                  </details>
                 </div>
               ))}
             </div>
-            <AddIntegrationForm clientId={clientId} />
+            <div className="mt-4">
+              <AddIntegrationForm clientId={clientId} stripeProducts={stripeProducts} />
+            </div>
           </div>
         )}
 

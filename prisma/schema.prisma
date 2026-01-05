@@ -39,14 +39,14 @@ enum ClientStatus {
 // =============================================================================
 
 model ClientIntegration {
-  id              String          @id @default(uuid())
-  clientId        String          @map("client_id")
-  integration     IntegrationType
-  encryptedSecret String          @map("encrypted_secret")
-  meta            Json? // Non-sensitive config: group_ids, product_map, etc.
-  healthStatus    HealthStatus    @default(GREEN) @map("health_status")
-  lastSeenAt      DateTime?       @map("last_seen_at")
-  createdAt       DateTime        @default(now()) @map("created_at")
+  id           String          @id @default(uuid())
+  clientId     String          @map("client_id")
+  integration  IntegrationType
+  secrets      Json?           // Array of { id: string, name: string, encryptedValue: string, keyVersion: number }
+  meta         Json?           // Non-sensitive config: groups, routing, product_map, etc.
+  healthStatus HealthStatus    @default(GREEN) @map("health_status")
+  lastSeenAt   DateTime?       @map("last_seen_at")
+  createdAt    DateTime        @default(now()) @map("created_at")
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -133,9 +133,13 @@ enum EventSystem {
 // =============================================================================
 
 model Admin {
-  id           String   @id @default(uuid())
-  passwordHash String   @map("password_hash")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id             String   @id @default(uuid())
+  passwordHash   String   @map("password_hash")
+  totpSecret     String?  @map("totp_secret") // Encrypted with AES-256-GCM, null if 2FA not set up
+  totpKeyVersion Int      @default(0) @map("totp_key_version") // Key version used to encrypt totpSecret
+  totpEnabled    Boolean  @default(false) @map("totp_enabled")
+  recoveryCodes  Json?    @map("recovery_codes") // Array of {hash: string, used: boolean}
+  createdAt      DateTime @default(now()) @map("created_at")
 
   sessions AdminSession[]
 

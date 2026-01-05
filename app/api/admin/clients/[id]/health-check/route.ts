@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { decryptSecret } from '@/app/_lib/crypto';
+import { MailerLiteMeta, isMailerLiteMeta, IntegrationSecret } from '@/app/_lib/types';
 
 type TestStatus = 'PASS' | 'WARN' | 'FAIL';
 type TestCategory = 'configuration' | 'api_connectivity';
@@ -165,46 +166,92 @@ async function testMailerLiteMetaValid(clientId: string): Promise<TestResult> {
     if (!mlIntegration) {
       return {
         category: 'configuration',
-        name: 'MailerLite Meta Valid',
+        name: 'MailerLite Config',
         status: 'FAIL',
         message: 'Integration not found',
         duration,
       };
     }
     
-    const meta = mlIntegration.meta as { groupIds?: { lead?: string; customer?: string } } | null;
-    if (!meta?.groupIds) {
+    const meta = mlIntegration.meta as MailerLiteMeta | null;
+    
+    // Check for new format (groups + routing)
+    if (!meta || !isMailerLiteMeta(meta)) {
       return {
         category: 'configuration',
-        name: 'MailerLite Meta Valid',
+        name: 'MailerLite Config',
         status: 'WARN',
-        message: 'Meta missing groupIds',
+        message: 'No groups configured',
         duration,
       };
     }
     
-    if (!meta.groupIds.lead) {
+    // Check groups
+    const groupCount = Object.keys(meta.groups).length;
+    if (groupCount === 0) {
       return {
         category: 'configuration',
-        name: 'MailerLite Meta Valid',
+        name: 'MailerLite Config',
         status: 'WARN',
-        message: 'Missing lead group ID',
+        message: 'No groups defined',
         duration,
       };
     }
     
+    // Check routing
+    if (!meta.routing) {
+      return {
+        category: 'configuration',
+        name: 'MailerLite Config',
+        status: 'WARN',
+        message: `${groupCount} group(s) but no routing configured`,
+        duration,
+      };
+    }
+    
+    // Check lead.captured routing
+    const hasCaptureRouting = meta.routing['lead.captured'] != null;
+    if (!hasCaptureRouting) {
+      return {
+        category: 'configuration',
+        name: 'MailerLite Config',
+        status: 'WARN',
+        message: 'No routing for lead.captured (email captures won\'t be added to any group)',
+        duration,
+      };
+    }
+    
+    // Validate routing references exist
+    const errors: string[] = [];
+    for (const [action, groupKey] of Object.entries(meta.routing)) {
+      if (groupKey && !meta.groups[groupKey]) {
+        errors.push(`'${action}' routes to unknown group '${groupKey}'`);
+      }
+    }
+    
+    if (errors.length > 0) {
+      return {
+        category: 'configuration',
+        name: 'MailerLite Config',
+        status: 'FAIL',
+        message: `Invalid routing: ${errors.join(', ')}`,
+        duration,
+      };
+    }
+    
+    const routingCount = Object.values(meta.routing).filter(v => v != null).length;
     return {
       category: 'configuration',
-      name: 'MailerLite Meta Valid',
+      name: 'MailerLite Config',
       status: 'PASS',
-      message: 'Meta structure valid',
+      message: `${groupCount} group(s), ${routingCount} routed action(s)`,
       duration,
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return {
       category: 'configuration',
-      name: 'MailerLite Meta Valid',
+      name: 'MailerLite Config',
       status: 'FAIL',
       message: `Error: ${message}`,
       duration: Date.now() - start,
@@ -297,6 +344,10 @@ async function testMailerLiteAPI(clientId: string): Promise<TestResult> {
   try {
     const mlIntegration = await prisma.clientIntegration.findFirst({
       where: { clientId, integration: 'MAILERLITE' },
+      select: {
+        secrets: true,
+        meta: true,
+      },
     });
     
     if (!mlIntegration) {
@@ -309,7 +360,20 @@ async function testMailerLiteAPI(clientId: string): Promise<TestResult> {
       };
     }
     
-    const apiKey = await decryptSecret(mlIntegration.encryptedSecret);
+    // Parse secrets and get API key
+    const secrets = (mlIntegration.secrets as IntegrationSecret[] | null) || [];
+    if (secrets.length === 0) {
+      return {
+        category: 'api_connectivity',
+        name: 'MailerLite API',
+        status: 'FAIL',
+        message: 'No API key configured',
+        duration: Date.now() - start,
+      };
+    }
+    
+    const apiKeySecret = secrets.find(s => s.name === 'API Key') || secrets[0];
+    const apiKey = decryptSecret(apiKeySecret.encryptedValue, apiKeySecret.keyVersion);
     
     const response = await withTimeout(
       fetch('https://connect.mailerlite.com/api/groups', {
@@ -332,31 +396,30 @@ async function testMailerLiteAPI(clientId: string): Promise<TestResult> {
       };
     }
     
-    const data = await response.json() as { data?: Array<{ id: string }> };
+    const data = await response.json() as { data?: Array<{ id: string; name: string }> };
     const groups = data.data || [];
-    const meta = mlIntegration.meta as { groupIds?: { lead?: string; customer?: string } } | null;
+    const meta = mlIntegration.meta as MailerLiteMeta | null;
     
-    // Verify configured groups exist
-    if (meta?.groupIds) {
-      const leadGroupExists = groups.some((g) => g.id === meta.groupIds?.lead);
-      const customerGroupExists = groups.some((g) => g.id === meta.groupIds?.customer);
+    // Verify configured groups exist in MailerLite
+    if (meta && isMailerLiteMeta(meta) && meta.groups) {
+      const missingGroups: string[] = [];
+      const foundGroups: string[] = [];
       
-      if (!leadGroupExists) {
-        return {
-          category: 'api_connectivity',
-          name: 'MailerLite API',
-          status: 'FAIL',
-          message: `Lead group ID (${meta.groupIds.lead}) not found in MailerLite`,
-          duration: Date.now() - start,
-        };
+      for (const [key, group] of Object.entries(meta.groups)) {
+        const exists = groups.some((g) => g.id === group.id);
+        if (exists) {
+          foundGroups.push(key);
+        } else {
+          missingGroups.push(`${key} (${group.id})`);
+        }
       }
       
-      if (meta.groupIds.customer && !customerGroupExists) {
+      if (missingGroups.length > 0) {
         return {
           category: 'api_connectivity',
           name: 'MailerLite API',
           status: 'WARN',
-          message: `Customer group ID (${meta.groupIds.customer}) not found`,
+          message: `Connected. Missing groups: ${missingGroups.join(', ')}`,
           duration: Date.now() - start,
         };
       }
@@ -365,7 +428,7 @@ async function testMailerLiteAPI(clientId: string): Promise<TestResult> {
         category: 'api_connectivity',
         name: 'MailerLite API',
         status: 'PASS',
-        message: `Connected. Found groups: lead (${meta.groupIds.lead})${meta.groupIds.customer ? `, customer (${meta.groupIds.customer})` : ''}`,
+        message: `Connected. Verified ${foundGroups.length} group(s): ${foundGroups.join(', ')}`,
         duration: Date.now() - start,
       };
     }
@@ -576,5 +639,3 @@ export async function GET(
   
   return NextResponse.json(response);
 }
-
-

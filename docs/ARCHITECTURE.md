@@ -10,13 +10,15 @@ How the RevOps MVP system works under the hood.
 flowchart TB
     subgraph external [External Services]
         Stripe[Stripe Webhooks]
+        Calendly[Calendly Webhooks]
         ML[MailerLite API]
         Resend[Resend Email]
     end
 
     subgraph app [Next.js App]
         Subscribe["/api/subscribe"]
-        Webhook["/api/stripe-webhook"]
+        StripeWH["/api/stripe-webhook"]
+        CalendlyWH["/api/calendly-webhook"]
         Admin["/admin/*"]
         Cron["/api/cron/health-check"]
     end
@@ -34,13 +36,16 @@ flowchart TB
         Leads[(leads)]
     end
 
-    Stripe --> Webhook
-    Webhook --> ClientGate
+    Stripe --> StripeWH
+    Calendly --> CalendlyWH
+    StripeWH --> ClientGate
+    CalendlyWH --> ClientGate
     ClientGate --> SecretMgr
     SecretMgr --> Integrations
-    Webhook --> EventLog
+    StripeWH --> EventLog
+    CalendlyWH --> EventLog
     EventLog --> Events
-    Webhook --> ML
+    StripeWH --> ML
     Subscribe --> ClientGate
     Subscribe --> ML
     Cron --> Events
@@ -99,6 +104,10 @@ flowchart TB
 **`admins`** - Single admin account
 - `id` (uuid, primary key)
 - `password_hash` (text) - Argon2id hash
+- `totp_secret` (text, nullable) - Encrypted TOTP secret for 2FA
+- `totp_key_version` (int) - Key version used to encrypt TOTP secret
+- `totp_enabled` (boolean) - Whether 2FA is enabled
+- `recovery_codes` (jsonb, nullable) - Hashed recovery codes
 - `created_at` (timestamp)
 
 **`admin_sessions`** - Admin login sessions
@@ -113,17 +122,50 @@ flowchart TB
 
 ### 1. Secret Management (`app/_lib/crypto.ts`)
 
-**Encryption:**
-- Algorithm: AES-256-GCM
-- IV: 12 bytes random per encryption
-- Master key: 32 bytes hex-encoded in `SRB_ENCRYPTION_KEY`
-- Format: `base64(IV + ciphertext + auth_tag)`
+**What we store per ClientIntegration:**
+- `encrypted_secret` (string): Base64-encoded blob of `IV || ciphertext || auth_tag`
+- `key_version` (int, default 0): Which master key was used for this secret
+- `meta` (JSON): Non-sensitive config only (group IDs, product maps). All sensitive data in `encrypted_secret`.
 
-**Security model:**
-- Secrets encrypted at rest in Postgres
-- Decrypted in memory at runtime only
-- Never logged, never shown after initial paste
-- Master key lives in env var only
+**Encryption model:**
+- Algorithm: AES-256-GCM (256-bit key)
+- IV: 12 bytes random per encryption
+- Auth tag: 16 bytes (128 bits) appended for integrity
+- Format: `encrypted_secret = base64(IV || ciphertext || auth_tag)`
+
+**Keyring:**
+```typescript
+const KEYRING: Record<number, Buffer> = {
+  0: Buffer.from(process.env.SRB_ENCRYPTION_KEY!, "hex"),     // Legacy
+  1: Buffer.from(process.env.REVLINE_ENCRYPTION_KEY_V1!, "hex"), // Current
+  // 2: Buffer.from(process.env.REVLINE_ENCRYPTION_KEY_V2!, "hex"), // Future
+};
+const CURRENT_KEY_VERSION = 1;
+```
+
+**Encrypt flow:**
+1. Always uses `CURRENT_KEY_VERSION` and corresponding key
+2. Returns `{ encryptedSecret, keyVersion }`
+3. Both values stored in database
+
+**Decrypt flow:**
+1. Read `keyVersion` from database row
+2. Look up `KEYRING[keyVersion]`
+3. If version not found: hard failure with clear error
+4. Decrypt using that key
+
+**Where secrets are used:**
+- Decrypted only at point-of-use inside backend adapters
+- Never sent to frontend, never logged, never in API responses
+- Not shown in admin UI (except confirmation that secret exists)
+
+**Key rotation plan (built-in, not live yet):**
+1. Generate new key: `openssl rand -hex 32`
+2. Add to env: `REVLINE_ENCRYPTION_KEY_V2=<new key>`
+3. Update code: add to KEYRING, set `CURRENT_KEY_VERSION = 2`
+4. Deploy: new secrets use V2, old secrets still decrypt via V1
+5. Migration: background job re-encrypts V1 → V2
+6. Cleanup: remove V1 from keyring and env after migration complete
 
 ### 2. Event Logging (`app/_lib/event-logger.ts`)
 
@@ -234,6 +276,23 @@ Note: Webhook signing key is stored in encrypted_secret field, not in meta.
      - Emit `mailerlite_subscribe_success/failed` event
      - Touch MailerLite integration
 
+**`POST /api/calendly-webhook`**
+- Booking webhooks from Calendly
+- Flow:
+  1. Extract client from `utm_source` in payload
+  2. Look up client by slug
+  3. Check if active (execution gate)
+  4. Get Calendly integration (signing key)
+  5. Verify HMAC SHA256 signature
+  6. Touch Calendly integration
+  7. If event = `invitee.created`:
+     - Extract invitee email
+     - Create/update lead, set stage to BOOKED
+     - Emit `calendly_booking_created` event
+  8. If event = `invitee.canceled`:
+     - Revert lead stage to CAPTURED
+     - Emit `calendly_booking_canceled` event
+
 ### Admin Routes (Internal Only)
 
 **`POST /api/admin/login`**
@@ -264,11 +323,46 @@ Note: Webhook signing key is stored in encrypted_secret field, not in meta.
 - Encrypts secret before storing
 - Emits `integration_added` event
 
+**`GET /api/admin/clients/[id]/health-check`**
+- Run comprehensive health check for a client
+- Tests configuration and API connectivity
+- Returns pass/warn/fail status for each test
+
+**`GET /api/admin/clients/[id]/mailerlite-insights`**
+- Fetch MailerLite subscriber stats for client
+- Shows group membership counts
+
+### 2FA Routes
+
+**`POST /api/admin/2fa/setup`**
+- Generate new TOTP secret for 2FA setup
+- Returns secret and QR code URI
+- Does not enable 2FA until verified
+
+**`POST /api/admin/2fa/verify`**
+- Verify TOTP code and enable 2FA
+- Generates and returns recovery codes
+
+**`POST /api/admin/2fa/disable`**
+- Disable 2FA for admin account
+- Requires current password
+
+**`GET /api/admin/2fa/status`**
+- Check if 2FA is enabled
+
+**`POST /api/admin/2fa/regenerate`**
+- Regenerate recovery codes
+- Requires valid TOTP code
+
+**`POST /api/admin/login/verify-2fa`**
+- Verify TOTP code during login
+- Called after password verification if 2FA is enabled
+
 ### Cron Route
 
 **`GET /api/cron/health-check`**
 - **Authentication:** Hard-fails without `Authorization: Bearer {CRON_SECRET}`
-- Runs every 15 minutes via Vercel cron (see `vercel.json`)
+- Runs every 15 minutes via external cron service (Railway cron, cron-job.org, etc.)
 - Checks:
   1. **Silence**: Any integration with no events in 4+ hours
   2. **Consecutive failures**: 3+ failed events in a row for an integration
@@ -282,36 +376,28 @@ Note: Webhook signing key is stored in encrypted_secret field, not in meta.
 
 ## Authentication & Sessions
 
-### Authentication Middleware
+### Authentication Model
 
-All `/admin/*` routes and `/api/admin/*` routes are protected by Next.js middleware (`middleware.ts`).
+All `/admin/*` routes and `/api/admin/*` routes require authentication via session cookies.
 
 **How it works:**
-1. Middleware intercepts all requests to `/admin/*` and `/api/admin/*`
-2. Checks for `revline_admin_session` cookie
-3. Validates session against database (checks expiration)
-4. If valid:
-   - Adds `x-admin-id` header to request
-   - Allows request to proceed
-5. If invalid or missing:
-   - **Page routes**: Redirects to `/admin/login?redirect={pathname}`
-   - **API routes**: Returns `401 Unauthorized` JSON response
+1. User submits password to `/api/admin/login`
+2. Password verified against Argon2id hash
+3. If 2FA enabled: returns `requires2FA: true`, user must verify TOTP
+4. On success: session created in `admin_sessions` table
+5. Session ID stored in httpOnly cookie
+6. Subsequent requests include cookie automatically
+7. Each admin route validates session before processing
 
-**Benefits:**
-- ✅ Centralized auth logic (no per-page checks)
-- ✅ Automatic redirects for pages
-- ✅ Proper HTTP status codes for API routes
-- ✅ Session validation happens before route handlers run
-- ✅ Admin ID available via headers in server components
-
-**Implementation:**
-- Middleware runs before route handlers
-- Server components can access admin ID via `getAdminIdFromHeaders()`
-- No manual auth checks needed in pages or API routes
-- Login page (`/admin/login`) is excluded from protection
+**Session Validation:**
+- Cookie name: `revline_admin_session`
+- Session looked up in database
+- Expiration checked (14-day duration)
+- Expired sessions deleted automatically
+- Invalid/missing session returns 401 or redirects to login
 
 **Admin Auth:**
-- Password-only (no username)
+- Password-only (no username - single admin)
 - Argon2id hashing with:
   - Memory cost: 64MB
   - Time cost: 3 iterations
@@ -321,20 +407,87 @@ All `/admin/*` routes and `/api/admin/*` routes are protected by Next.js middlew
 - Session duration: 14 days
 - No OAuth, no multi-user
 
-**Why this model:** Single internal admin. Minimal attack surface. Easy revocation.
+### Two-Factor Authentication (2FA)
+
+**TOTP-based 2FA** is fully implemented:
+
+**Setup flow:**
+1. Admin calls `/api/admin/2fa/setup` to get TOTP secret
+2. Secret displayed as QR code for authenticator app
+3. Admin enters TOTP code to verify
+4. 2FA enabled, recovery codes generated
+
+**Login flow with 2FA:**
+1. Password verified → returns `requires2FA: true`
+2. User enters TOTP code
+3. Code verified → session created
+
+**Recovery:**
+- 8 one-time recovery codes generated on setup
+- Each code can only be used once
+- Codes are hashed before storage
+
+**TOTP Implementation:**
+- Algorithm: SHA-1 (standard)
+- Period: 30 seconds
+- Digits: 6
+- Secret encrypted with AES-256-GCM (same keyring as client secrets)
+
+**Why this model:** Single internal admin. Minimal attack surface. Easy revocation. 2FA adds protection against password compromise.
 
 ---
 
 ## Security Considerations
 
-**Secrets:**
-- Master encryption key is single point of failure
-- Back it up securely
-- No key rotation support yet (planned post-MVP)
+### What This Protects
+
+**DB or backup theft:**
+- Attacker only gets `encrypted_secret` blobs
+- Without env key, secrets are not decryptable
+- Key version tracking prevents confusion during rotation
+
+**Read-only DB access (misconfigured dashboard, SQL injection):**
+- Still only ciphertext visible
+- Meta contains non-sensitive config only
+
+**Log theft:**
+- No secrets logged by design
+- Event system logs outcomes, not payloads
+
+### What This Does NOT Protect
+
+**Full compromise of app env / container:**
+- If attacker can read env vars, they can load the keyring and decrypt
+- Mitigation: Railway secrets management, container isolation
+
+**Arbitrary code execution in backend:**
+- Attacker can call the same decrypt functions as your own code
+- Mitigation: standard security hygiene (dependency audit, input validation)
+
+This threat model is acceptable at startup stage. For higher security, consider AWS KMS or HashiCorp Vault.
+
+### Key Management
+
+**Environment variables required:**
+```bash
+# Legacy key (version 0) - keep until all secrets migrated
+SRB_ENCRYPTION_KEY=<64 hex chars>
+
+# Current key (version 1)
+REVLINE_ENCRYPTION_KEY_V1=<64 hex chars>
+
+# Future keys (add when rotating)
+# REVLINE_ENCRYPTION_KEY_V2=<64 hex chars>
+```
+
+**Backup strategy:**
+- Back up master encryption keys offline (encrypted USB, password manager)
+- If keys are lost, all secrets are unrecoverable
+- Railway stores backups, but encrypted secrets are useless without keys
 
 **Admin access:**
-- Single password
-- No 2FA (yet)
+- Single password + optional 2FA (TOTP)
+- 2FA recommended for production
 - No audit log of admin actions (yet)
 - Consider IP allowlisting in production
 
@@ -346,7 +499,7 @@ All `/admin/*` routes and `/api/admin/*` routes are protected by Next.js middlew
 **Cron protection:**
 - `CRON_SECRET` in Authorization header
 - Hard-fails without it (no soft warnings)
-- Vercel cron jobs auto-authenticate
+- External cron service must include Authorization header
 
 ---
 
@@ -356,7 +509,7 @@ All `/admin/*` routes and `/api/admin/*` routes are protected by Next.js middlew
 - Event table will grow unbounded
   - Solution: Periodic cleanup (see OPERATIONS.md)
 - No connection pooling
-  - Solution: Vercel uses serverless - connections managed per function invocation
+  - Solution: Railway uses container-based deployment - connections managed per instance
 - No caching
   - Solution: Acceptable for MVP scale (< 10 clients)
 

@@ -117,7 +117,7 @@ beforeAll(async () => {
         DATABASE_URL: testDbUrl,
       },
     });
-  } catch (error) {
+  } catch {
     // Ignore - Prisma client is likely already generated
     // This is non-critical since migrations ensure schema is up to date
   }
@@ -175,12 +175,22 @@ export async function createTestIntegration(
 ) {
   // Import encryption at runtime to avoid circular deps
   const { encryptSecret } = await import('@/app/_lib/crypto');
+  const { randomUUID } = await import('crypto');
+  
+  // Create secrets array with the new format
+  const { encryptedSecret, keyVersion } = encryptSecret(secret);
+  const secrets = [{
+    id: randomUUID(),
+    name: 'API Key',
+    encryptedValue: encryptedSecret,
+    keyVersion,
+  }];
   
   return testPrisma.clientIntegration.create({
     data: {
       clientId,
       integration,
-      encryptedSecret: encryptSecret(secret),
+      secrets: secrets as Parameters<typeof testPrisma.clientIntegration.create>[0]['data']['secrets'],
       meta: meta as Parameters<typeof testPrisma.clientIntegration.create>[0]['data']['meta'],
     },
   });

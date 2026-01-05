@@ -1,7 +1,6 @@
 import { prisma } from '@/app/_lib/db';
 import { HealthStatus } from '@prisma/client';
 import Link from 'next/link';
-import { ClientActions } from './client-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,9 +85,9 @@ export default async function AdminClientsPage() {
   return (
     <div className="min-h-screen p-8">
       <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <h1 className="text-2xl font-bold">Clients</h1>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <Link
               href="/admin/onboarding"
               className="px-4 py-2 border border-zinc-700 text-white rounded hover:border-zinc-600 transition-colors text-sm font-medium"
@@ -100,6 +99,18 @@ export default async function AdminClientsPage() {
               className="px-4 py-2 bg-white text-black rounded hover:bg-zinc-200 transition-colors text-sm font-medium"
             >
               Add Client
+            </Link>
+            <Link
+              href="/admin/settings"
+              className="px-4 py-2 border border-zinc-700 text-white rounded hover:border-zinc-600 transition-colors text-sm font-medium"
+            >
+              Settings
+            </Link>
+            <Link
+              href="/api/auth/logout"
+              className="px-4 py-2 border border-zinc-700 text-zinc-400 rounded hover:border-zinc-600 hover:text-white transition-colors text-sm font-medium"
+            >
+              Sign Out
             </Link>
           </div>
         </div>
@@ -114,11 +125,9 @@ export default async function AdminClientsPage() {
               <thead>
                 <tr className="border-b border-zinc-800 text-left text-sm text-zinc-400">
                   <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Slug</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Health</th>
                   <th className="px-4 py-3 font-medium">Last Event</th>
-                  <th className="px-4 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -130,13 +139,15 @@ export default async function AdminClientsPage() {
                     <td className="px-4 py-3">
                       <Link
                         href={`/admin/clients/${client.id}`}
-                        className="text-white hover:underline"
+                        className="block group"
                       >
-                        {client.name}
+                        <div className="text-white group-hover:underline">
+                          {client.name}
+                        </div>
+                        <div className="text-zinc-500 font-mono text-xs mt-0.5">
+                          /{client.slug}
+                        </div>
                       </Link>
-                    </td>
-                    <td className="px-4 py-3 text-zinc-400 font-mono text-sm">
-                      {client.slug}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={client.status} />
@@ -146,12 +157,6 @@ export default async function AdminClientsPage() {
                     </td>
                     <td className="px-4 py-3 text-zinc-400 text-sm">
                       {formatDate(client.lastEventAt)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <ClientActions
-                        clientId={client.id}
-                        currentStatus={client.status}
-                      />
                     </td>
                   </tr>
                 ))}

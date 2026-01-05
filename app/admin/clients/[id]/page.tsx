@@ -1,9 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/app/_lib/db';
 import Link from 'next/link';
-import { ClientActions } from '../client-actions';
-import { DeleteClientButton } from './delete-client-button';
-import { HealthCheckButton } from './health-check-button';
+import { ClientActionsDropdown } from './client-actions-dropdown';
 import { ClientTabs } from './client-tabs';
 
 export const dynamic = 'force-dynamic';
@@ -19,6 +17,7 @@ async function getClient(id: string) {
           healthStatus: true,
           lastSeenAt: true,
           meta: true,
+          secrets: true,
           createdAt: true,
         },
       },
@@ -41,13 +40,11 @@ async function getClient(id: string) {
   });
 }
 
-
 export default async function ClientDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  // Middleware handles auth - if we reach here, user is authenticated
   const { id } = await params;
   const client = await getClient(id);
 
@@ -56,11 +53,11 @@ export default async function ClientDetailPage({
   }
 
   return (
-    <div className="min-h-screen p-8">
+    <div className="min-h-screen p-4 sm:p-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex gap-4 mb-2">
+          <div className="flex flex-wrap gap-4 mb-4">
             <Link
               href="/admin/clients"
               className="text-zinc-400 hover:text-white text-sm inline-block"
@@ -71,18 +68,20 @@ export default async function ClientDetailPage({
               href="/admin/onboarding"
               className="text-zinc-400 hover:text-white text-sm inline-block"
             >
-              📋 Onboarding Guide
+              Onboarding Guide
             </Link>
           </div>
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold">{client.name}</h1>
-              <p className="text-zinc-400 font-mono">{client.slug}</p>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 relative">
+            <div className="space-y-1">
+              <h1 className="text-3xl font-bold tracking-tight text-white">{client.name}</h1>
+              <p className="text-zinc-500 font-mono text-xs bg-zinc-900/50 w-fit px-2 py-0.5 rounded border border-zinc-800/50">{client.slug}</p>
             </div>
-            <div className="flex gap-3">
-              <HealthCheckButton clientId={client.id} />
-              <ClientActions clientId={client.id} currentStatus={client.status} />
-              <DeleteClientButton clientId={client.id} clientName={client.name} />
+            <div className="flex items-center justify-end">
+              <ClientActionsDropdown 
+                clientId={client.id} 
+                clientName={client.name}
+                currentStatus={client.status}
+              />
             </div>
           </div>
         </div>
@@ -98,4 +97,7 @@ export default async function ClientDetailPage({
     </div>
   );
 }
+
+
+
 

@@ -14,7 +14,7 @@
 import { prisma } from '@/app/_lib/db';
 import { decryptSecret } from '@/app/_lib/crypto';
 import { IntegrationType, HealthStatus } from '@prisma/client';
-import { IntegrationResult, IntegrationMeta } from '@/app/_lib/types';
+import { IntegrationResult, IntegrationMeta, IntegrationSecret } from '@/app/_lib/types';
 
 /**
  * Base class for all integration adapters
@@ -28,12 +28,17 @@ export abstract class BaseIntegrationAdapter<TMeta extends IntegrationMeta = Int
   abstract readonly type: IntegrationType;
 
   /**
+   * Cached decrypted secrets (decrypted on first access per name)
+   */
+  private decryptedSecrets: Map<string, string> = new Map();
+
+  /**
    * Create a new adapter instance
    * Use the static forClient() method instead of calling directly
    */
   constructor(
     protected readonly clientId: string,
-    protected readonly secret: string,
+    protected readonly secrets: IntegrationSecret[],
     protected readonly meta: TMeta | null
   ) {}
 
@@ -47,7 +52,7 @@ export abstract class BaseIntegrationAdapter<TMeta extends IntegrationMeta = Int
   protected static async loadAdapter<TMeta extends IntegrationMeta>(
     clientId: string,
     type: IntegrationType
-  ): Promise<{ secret: string; meta: TMeta | null } | null> {
+  ): Promise<{ secrets: IntegrationSecret[]; meta: TMeta | null } | null> {
     const row = await prisma.clientIntegration.findUnique({
       where: {
         clientId_integration: {
@@ -56,7 +61,7 @@ export abstract class BaseIntegrationAdapter<TMeta extends IntegrationMeta = Int
         },
       },
       select: {
-        encryptedSecret: true,
+        secrets: true,
         meta: true,
       },
     });
@@ -65,10 +70,75 @@ export abstract class BaseIntegrationAdapter<TMeta extends IntegrationMeta = Int
       return null;
     }
 
-    const secret = decryptSecret(row.encryptedSecret);
+    // Parse secrets from JSON
+    const secrets = (row.secrets as IntegrationSecret[] | null) || [];
     const meta = row.meta as TMeta | null;
 
-    return { secret, meta };
+    return { secrets, meta };
+  }
+
+  /**
+   * Get a secret by name
+   * Decrypts the secret on first access and caches in memory
+   * 
+   * @param name - The name of the secret (e.g., "API Key", "Webhook Secret")
+   * @returns The decrypted secret value, or null if not found
+   */
+  protected getSecret(name: string): string | null {
+    // Check cache first
+    if (this.decryptedSecrets.has(name)) {
+      return this.decryptedSecrets.get(name)!;
+    }
+
+    // Find secret by name
+    const secret = this.secrets.find(s => s.name === name);
+    if (!secret) {
+      return null;
+    }
+
+    // Decrypt and cache
+    const decrypted = decryptSecret(secret.encryptedValue, secret.keyVersion);
+    this.decryptedSecrets.set(name, decrypted);
+    return decrypted;
+  }
+
+  /**
+   * Get the primary (first) secret
+   * For integrations that only have one secret
+   * 
+   * @returns The decrypted first secret value
+   * @throws Error if no secrets are configured
+   */
+  protected getPrimarySecret(): string {
+    if (this.secrets.length === 0) {
+      throw new Error(`No secrets configured for ${this.type} integration`);
+    }
+
+    const first = this.secrets[0];
+    
+    // Check cache first
+    if (this.decryptedSecrets.has(first.name)) {
+      return this.decryptedSecrets.get(first.name)!;
+    }
+
+    // Decrypt and cache
+    const decrypted = decryptSecret(first.encryptedValue, first.keyVersion);
+    this.decryptedSecrets.set(first.name, decrypted);
+    return decrypted;
+  }
+
+  /**
+   * Check if a secret with the given name exists
+   */
+  protected hasSecret(name: string): boolean {
+    return this.secrets.some(s => s.name === name);
+  }
+
+  /**
+   * Get the names of all configured secrets
+   */
+  protected getSecretNames(): string[] {
+    return this.secrets.map(s => s.name);
   }
 
   /**
@@ -136,5 +206,4 @@ export abstract class BaseIntegrationAdapter<TMeta extends IntegrationMeta = Int
 export type AdapterConstructor<
   TMeta extends IntegrationMeta,
   T extends BaseIntegrationAdapter<TMeta>
-> = new (clientId: string, secret: string, meta: TMeta | null) => T;
-
+> = new (clientId: string, secrets: IntegrationSecret[], meta: TMeta | null) => T;

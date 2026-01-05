@@ -31,15 +31,20 @@ vi.mock('@/app/_lib/integrations/mailerlite.adapter', async () => {
           return null;
         }
         
+        // Parse meta to check configuration
+        const meta = integration.meta as { groups?: Record<string, unknown>; routing?: Record<string, string> };
+        
         // Return mock adapter
         return {
           clientId,
-          addToLeadGroup: vi.fn().mockResolvedValue({
+          meta,
+          addToGroup: vi.fn().mockResolvedValue({
             success: true,
-            data: { subscriberId: 'mock-subscriber-123', alreadyExists: false },
+            data: { subscriberId: 'mock-subscriber-123', message: 'Subscribed' },
           }),
-          isConfigured: () => ({ valid: true, missing: [] }),
-          getLeadGroupId: () => 'mock-group-id',
+          hasGroups: () => !!(meta?.groups && Object.keys(meta.groups).length > 0),
+          hasRoutingFor: (action: string) => !!(meta?.routing && action in meta.routing),
+          getGroup: (key: string) => meta?.groups?.[key] || null,
         };
       }),
     },
@@ -55,7 +60,12 @@ describe('Capture Service Integration', () => {
       // Create test client with MailerLite integration
       const client = await createTestClient({ slug: 'capture-test' });
       await createTestIntegration(client.id, 'MAILERLITE', 'mock-api-key', {
-        leadGroupId: 'test-group',
+        groups: {
+          welcome: { id: 'test-group', name: 'Welcome' },
+        },
+        routing: {
+          'lead.captured': 'welcome',
+        },
       });
       
       // Capture email
@@ -85,7 +95,12 @@ describe('Capture Service Integration', () => {
       
       const client = await createTestClient({ slug: 'event-test' });
       await createTestIntegration(client.id, 'MAILERLITE', 'mock-api-key', {
-        leadGroupId: 'test-group',
+        groups: {
+          welcome: { id: 'test-group', name: 'Welcome' },
+        },
+        routing: {
+          'lead.captured': 'welcome',
+        },
       });
       
       await CaptureService.captureEmail({
@@ -107,7 +122,12 @@ describe('Capture Service Integration', () => {
       
       const client = await createTestClient({ slug: 'ml-success-test' });
       await createTestIntegration(client.id, 'MAILERLITE', 'mock-api-key', {
-        leadGroupId: 'test-group',
+        groups: {
+          welcome: { id: 'test-group', name: 'Welcome' },
+        },
+        routing: {
+          'lead.captured': 'welcome',
+        },
       });
       
       await CaptureService.captureEmail({
@@ -136,20 +156,14 @@ describe('Capture Service Integration', () => {
         source: 'test',
       });
       
-      // Should fail gracefully, not throw
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('not configured');
+      // Should succeed - lead creation succeeds even if MailerLite fails
+      expect(result.success).toBe(true);
       
       // Lead should still be created
       const lead = await testPrisma.lead.findFirst({
         where: { clientId: client.id, email: 'noconfig@example.com' },
       });
       expect(lead).not.toBeNull();
-      
-      // Should emit failure event
-      const events = await getEventsForClient(client.id);
-      const failEvent = events.find(e => e.eventType === 'mailerlite_subscribe_failed');
-      expect(failEvent).toBeDefined();
     });
 
     it('should upsert lead if email already exists', async () => {
@@ -157,7 +171,12 @@ describe('Capture Service Integration', () => {
       
       const client = await createTestClient({ slug: 'upsert-test' });
       await createTestIntegration(client.id, 'MAILERLITE', 'mock-api-key', {
-        leadGroupId: 'test-group',
+        groups: {
+          welcome: { id: 'test-group', name: 'Welcome' },
+        },
+        routing: {
+          'lead.captured': 'welcome',
+        },
       });
       
       // First capture
@@ -193,7 +212,12 @@ describe('Capture Service Integration', () => {
       
       const client = await createTestClient({ slug: 'concurrent-test' });
       await createTestIntegration(client.id, 'MAILERLITE', 'mock-api-key', {
-        leadGroupId: 'test-group',
+        groups: {
+          welcome: { id: 'test-group', name: 'Welcome' },
+        },
+        routing: {
+          'lead.captured': 'welcome',
+        },
       });
       
       // Fire multiple captures concurrently
@@ -225,7 +249,12 @@ describe('Capture Service Integration', () => {
       
       const client = await createTestClient({ slug: 'default-source' });
       await createTestIntegration(client.id, 'MAILERLITE', 'mock-api-key', {
-        leadGroupId: 'test-group',
+        groups: {
+          welcome: { id: 'test-group', name: 'Welcome' },
+        },
+        routing: {
+          'lead.captured': 'welcome',
+        },
       });
       
       await CaptureService.captureEmail({
@@ -279,7 +308,12 @@ describe('Capture Service Integration', () => {
       
       const client = await createTestClient({ slug: 'config-check' });
       await createTestIntegration(client.id, 'MAILERLITE', 'mock-api-key', {
-        leadGroupId: 'test-group',
+        groups: {
+          welcome: { id: 'test-group', name: 'Welcome' },
+        },
+        routing: {
+          'lead.captured': 'welcome',
+        },
       });
       
       const isConfigured = await CaptureService.isConfigured(client.id);

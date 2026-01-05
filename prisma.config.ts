@@ -4,7 +4,7 @@ import { config } from "dotenv";
 config({ path: ".env.local", override: false });
 config({ path: ".env", override: false });
 
-import { defineConfig, env } from "prisma/config";
+import { defineConfig } from "prisma/config";
 
 // Get DATABASE_URL with fallback - env() throws if not set, so check process.env first
 const databaseUrl = process.env.DATABASE_URL || "postgresql://dummy:dummy@localhost:5432/dummy";

@@ -183,7 +183,13 @@ function HealthCheckDialog({
   );
 }
 
-export function HealthCheckButton({ clientId }: { clientId: string }) {
+export function HealthCheckButton({ 
+  clientId, 
+  isDropdownItem = false 
+}: { 
+  clientId: string;
+  isDropdownItem?: boolean;
+}) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<HealthCheckResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -227,6 +233,24 @@ export function HealthCheckButton({ clientId }: { clientId: string }) {
     setResults(null);
   }
 
+  if (isDropdownItem) {
+    return (
+      <>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            runHealthCheck();
+          }}
+          disabled={loading}
+          className="w-full text-left px-3 py-2 text-sm rounded hover:bg-zinc-800 transition-colors flex items-center gap-2 text-zinc-300 hover:text-white disabled:opacity-50"
+        >
+          {loading ? 'Running...' : 'Run Health Check'}
+        </button>
+        {results && <HealthCheckDialog results={results} onClose={closeDialog} />}
+      </>
+    );
+  }
+
   return (
     <>
       <button
@@ -235,7 +259,7 @@ export function HealthCheckButton({ clientId }: { clientId: string }) {
         className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
           loading
             ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed'
-            : 'bg-blue-600 hover:bg-blue-700 text-white'
+            : 'bg-zinc-800 hover:bg-zinc-700 text-white'
         }`}
       >
         {loading ? (

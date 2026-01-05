@@ -263,12 +263,12 @@ curl http://localhost:3000/api/cron/health-check \
 
 ---
 
-## Current Gaps (TODO)
+## Known Limitations
 
-1. **`lastSeenAt` not updated** - Need to add to all integration success paths
-2. **No recovery logic** - Once RED, stays RED even after fixed (should turn GREEN after 3 successes)
-3. **No timezone-aware business hours** - Alerts 24/7 instead of 4am-11pm client time
-4. **No grace period** - New integrations immediately go YELLOW after 4 hours (should have 24h grace)
+1. **`lastSeenAt` updates** - Updated via `touchIntegration()` on successful API calls
+2. **No automatic recovery** - Once RED, stays RED until next successful operation
+3. **No timezone-aware business hours** - Alerts 24/7 instead of 4am-11pm client time (future enhancement)
+4. **No grace period** - New integrations may show YELLOW after 4 hours of no activity
 
 ---
 

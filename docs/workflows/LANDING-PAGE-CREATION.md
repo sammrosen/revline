@@ -244,14 +244,14 @@ npm run dev
 
 ### Step 10: Deploy (1 minute if automated)
 
-**Option A: Vercel Auto-Deploy (Recommended)**
+**Option A: Railway Auto-Deploy (Recommended)**
 ```bash
 git add app/clientname/
 git commit -m "Add landing page for ClientName"
 git push origin main
 ```
 
-Vercel auto-deploys in ~2 minutes.
+Railway auto-deploys in ~2 minutes.
 
 **Option B: Manual Deploy**
 ```bash
@@ -504,4 +504,7 @@ After creating the landing page:
 - How to check if automation is working
 - Your support contact info
 
+---
+
+*Last updated: January 2025*
 
