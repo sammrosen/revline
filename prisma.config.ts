@@ -5,6 +5,9 @@ config({ path: ".env" });
 
 import { defineConfig, env } from "prisma/config";
 
+// Get DATABASE_URL with fallback - env() throws if not set, so check process.env first
+const databaseUrl = process.env.DATABASE_URL || "postgresql://dummy:dummy@localhost:5432/dummy";
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
@@ -14,6 +17,6 @@ export default defineConfig({
   datasource: {
     // Use a dummy URL for generate operations (doesn't need real DB)
     // For actual DB operations, DATABASE_URL must be set
-    url: env("DATABASE_URL") || "postgresql://dummy:dummy@localhost:5432/dummy",
+    url: databaseUrl,
   },
 });
