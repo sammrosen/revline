@@ -80,7 +80,6 @@ export async function POST(request: NextRequest) {
     // Handle event types
     const eventType = payload.event;
     const email = payload.payload?.email;
-    const name = payload.payload?.name;
     
     if (!email) {
       console.error('[CALENDLY] No email in payload');
@@ -111,7 +110,7 @@ export async function POST(request: NextRequest) {
       });
 
       // Optional: Add to "Booked Calls" MailerLite segment
-      const addToSegment = (calendlyIntegration.meta as any)?.addToBookedSegment;
+      const addToSegment = (calendlyIntegration.meta as { addToBookedSegment?: boolean } | null)?.addToBookedSegment;
       if (addToSegment) {
         console.log(`[CALENDLY] addToBookedSegment is enabled but not yet implemented for ${email}`);
         // TODO: Add MailerLite call here if desired

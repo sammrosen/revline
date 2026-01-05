@@ -214,8 +214,9 @@ export function HealthCheckButton({ clientId }: { clientId: string }) {
       const data = await res.json();
       setResults(data);
       setLastRunTime(now);
-    } catch (err: any) {
-      setError(err.message || 'Failed to run health check');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to run health check';
+      setError(message);
       setTimeout(() => setError(null), 5000);
     } finally {
       setLoading(false);

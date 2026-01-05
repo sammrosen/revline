@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { LeadStage } from '@prisma/client';
 
 interface Lead {
@@ -51,8 +51,9 @@ function StageBadge({ stage }: { stage: LeadStage }) {
 export function LeadsView({ leads }: LeadsViewProps) {
   const [selectedStage, setSelectedStage] = useState<LeadStage | 'ALL'>('ALL');
   
-  // Capture current time once to avoid calling Date.now() during render
-  const now = useMemo(() => Date.now(), []);
+  // Capture current time once using useState lazy initialization
+  // This avoids calling Date.now() during render
+  const [now] = useState(() => Date.now());
 
   const filteredLeads = selectedStage === 'ALL' 
     ? leads 

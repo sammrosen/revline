@@ -14,7 +14,7 @@ interface Integration {
   integration: string;
   healthStatus: HealthStatus;
   lastSeenAt: Date | null;
-  meta: any;
+  meta: unknown;
   createdAt: Date;
 }
 
@@ -121,7 +121,6 @@ export function ClientTabs({ clientId, integrations, events, leads }: ClientTabs
                       <HealthBadge status={integration.healthStatus} />
                     </div>
                     <IntegrationActions
-                      clientId={clientId}
                       integration={{
                         id: integration.id,
                         integration: integration.integration,
@@ -132,7 +131,7 @@ export function ClientTabs({ clientId, integrations, events, leads }: ClientTabs
                   <div className="text-sm text-zinc-400">
                     Last seen: {formatDate(integration.lastSeenAt)}
                   </div>
-                  {integration.meta && (
+                  {integration.meta != null && (
                     <pre className="mt-2 text-xs bg-zinc-950 p-2 rounded overflow-x-auto">
                       {JSON.stringify(integration.meta, null, 2)}
                     </pre>

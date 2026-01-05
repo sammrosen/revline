@@ -81,8 +81,9 @@ export default function MailerLiteInsights({ clientId }: MailerLiteInsightsProps
         }
         const insights = await response.json();
         setData(insights);
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch insights';
+        setError(message);
       } finally {
         setLoading(false);
       }

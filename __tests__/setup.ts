@@ -22,6 +22,7 @@
 
 import { beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
+import { execSync } from 'child_process';
 
 // IMPORTANT: Capture TEST_DATABASE_URL from shell FIRST before anything else
 const testDbUrlFromEnv = process.env.TEST_DATABASE_URL;
@@ -89,6 +90,37 @@ vi.mock('next/headers', () => ({
 }));
 
 beforeAll(async () => {
+  // Run migrations on test database before connecting
+  console.log('Running migrations on test database...');
+  try {
+    execSync('npx prisma migrate deploy', {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        DATABASE_URL: testDbUrl,
+      },
+    });
+    console.log('Migrations completed');
+  } catch (error) {
+    console.error('Migration failed:', error);
+    throw error;
+  }
+
+  // Generate Prisma client to ensure it's up to date
+  // Note: This may fail if client is already generated and locked - that's OK
+  try {
+    execSync('npx prisma generate', {
+      stdio: 'pipe', // Use pipe instead of inherit to avoid noise
+      env: {
+        ...process.env,
+        DATABASE_URL: testDbUrl,
+      },
+    });
+  } catch (error) {
+    // Ignore - Prisma client is likely already generated
+    // This is non-critical since migrations ensure schema is up to date
+  }
+
   // Connect to test database
   await testPrisma.$connect();
   console.log('Connected to test database');
