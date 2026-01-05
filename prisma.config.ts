@@ -1,7 +1,8 @@
 // Load environment variables from .env.local first, then .env
+// Don't override existing env vars (like those from CI/CD)
 import { config } from "dotenv";
-config({ path: ".env.local" });
-config({ path: ".env" });
+config({ path: ".env.local", override: false });
+config({ path: ".env", override: false });
 
 import { defineConfig, env } from "prisma/config";
 

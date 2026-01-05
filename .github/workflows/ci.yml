@@ -51,9 +51,13 @@ jobs:
         run: npm ci
       
       - name: Generate Prisma Client
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npx prisma generate
       
       - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npx prisma migrate deploy
       
       - name: Run tests
