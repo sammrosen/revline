@@ -4,14 +4,29 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint"
+    "start:prod": "prisma migrate deploy && next start",
+    "lint": "eslint .",
+    "postinstall": "prisma generate || echo 'Skipping Prisma generation (DATABASE_URL not set)'",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "type-check": "tsc --noEmit",
+    "ci": "npm run lint && npm run type-check && npm run test && npm run build"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.1",
+    "argon2": "^0.44.0",
     "next": "16.0.7",
     "react": "19.2.1",
     "react-dom": "19.2.1",
+    "resend": "^6.6.0",
     "stripe": "^20.0.0"
   },
   "devDependencies": {
@@ -19,9 +34,14 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^2.1.0",
+    "dotenv": "^17.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.0.7",
+    "prisma": "^6.19.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.21.0",
+    "typescript": "^5",
+    "vitest": "^2.1.0"
   }
 }
