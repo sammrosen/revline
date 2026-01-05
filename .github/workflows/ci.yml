@@ -35,8 +35,9 @@ jobs:
     needs: lint
     
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      TEST_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # TEST_DATABASE_URL is the secret name - we map it to both vars
+      DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+      TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
     
     steps:
       - uses: actions/checkout@v4
@@ -51,13 +52,9 @@ jobs:
         run: npm ci
       
       - name: Generate Prisma Client
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npx prisma generate
       
       - name: Run database migrations
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npx prisma migrate deploy
       
       - name: Run tests
@@ -77,7 +74,7 @@ jobs:
     needs: test
     
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
     
     steps:
       - uses: actions/checkout@v4
@@ -92,17 +89,12 @@ jobs:
         run: npm ci
       
       - name: Generate Prisma Client
-        env:
-          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
         run: npx prisma generate
       
       - name: Build (Next.js includes TypeScript type checking)
-        env:
-          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
         run: npm run build
 
   # Railway auto-deploys from main after CI passes
-  # This job confirms all checks passed before Railway deploys
   deploy-check:
     name: Deploy Check
     runs-on: ubuntu-latest
@@ -112,4 +104,3 @@ jobs:
     steps:
       - name: All checks passed
         run: echo "All CI checks passed. Railway will auto-deploy from main."
-

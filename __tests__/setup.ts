@@ -28,9 +28,10 @@ import { execSync } from 'child_process';
 const testDbUrlFromEnv = process.env.TEST_DATABASE_URL;
 
 // Load environment files (for local development) - but we'll override DATABASE_URL
+// Don't override existing env vars (like those from CI/CD)
 import * as dotenv from 'dotenv';
-dotenv.config({ path: '.env.local' });
-dotenv.config({ path: '.env' });
+dotenv.config({ path: '.env.local', override: false });
+dotenv.config({ path: '.env', override: false });
 
 // Load test environment
 (process.env as Record<string, string>).NODE_ENV = 'test';
