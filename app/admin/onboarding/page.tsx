@@ -26,11 +26,11 @@ export default async function OnboardingGuidePage() {
             <h3 className="font-medium mb-3">Client Details</h3>
             <ul className="space-y-2 text-sm text-zinc-300">
               <li>• Business name (display name)</li>
-              <li>• Slug for routing (lowercase, underscores OK - e.g., "acme_fitness")</li>
+              <li>• Slug for routing (lowercase, underscores OK - e.g., &quot;acme_fitness&quot;)</li>
               <li>• Timezone <span className="text-red-400">*required</span> - IANA format (searchable in UI)</li>
             </ul>
             <p className="text-xs text-zinc-500 mt-3">
-              💡 Timezone is used for health check business hours (4am-11pm client time) to avoid false "silent" alerts
+              💡 Timezone is used for health check business hours (4am-11pm client time) to avoid false &quot;silent&quot; alerts
             </p>
           </div>
 
@@ -43,8 +43,8 @@ export default async function OnboardingGuidePage() {
             </ul>
             <div className="mt-3 p-3 bg-zinc-950 rounded text-xs">
               <p className="text-zinc-500 mb-2">Ask client to:</p>
-              <p className="text-zinc-400">1. Create group: "Leads - [Client Name]"</p>
-              <p className="text-zinc-400">2. Create group: "Customer - [Client Name]"</p>
+              <p className="text-zinc-400">1. Create group: &quot;Leads - [Client Name]&quot;</p>
+              <p className="text-zinc-400">2. Create group: &quot;Customer - [Client Name]&quot;</p>
               <p className="text-zinc-400">3. Get group IDs from URL (e.g., /groups/123456)</p>
               <p className="text-zinc-400">4. Generate API key (Settings → API)</p>
             </div>
@@ -53,7 +53,7 @@ export default async function OnboardingGuidePage() {
           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
             <h3 className="font-medium mb-3">Stripe Setup</h3>
             <ul className="space-y-2 text-sm text-zinc-300">
-              <li>• Webhook signing secret (starts with "whsec_")</li>
+              <li>• Webhook signing secret (starts with &quot;whsec_&quot;)</li>
               <li>• Stripe API key (optional, for signature verification)</li>
             </ul>
             <div className="mt-3 p-3 bg-zinc-950 rounded text-xs">
@@ -73,10 +73,10 @@ export default async function OnboardingGuidePage() {
           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
             <ol className="space-y-3 text-sm text-zinc-300">
               <li>1. Go to <Link href="/admin/clients/new" className="text-white underline">Add Client page</Link></li>
-              <li>2. Enter name: "Acme Fitness"</li>
-              <li>3. Slug auto-generates: "acme_fitness" (edit if needed)</li>
+              <li>2. Enter name: &quot;Acme Fitness&quot;</li>
+              <li>3. Slug auto-generates: &quot;acme_fitness&quot; (edit if needed)</li>
               <li>4. Add timezone (optional)</li>
-              <li>5. Click "Create Client"</li>
+              <li>5. Click &quot;Create Client&quot;</li>
             </ol>
           </div>
         </section>
@@ -224,7 +224,7 @@ export default async function OnboardingGuidePage() {
             <h3 className="font-medium mb-3">Provide to Client</h3>
             <ul className="space-y-2 text-sm text-zinc-300">
               <li>• Webhook URL: <code className="text-white">https://yourdomain.com/api/stripe-webhook?source=client_slug</code></li>
-              <li>• Subscribe endpoint: <code className="text-white">POST /api/subscribe</code> with <code className="text-white">source: "client_slug"</code></li>
+              <li>• Subscribe endpoint: <code className="text-white">POST /api/subscribe</code> with <code className="text-white">source: &quot;client_slug&quot;</code></li>
               <li>• Confirmation that automations are live</li>
             </ul>
             <div className="mt-4 p-3 bg-zinc-950 rounded text-xs">

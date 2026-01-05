@@ -60,12 +60,13 @@ async function testClientExists(clientId: string): Promise<TestResult> {
       message: 'Client found',
       duration,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return {
       category: 'configuration',
       name: 'Client Exists',
       status: 'FAIL',
-      message: `Error: ${error.message}`,
+      message: `Error: ${message}`,
       duration: Date.now() - start,
     };
   }
@@ -104,12 +105,13 @@ async function testClientActive(clientId: string): Promise<TestResult> {
       message: 'Client status is ACTIVE',
       duration,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return {
       category: 'configuration',
       name: 'Client Active',
       status: 'FAIL',
-      message: `Error: ${error.message}`,
+      message: `Error: ${message}`,
       duration: Date.now() - start,
     };
   }
@@ -140,12 +142,13 @@ async function testMailerLiteIntegrationExists(clientId: string): Promise<TestRe
       message: 'MailerLite integration found',
       duration,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return {
       category: 'configuration',
       name: 'MailerLite Integration',
       status: 'FAIL',
-      message: `Error: ${error.message}`,
+      message: `Error: ${message}`,
       duration: Date.now() - start,
     };
   }
@@ -169,7 +172,7 @@ async function testMailerLiteMetaValid(clientId: string): Promise<TestResult> {
       };
     }
     
-    const meta = mlIntegration.meta as any;
+    const meta = mlIntegration.meta as { groupIds?: { lead?: string; customer?: string } } | null;
     if (!meta?.groupIds) {
       return {
         category: 'configuration',
@@ -197,12 +200,13 @@ async function testMailerLiteMetaValid(clientId: string): Promise<TestResult> {
       message: 'Meta structure valid',
       duration,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return {
       category: 'configuration',
       name: 'MailerLite Meta Valid',
       status: 'FAIL',
-      message: `Error: ${error.message}`,
+      message: `Error: ${message}`,
       duration: Date.now() - start,
     };
   }
@@ -233,12 +237,13 @@ async function testStripeIntegrationExists(clientId: string): Promise<TestResult
       message: 'Stripe integration found',
       duration,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return {
       category: 'configuration',
       name: 'Stripe Integration',
       status: 'FAIL',
-      message: `Error: ${error.message}`,
+      message: `Error: ${message}`,
       duration: Date.now() - start,
     };
   }
@@ -274,12 +279,13 @@ async function testRecentActivity(clientId: string): Promise<TestResult> {
       message: 'Recent activity detected',
       duration,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return {
       category: 'configuration',
       name: 'Recent Activity',
       status: 'FAIL',
-      message: `Error: ${error.message}`,
+      message: `Error: ${message}`,
       duration: Date.now() - start,
     };
   }
@@ -326,14 +332,14 @@ async function testMailerLiteAPI(clientId: string): Promise<TestResult> {
       };
     }
     
-    const data = await response.json();
+    const data = await response.json() as { data?: Array<{ id: string }> };
     const groups = data.data || [];
-    const meta = mlIntegration.meta as any;
+    const meta = mlIntegration.meta as { groupIds?: { lead?: string; customer?: string } } | null;
     
     // Verify configured groups exist
     if (meta?.groupIds) {
-      const leadGroupExists = groups.some((g: any) => g.id === meta.groupIds?.lead);
-      const customerGroupExists = groups.some((g: any) => g.id === meta.groupIds?.customer);
+      const leadGroupExists = groups.some((g) => g.id === meta.groupIds?.lead);
+      const customerGroupExists = groups.some((g) => g.id === meta.groupIds?.customer);
       
       if (!leadGroupExists) {
         return {
@@ -371,12 +377,13 @@ async function testMailerLiteAPI(clientId: string): Promise<TestResult> {
       message: `Connected successfully. Found ${groups.length} groups`,
       duration: Date.now() - start,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return {
       category: 'api_connectivity',
       name: 'MailerLite API',
       status: 'FAIL',
-      message: `Error: ${error.message}`,
+      message: `Error: ${message}`,
       duration: Date.now() - start,
     };
   }
@@ -439,12 +446,13 @@ async function testLandingPage(clientSlug: string): Promise<TestResult> {
       message: 'Landing page loads correctly with email capture',
       duration: Date.now() - start,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return {
       category: 'api_connectivity',
       name: 'Landing Page',
       status: 'FAIL',
-      message: `Cannot reach landing page: ${error.message}`,
+      message: `Cannot reach landing page: ${message}`,
       duration: Date.now() - start,
     };
   }
@@ -497,12 +505,13 @@ async function testStripeWebhook(clientSlug: string): Promise<TestResult> {
       message: `Unexpected response: ${response.status}`,
       duration: Date.now() - start,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return {
       category: 'api_connectivity',
       name: 'Stripe Webhook',
       status: 'FAIL',
-      message: `Cannot reach webhook: ${error.message}`,
+      message: `Cannot reach webhook: ${message}`,
       duration: Date.now() - start,
     };
   }

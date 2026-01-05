@@ -82,7 +82,7 @@ export async function GET(
     ]);
 
     // Parse meta to get configured group IDs
-    const meta = mlIntegration.meta as any;
+    const meta = mlIntegration.meta as { groupIds?: { lead?: string; customer?: string; programs?: Record<string, string> } } | null;
     const groupIds = meta?.groupIds || {};
 
     // Match configured groups with actual groups from API
@@ -146,12 +146,13 @@ export async function GET(
     };
 
     return NextResponse.json(response);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Failed to fetch MailerLite insights:', error);
     return NextResponse.json(
       {
         error: 'Failed to fetch insights from MailerLite',
-        details: error.message,
+        details: message,
       },
       { status: 500 }
     );

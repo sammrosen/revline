@@ -106,9 +106,7 @@ export function TimezoneSelector({ value, onChange, required }: TimezoneSelector
   }, []);
 
   // Reset highlighted index when filtered list changes
-  useEffect(() => {
-    setHighlightedIndex(0);
-  }, [search]);
+  // Note: This is handled in the search onChange handler to avoid setState in effect
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (!showDropdown) {
@@ -182,6 +180,7 @@ export function TimezoneSelector({ value, onChange, required }: TimezoneSelector
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
+            setHighlightedIndex(0); // Reset highlight when search changes
             setShowDropdown(true);
           }}
           onFocus={() => setShowDropdown(true)}
@@ -197,7 +196,7 @@ export function TimezoneSelector({ value, onChange, required }: TimezoneSelector
         <div className="absolute z-50 w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl max-h-64 overflow-y-auto">
           {filteredTimezones.length === 0 ? (
             <div className="px-4 py-3 text-sm text-zinc-500">
-              No timezones found matching "{search}"
+              No timezones found matching &quot;{search}&quot;
             </div>
           ) : (
             filteredTimezones.map((tz, index) => (

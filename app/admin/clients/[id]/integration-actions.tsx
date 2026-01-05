@@ -10,11 +10,10 @@ interface Integration {
 }
 
 interface IntegrationActionsProps {
-  clientId: string;
   integration: Integration;
 }
 
-export function IntegrationActions({ clientId, integration }: IntegrationActionsProps) {
+export function IntegrationActions({ integration }: IntegrationActionsProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditMeta, setShowEditMeta] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
