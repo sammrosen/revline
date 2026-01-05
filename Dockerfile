@@ -45,10 +45,6 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-# Install Prisma CLI for migrations (simpler than copying all transitive deps)
-COPY --from=builder /app/package.json ./package.json
-RUN npm install prisma --omit=dev --ignore-scripts
-
 # Set correct permissions
 RUN chown -R nextjs:nodejs /app
 
@@ -59,6 +55,6 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Run migrations and start server
-CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
+# Start server (run migrations manually when schema changes)
+CMD ["node", "server.js"]
 
