@@ -4,6 +4,10 @@
  * Handles Stripe webhook verification and event parsing for a specific client.
  * The webhook signing secret is stored encrypted per-client.
  * 
+ * Secret names:
+ * - "Webhook Secret" - Required for webhook verification (whsec_...)
+ * - "API Key" - Optional, for API calls (uses env STRIPE_API_KEY if not set)
+ * 
  * STANDARDS:
  * - Always verify webhook signatures before processing
  * - Never expose webhook secrets in logs or responses
@@ -14,6 +18,10 @@ import Stripe from 'stripe';
 import { IntegrationType } from '@prisma/client';
 import { BaseIntegrationAdapter } from './base';
 import { StripeMeta, IntegrationResult } from '@/app/_lib/types';
+
+/** Default secret names for Stripe */
+export const STRIPE_WEBHOOK_SECRET = 'Webhook Secret';
+export const STRIPE_API_KEY_SECRET = 'API Key';
 
 /**
  * Extracted checkout session data
@@ -66,20 +74,38 @@ export class StripeAdapter extends BaseIntegrationAdapter<StripeMeta> {
     if (!data) {
       return null;
     }
+
+    // Ensure at least one secret exists (webhook secret)
+    if (data.secrets.length === 0) {
+      console.warn('Stripe integration has no secrets configured:', { clientId });
+      return null;
+    }
     
-    return new StripeAdapter(clientId, data.secret, data.meta);
+    return new StripeAdapter(clientId, data.secrets, data.meta);
+  }
+
+  /**
+   * Get the webhook signing secret
+   */
+  private getWebhookSecret(): string {
+    const secret = this.getSecret(STRIPE_WEBHOOK_SECRET) || this.getPrimarySecret();
+    return secret;
   }
 
   /**
    * Get or create Stripe client instance
-   * Uses API key from meta or environment
+   * Uses API key from secrets, meta, or environment
    */
   private getStripeClient(): Stripe {
     if (this._stripe) {
       return this._stripe;
     }
 
-    const apiKey = this.meta?.apiKey || process.env.STRIPE_API_KEY;
+    // Priority: secrets -> meta -> env
+    const apiKey = this.getSecret(STRIPE_API_KEY_SECRET) 
+      || this.meta?.apiKey 
+      || process.env.STRIPE_API_KEY;
+      
     if (!apiKey) {
       throw new Error('Stripe API key not configured');
     }
@@ -101,11 +127,11 @@ export class StripeAdapter extends BaseIntegrationAdapter<StripeMeta> {
     try {
       const stripe = this.getStripeClient();
       
-      // The secret stored is the webhook signing secret (whsec_...)
+      // Use the webhook signing secret
       const event = stripe.webhooks.constructEvent(
         payload,
         signature,
-        this.secret
+        this.getWebhookSecret()
       );
 
       await this.touch();
@@ -186,7 +212,11 @@ export class StripeAdapter extends BaseIntegrationAdapter<StripeMeta> {
    * Check if Stripe API key is configured
    */
   hasApiKey(): boolean {
-    return !!(this.meta?.apiKey || process.env.STRIPE_API_KEY);
+    return !!(
+      this.hasSecret(STRIPE_API_KEY_SECRET) || 
+      this.meta?.apiKey || 
+      process.env.STRIPE_API_KEY
+    );
   }
 
   /**
@@ -198,7 +228,7 @@ export class StripeAdapter extends BaseIntegrationAdapter<StripeMeta> {
     if (!this.hasApiKey()) {
       missing.push('Stripe API key');
     }
-    // Webhook secret is always present if adapter loaded successfully
+    // Webhook secret is required and checked in forClient
 
     return {
       valid: missing.length === 0,
@@ -206,4 +236,3 @@ export class StripeAdapter extends BaseIntegrationAdapter<StripeMeta> {
     };
   }
 }
-

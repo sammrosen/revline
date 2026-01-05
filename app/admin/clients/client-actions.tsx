@@ -6,9 +6,10 @@ import { useRouter } from 'next/navigation';
 interface ClientActionsProps {
   clientId: string;
   currentStatus: 'ACTIVE' | 'PAUSED';
+  isDropdownItem?: boolean;
 }
 
-export function ClientActions({ clientId, currentStatus }: ClientActionsProps) {
+export function ClientActions({ clientId, currentStatus, isDropdownItem = false }: ClientActionsProps) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -31,6 +32,20 @@ export function ClientActions({ clientId, currentStatus }: ClientActionsProps) {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (isDropdownItem) {
+    return (
+      <button
+        onClick={handleToggle}
+        disabled={loading}
+        className={`w-full text-left px-3 py-2 text-sm rounded hover:bg-zinc-800 transition-colors ${
+          currentStatus === 'ACTIVE' ? 'text-red-400' : 'text-green-400'
+        } disabled:opacity-50`}
+      >
+        {loading ? '...' : currentStatus === 'ACTIVE' ? 'Pause Client' : 'Unpause Client'}
+      </button>
+    );
   }
 
   return (

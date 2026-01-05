@@ -176,39 +176,9 @@ git status prisma/migrations/
 - [ ] Migration file created and committed
 - [ ] Migration tested locally
 - [ ] No data loss in migration (for production)
+- [ ] Make sure we migrate DATABASE_URL and PROD_DATABASE_URL ***THIS IS THE PROD DATABASE, MAKE SURE MIGRATIONS ARE SAFE TO RUN***
 
 ---
-
-## Manual Testing Recommendations
-
-### Critical Flows to Test
-
-1. **Email Capture Flow**
-   ```bash
-   curl -X POST http://localhost:3000/api/subscribe \
-     -H "Content-Type: application/json" \
-     -d '{"email":"test@example.com","source":"demo"}'
-   ```
-   - [ ] Returns success response
-   - [ ] Event logged in admin dashboard
-   - [ ] MailerLite receives subscriber (if configured)
-
-2. **Admin Login Flow**
-   - [ ] Login page loads (`/admin/login`)
-   - [ ] Can log in with valid password
-   - [ ] Redirected to dashboard after login
-   - [ ] Session persists across page refreshes
-
-3. **Client Management**
-   - [ ] Can create new client
-   - [ ] Can pause/unpause client
-   - [ ] Health check runs successfully
-
-4. **2FA Flow** (if modifying auth)
-   - [ ] Can enable 2FA from settings
-   - [ ] QR code displays correctly
-   - [ ] TOTP verification works
-   - [ ] Recovery codes function
 
 ---
 
@@ -345,4 +315,6 @@ npm run ci  # Same as pre-push
 ---
 
 *Last updated: January 2025*
+
+
 

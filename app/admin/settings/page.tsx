@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import QRCode from 'qrcode';
 
 interface TwoFAStatus {
@@ -318,12 +319,13 @@ export default function AdminSettingsPage() {
                   {/* QR Code */}
                   <div className="bg-white p-3 rounded-lg inline-block">
                     {qrCodeUrl ? (
-                      <img 
+                      <Image 
                         src={qrCodeUrl} 
                         alt="2FA QR Code" 
                         width={200} 
                         height={200}
                         className="block"
+                        unoptimized
                       />
                     ) : (
                       <div className="w-[200px] h-[200px] flex items-center justify-center text-black text-sm">

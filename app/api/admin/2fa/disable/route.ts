@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminIdFromHeaders, verifyPassword } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
+import { Prisma } from '@prisma/client';
 
 /**
  * POST /api/admin/2fa/disable
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
       data: {
         totpEnabled: false,
         totpSecret: null,
-        recoveryCodes: null,
+        recoveryCodes: Prisma.DbNull,
       },
     });
 

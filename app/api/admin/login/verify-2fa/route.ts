@@ -7,6 +7,7 @@ import {
   verifyRecoveryCode,
   RecoveryCode,
 } from '@/app/_lib/totp';
+import { Prisma } from '@prisma/client';
 import {
   validateTempToken,
   clearTempTokenCookie,
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
         
         await prisma.admin.update({
           where: { id: adminId },
-          data: { recoveryCodes: recoveryCodes },
+          data: { recoveryCodes: recoveryCodes as unknown as Prisma.InputJsonValue },
         });
       }
     } else {

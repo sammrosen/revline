@@ -9,6 +9,7 @@ import {
   type Automation,
 } from '@/app/_lib/mailerlite';
 import { IntegrationType } from '@prisma/client';
+import { IntegrationSecret, MailerLiteMeta } from '@/app/_lib/types';
 
 interface ConfiguredGroup {
   id: string;
@@ -21,11 +22,7 @@ interface ConfiguredGroup {
 interface InsightsResponse {
   groups: MailerLiteGroup[];
   automations: Automation[];
-  configured_groups: {
-    lead?: ConfiguredGroup;
-    customer?: ConfiguredGroup;
-    programs?: ConfiguredGroup[];
-  };
+  configured_groups: Record<string, ConfiguredGroup>;
   summary: {
     total_groups: number;
     total_automations: number;
@@ -63,8 +60,7 @@ export async function GET(
       integration: IntegrationType.MAILERLITE,
     },
     select: {
-      encryptedSecret: true,
-      keyVersion: true,
+      secrets: true,
       meta: true,
     },
   });
@@ -76,9 +72,19 @@ export async function GET(
     );
   }
 
+  // Parse secrets
+  const secrets = (mlIntegration.secrets as IntegrationSecret[] | null) || [];
+  if (secrets.length === 0) {
+    return NextResponse.json(
+      { error: 'MailerLite API key not configured' },
+      { status: 404 }
+    );
+  }
+
   try {
-    // Decrypt API key using the stored key version
-    const apiKey = decryptSecret(mlIntegration.encryptedSecret, mlIntegration.keyVersion);
+    // Decrypt API key (use first secret or one named "API Key")
+    const apiKeySecret = secrets.find(s => s.name === 'API Key') || secrets[0];
+    const apiKey = decryptSecret(apiKeySecret.encryptedValue, apiKeySecret.keyVersion);
 
     // Fetch data from MailerLite API
     const [groups, automations] = await Promise.all([
@@ -86,48 +92,22 @@ export async function GET(
       getAllAutomations(apiKey),
     ]);
 
-    // Parse meta to get configured group IDs
-    const meta = mlIntegration.meta as { groupIds?: { lead?: string; customer?: string; programs?: Record<string, string> } } | null;
-    const groupIds = meta?.groupIds || {};
+    // Parse meta to get configured groups (new format)
+    const meta = mlIntegration.meta as MailerLiteMeta | null;
+    const configuredGroupsMeta = meta?.groups || {};
 
     // Match configured groups with actual groups from API
-    const configuredGroups: InsightsResponse['configured_groups'] = {};
+    const configuredGroups: Record<string, ConfiguredGroup> = {};
 
-    if (groupIds.lead) {
-      const group = groups.find((g) => g.id === groupIds.lead);
+    for (const [key, groupConfig] of Object.entries(configuredGroupsMeta)) {
+      const group = groups.find((g) => g.id === groupConfig.id);
       if (group) {
-        configuredGroups.lead = {
+        configuredGroups[key] = {
           ...group,
-          type: 'lead',
-          config_key: 'groupIds.lead',
+          type: 'lead', // Default type, can be inferred from routing if needed
+          config_key: `groups.${key}`,
         };
       }
-    }
-
-    if (groupIds.customer) {
-      const group = groups.find((g) => g.id === groupIds.customer);
-      if (group) {
-        configuredGroups.customer = {
-          ...group,
-          type: 'customer',
-          config_key: 'groupIds.customer',
-        };
-      }
-    }
-
-    // Check for program-specific groups (if meta has programs object)
-    if (groupIds.programs && typeof groupIds.programs === 'object') {
-      configuredGroups.programs = [];
-      Object.entries(groupIds.programs).forEach(([programName, programGroupId]) => {
-        const group = groups.find((g) => g.id === programGroupId);
-        if (group) {
-          configuredGroups.programs!.push({
-            ...group,
-            type: 'program',
-            config_key: `groupIds.programs.${programName}`,
-          });
-        }
-      });
     }
 
     // Calculate summary stats
@@ -163,4 +143,3 @@ export async function GET(
     );
   }
 }
-

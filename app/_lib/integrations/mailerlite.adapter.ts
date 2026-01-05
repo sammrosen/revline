@@ -1,8 +1,12 @@
 /**
  * MailerLite Integration Adapter
  * 
- * Handles all MailerLite API operations for a specific client.
- * Wraps the low-level mailerlite.ts functions with client context.
+ * Handles MailerLite API operations for a specific client.
+ * This adapter only handles operations (addToGroup, getGroups, etc.)
+ * Routing logic is handled by the action dispatcher.
+ * 
+ * Secret names:
+ * - "API Key" - Required for all operations
  * 
  * STANDARDS:
  * - All operations auto-update health status
@@ -22,6 +26,9 @@ import {
   Automation,
 } from '@/app/_lib/mailerlite';
 
+/** Default secret name for MailerLite API key */
+export const MAILERLITE_API_KEY_SECRET = 'API Key';
+
 /**
  * Result of adding a subscriber
  */
@@ -38,10 +45,8 @@ export interface AddSubscriberResult {
  * const adapter = await MailerLiteAdapter.forClient(clientId);
  * if (!adapter) return ApiResponse.configError();
  * 
- * const result = await adapter.addToLeadGroup('user@example.com', 'John');
- * if (!result.success) {
- *   await emitEvent({ eventType: 'mailerlite_subscribe_failed', ... });
- * }
+ * // Add to a specific group (routing handled by dispatcher)
+ * const result = await adapter.addToGroup('user@example.com', '123456', 'John');
  */
 export class MailerLiteAdapter extends BaseIntegrationAdapter<MailerLiteMeta> {
   readonly type = IntegrationType.MAILERLITE;
@@ -58,67 +63,42 @@ export class MailerLiteAdapter extends BaseIntegrationAdapter<MailerLiteMeta> {
     if (!data) {
       return null;
     }
+
+    // Ensure at least one secret exists
+    if (data.secrets.length === 0) {
+      console.warn('MailerLite integration has no secrets configured:', { clientId });
+      return null;
+    }
     
-    return new MailerLiteAdapter(clientId, data.secret, data.meta);
+    return new MailerLiteAdapter(clientId, data.secrets, data.meta);
   }
 
   /**
-   * Get the lead group ID from meta
+   * Get the API key for MailerLite operations
    */
-  getLeadGroupId(): string | undefined {
-    return this.meta?.groupIds?.lead;
+  private getApiKey(): string {
+    // Try to get by name first, fall back to primary
+    const apiKey = this.getSecret(MAILERLITE_API_KEY_SECRET) || this.getPrimarySecret();
+    return apiKey;
   }
 
   /**
-   * Get the customer group ID from meta
-   * Supports program-specific groups via customer_{program}
+   * Get the configured groups from meta
    */
-  getCustomerGroupId(program?: string): string | undefined {
-    if (program && this.meta?.groupIds?.[`customer_${program}`]) {
-      return this.meta.groupIds[`customer_${program}`];
-    }
-    return this.meta?.groupIds?.customer;
+  getConfiguredGroups(): Record<string, { id: string; name: string }> {
+    return this.meta?.groups ?? {};
   }
 
   /**
-   * Add subscriber to lead group
-   * Use this for email captures from landing pages
+   * Get a specific group by key
    */
-  async addToLeadGroup(
-    email: string,
-    name?: string
-  ): Promise<IntegrationResult<AddSubscriberResult>> {
-    const groupId = this.getLeadGroupId();
-    if (!groupId) {
-      return this.error('Lead group ID not configured');
-    }
-
-    return this.addToGroup(email, groupId, name);
+  getGroup(key: string): { id: string; name: string } | null {
+    return this.meta?.groups?.[key] ?? null;
   }
 
   /**
-   * Add subscriber to customer group
-   * Use this after successful payments
-   * 
-   * @param program - Optional program name for multi-product routing
-   */
-  async addToCustomerGroup(
-    email: string,
-    name?: string,
-    program?: string
-  ): Promise<IntegrationResult<AddSubscriberResult>> {
-    const groupId = this.getCustomerGroupId(program);
-    if (!groupId) {
-      const context = program ? ` for program '${program}'` : '';
-      return this.error(`Customer group ID not configured${context}`);
-    }
-
-    return this.addToGroup(email, groupId, name);
-  }
-
-  /**
-   * Add subscriber to a specific group
-   * Low-level method - prefer addToLeadGroup/addToCustomerGroup
+   * Add subscriber to a specific group by ID
+   * This is the core operation - routing is handled by the dispatcher
    */
   async addToGroup(
     email: string,
@@ -130,7 +110,7 @@ export class MailerLiteAdapter extends BaseIntegrationAdapter<MailerLiteMeta> {
         email,
         name,
         groupId,
-        apiKey: this.secret,
+        apiKey: this.getApiKey(),
       });
 
       if (result.success) {
@@ -157,11 +137,11 @@ export class MailerLiteAdapter extends BaseIntegrationAdapter<MailerLiteMeta> {
 
   /**
    * Get all groups in the MailerLite account
-   * Used for insights/admin views
+   * Used for insights/admin views and config validation
    */
   async getGroups(): Promise<IntegrationResult<MailerLiteGroup[]>> {
     try {
-      const groups = await getMailerLiteGroups(this.secret);
+      const groups = await getMailerLiteGroups(this.getApiKey());
       await this.touch();
       return this.success(groups);
     } catch (error) {
@@ -179,7 +159,7 @@ export class MailerLiteAdapter extends BaseIntegrationAdapter<MailerLiteMeta> {
    */
   async getAutomations(): Promise<IntegrationResult<Automation[]>> {
     try {
-      const automations = await getAllAutomations(this.secret);
+      const automations = await getAllAutomations(this.getApiKey());
       await this.touch();
       return this.success(automations);
     } catch (error) {
@@ -199,7 +179,7 @@ export class MailerLiteAdapter extends BaseIntegrationAdapter<MailerLiteMeta> {
     groupId: string
   ): Promise<IntegrationResult<Automation[]>> {
     try {
-      const automations = await getAutomationsByGroup(this.secret, groupId);
+      const automations = await getAutomationsByGroup(this.getApiKey(), groupId);
       await this.touch();
       return this.success(automations);
     } catch (error) {
@@ -213,22 +193,44 @@ export class MailerLiteAdapter extends BaseIntegrationAdapter<MailerLiteMeta> {
   }
 
   /**
-   * Check if the integration is properly configured
+   * Check if the integration has groups configured
    */
-  isConfigured(): { valid: boolean; missing: string[] } {
-    const missing: string[] = [];
+  hasGroups(): boolean {
+    const groups = this.meta?.groups;
+    return !!groups && Object.keys(groups).length > 0;
+  }
+
+  /**
+   * Check if routing is configured for an action
+   */
+  hasRoutingFor(action: string): boolean {
+    const routing = this.meta?.routing;
+    if (!routing) return false;
+    return action in routing && routing[action as keyof typeof routing] !== null;
+  }
+
+  /**
+   * Validate the meta configuration
+   */
+  validateConfig(): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
     
-    if (!this.getLeadGroupId()) {
-      missing.push('lead group ID');
+    if (!this.meta?.groups || Object.keys(this.meta.groups).length === 0) {
+      errors.push('No groups configured');
     }
-    if (!this.getCustomerGroupId()) {
-      missing.push('customer group ID');
+
+    // Check that all routing references valid groups
+    if (this.meta?.routing && this.meta?.groups) {
+      for (const [action, groupKey] of Object.entries(this.meta.routing)) {
+        if (groupKey && !this.meta.groups[groupKey]) {
+          errors.push(`Routing for '${action}' references unknown group '${groupKey}'`);
+        }
+      }
     }
 
     return {
-      valid: missing.length === 0,
-      missing,
+      valid: errors.length === 0,
+      errors,
     };
   }
 }
-

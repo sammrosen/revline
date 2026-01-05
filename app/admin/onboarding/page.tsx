@@ -54,7 +54,7 @@ export default async function OnboardingGuidePage() {
             <h3 className="font-medium mb-3">Stripe Setup</h3>
             <ul className="space-y-2 text-sm text-zinc-300">
               <li>• Webhook signing secret (starts with &quot;whsec_&quot;)</li>
-              <li>• Stripe API key (optional, for signature verification)</li>
+              <li>• Stripe API key (optional, for additional API calls)</li>
             </ul>
             <div className="mt-3 p-3 bg-zinc-950 rounded text-xs">
               <p className="text-zinc-500 mb-2">Ask client to:</p>
@@ -87,50 +87,106 @@ export default async function OnboardingGuidePage() {
           
           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 mb-4">
             <h3 className="font-medium mb-3 text-green-400">MailerLite Integration</h3>
-            <div className="space-y-3 text-sm">
+            <div className="space-y-4 text-sm">
               <div>
                 <p className="text-zinc-400 mb-1">Type:</p>
                 <code className="text-white">MAILERLITE</code>
               </div>
-              <div>
-                <p className="text-zinc-400 mb-1">Secret (API Key):</p>
-                <code className="text-white">mlsk_xxxxxxxxxxxxx</code>
-                <p className="text-xs text-zinc-500 mt-1">🔒 Encrypted on save, never shown again</p>
+              
+              <div className="p-3 bg-zinc-950 rounded border border-zinc-800">
+                <p className="text-zinc-400 mb-2 font-medium">Secrets:</p>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-zinc-500">
+                      <th className="pb-1">Name</th>
+                      <th className="pb-1">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-zinc-300">
+                    <tr>
+                      <td className="py-1"><code>API Key</code></td>
+                      <td><code>mlsk_xxxxxxxxxxxxx</code></td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p className="text-xs text-zinc-500 mt-2">🔒 Secrets are encrypted on save, never shown again</p>
+                <p className="text-xs text-zinc-500">💡 Click &quot;+ Add another secret&quot; if you need multiple keys</p>
               </div>
+              
               <div>
-                <p className="text-zinc-400 mb-1">Meta (JSON):</p>
+                <p className="text-zinc-400 mb-2">Configuration (groups + routing):</p>
+                <p className="text-xs text-zinc-500 mb-2">Use the structured editor or toggle to JSON mode:</p>
                 <pre className="bg-zinc-950 p-3 rounded text-xs text-zinc-300 overflow-x-auto">
 {`{
-  "groupIds": {
-    "lead": "123456",
-    "customer": "789012"
+  "groups": {
+    "leads": { "id": "123456", "name": "Leads" },
+    "customers": { "id": "789012", "name": "Customers" }
+  },
+  "routing": {
+    "lead.captured": "leads",
+    "lead.paid": "customers"
   }
 }`}
                 </pre>
                 <div className="mt-2 p-2 bg-blue-950/30 border border-blue-900/50 rounded">
                   <p className="text-xs text-blue-300">
-                    💡 <strong>Meta stores non-sensitive config only</strong> (group IDs, URLs, flags).
+                    💡 <strong>Groups</strong> define your MailerLite groups with friendly names.
                   </p>
                   <p className="text-xs text-blue-300 mt-1">
-                    ⚠️ <strong>Never put API keys or secrets in meta</strong> - they go in the Secret field above.
+                    💡 <strong>Routing</strong> maps RevLine actions to groups (e.g., email captures → leads group).
                   </p>
                 </div>
+              </div>
+              
+              <div className="p-2 bg-amber-950/30 border border-amber-900/50 rounded">
+                <p className="text-xs text-amber-300">
+                  <strong>Available actions:</strong>
+                </p>
+                <ul className="text-xs text-amber-300 mt-1 space-y-0.5">
+                  <li>• <code>lead.captured</code> - Email submitted on landing page</li>
+                  <li>• <code>lead.paid</code> - Stripe payment completed</li>
+                  <li>• <code>lead.paid:fit1</code> - Payment for specific program (uses Stripe metadata)</li>
+                  <li>• <code>lead.booked</code> - Calendly booking created</li>
+                  <li>• <code>lead.canceled</code> - Calendly booking canceled</li>
+                </ul>
               </div>
             </div>
           </div>
 
           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 mb-4">
             <h3 className="font-medium mb-3 text-purple-400">Stripe Integration</h3>
-            <div className="space-y-3 text-sm">
+            <div className="space-y-4 text-sm">
               <div>
                 <p className="text-zinc-400 mb-1">Type:</p>
                 <code className="text-white">STRIPE</code>
               </div>
-              <div>
-                <p className="text-zinc-400 mb-1">Secret (Webhook Secret):</p>
-                <code className="text-white">whsec_xxxxxxxxxxxxx</code>
-                <p className="text-xs text-zinc-500 mt-1">🔒 Encrypted on save, never shown again</p>
+              
+              <div className="p-3 bg-zinc-950 rounded border border-zinc-800">
+                <p className="text-zinc-400 mb-2 font-medium">Secrets:</p>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-zinc-500">
+                      <th className="pb-1">Name</th>
+                      <th className="pb-1">Value</th>
+                      <th className="pb-1">Required</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-zinc-300">
+                    <tr>
+                      <td className="py-1"><code>Webhook Secret</code></td>
+                      <td><code>whsec_xxxxxxxxxxxxx</code></td>
+                      <td className="text-green-400">Yes</td>
+                    </tr>
+                    <tr>
+                      <td className="py-1"><code>API Key</code></td>
+                      <td><code>sk_live_xxxxxxxxxxxxx</code></td>
+                      <td className="text-zinc-500">Optional</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p className="text-xs text-zinc-500 mt-2">🔒 Secrets are encrypted on save, never shown again</p>
               </div>
+              
               <div>
                 <p className="text-zinc-400 mb-1">Meta (JSON, optional):</p>
                 <pre className="bg-zinc-950 p-3 rounded text-xs text-zinc-300 overflow-x-auto">
@@ -138,13 +194,10 @@ export default async function OnboardingGuidePage() {
                 </pre>
                 <div className="mt-2 p-2 bg-blue-950/30 border border-blue-900/50 rounded">
                   <p className="text-xs text-blue-300">
-                    💡 <strong>Stripe webhook uses MailerLite groups</strong> (configured above).
+                    💡 <strong>Stripe uses MailerLite routing</strong> for group assignment.
                   </p>
                   <p className="text-xs text-blue-300 mt-1">
-                    You can leave meta empty or add optional product routing.
-                  </p>
-                  <p className="text-xs text-red-300 mt-1">
-                    ⚠️ <strong>Do NOT put Stripe API keys in meta</strong> - they are not needed for webhooks.
+                    When a payment is received, the <code>lead.paid</code> action routes to your configured group.
                   </p>
                 </div>
               </div>
@@ -153,34 +206,77 @@ export default async function OnboardingGuidePage() {
 
           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
             <h3 className="font-medium mb-3 text-cyan-400">Calendly Integration (Optional)</h3>
-            <div className="space-y-3 text-sm">
+            <div className="space-y-4 text-sm">
               <div>
                 <p className="text-zinc-400 mb-1">Type:</p>
                 <code className="text-white">CALENDLY</code>
               </div>
-              <div>
-                <p className="text-zinc-400 mb-1">Secret (Webhook Signing Key):</p>
-                <code className="text-white">your_signing_key_from_calendly</code>
-                <p className="text-xs text-zinc-500 mt-1">🔒 Encrypted on save, never shown again</p>
+              
+              <div className="p-3 bg-zinc-950 rounded border border-zinc-800">
+                <p className="text-zinc-400 mb-2 font-medium">Secrets:</p>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-zinc-500">
+                      <th className="pb-1">Name</th>
+                      <th className="pb-1">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-zinc-300">
+                    <tr>
+                      <td className="py-1"><code>Webhook Secret</code></td>
+                      <td><code>your_signing_key</code></td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
+              
               <div>
                 <p className="text-zinc-400 mb-1">Meta (JSON, optional):</p>
                 <pre className="bg-zinc-950 p-3 rounded text-xs text-zinc-300 overflow-x-auto">
 {`{
   "schedulingUrls": {
     "discovery": "https://calendly.com/yourname/30min"
-  },
-  "addToBookedSegment": false
+  }
 }`}
                 </pre>
                 <div className="mt-2 p-2 bg-blue-950/30 border border-blue-900/50 rounded">
                   <p className="text-xs text-blue-300">
-                    💡 <strong>Calendly requires webhook subscription setup</strong> via their API.
+                    💡 <strong>Calendly bookings trigger <code>lead.booked</code></strong> action.
                   </p>
                   <p className="text-xs text-blue-300 mt-1">
-                    Store scheduling URLs and config flags in meta (optional). Webhook signing key must go in Secret field above.
+                    Configure routing in MailerLite integration to add booked leads to a group.
                   </p>
                 </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Managing Secrets */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-semibold mb-4 text-white">Managing Secrets</h2>
+          
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+            <p className="text-sm text-zinc-300 mb-4">
+              After creating an integration, you can manage secrets separately:
+            </p>
+            
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-1 bg-zinc-800 rounded text-xs">Secrets (n)</span>
+                <span className="text-zinc-400">→ Opens secret management modal</span>
+              </div>
+              
+              <ul className="space-y-2 text-zinc-400 ml-4">
+                <li>• <strong className="text-white">Add Secret</strong> - Add a new named secret to the integration</li>
+                <li>• <strong className="text-white">Rotate</strong> - Update a secret&apos;s value (for key rotation)</li>
+                <li>• <strong className="text-white">Delete</strong> - Remove a secret from the integration</li>
+              </ul>
+              
+              <div className="p-2 bg-amber-950/30 border border-amber-900/50 rounded mt-4">
+                <p className="text-xs text-amber-300">
+                  ⚠️ <strong>Secret values are never displayed.</strong> When rotating, you must enter the new value - the old value cannot be retrieved.
+                </p>
               </div>
             </div>
           </div>
@@ -198,9 +294,22 @@ export default async function OnboardingGuidePage() {
   -d '{"email":"test@example.com","source":"client_slug"}'`}
             </pre>
             <ul className="mt-3 space-y-1 text-sm text-zinc-400">
-              <li>✓ Check MailerLite: Email appears in lead group</li>
+              <li>✓ Check MailerLite: Email appears in &quot;leads&quot; group (per routing)</li>
               <li>✓ Check admin dashboard: Events logged</li>
               <li>✓ Check email: Welcome automation sends</li>
+            </ul>
+          </div>
+
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 mb-4">
+            <h3 className="font-medium mb-3">Run Health Check</h3>
+            <p className="text-sm text-zinc-400 mb-3">
+              From the client detail page, click <span className="text-white">Run Health Check</span> to verify:
+            </p>
+            <ul className="space-y-1 text-sm text-zinc-400">
+              <li>✓ MailerLite API connectivity</li>
+              <li>✓ Group IDs exist in MailerLite</li>
+              <li>✓ Routing configuration valid</li>
+              <li>✓ Webhook endpoints accessible</li>
             </ul>
           </div>
 
@@ -210,8 +319,8 @@ export default async function OnboardingGuidePage() {
               <li>1. Use Stripe test card: <code className="text-white">4242 4242 4242 4242</code></li>
               <li>2. Complete test checkout</li>
               <li>3. Check Stripe Dashboard → Webhooks: Delivery shows success</li>
-              <li>4. Check MailerLite: Customer appears in customer group</li>
-              <li>5. Check admin dashboard: Payment + subscribe events logged</li>
+              <li>4. Check MailerLite: Customer appears in &quot;customers&quot; group (per routing)</li>
+              <li>5. Check admin dashboard: Payment events logged</li>
             </ol>
           </div>
         </section>
@@ -241,29 +350,35 @@ export default async function OnboardingGuidePage() {
           
           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
             <p className="text-sm text-zinc-300 mb-4">
-              If client has multiple products (e.g., FIT1, Premium, Demo), use Stripe metadata for routing.
+              If client has multiple products (e.g., FIT1, Premium, Demo), use Stripe metadata + program-specific routing.
             </p>
             
             <h3 className="font-medium mb-2 text-sm">Setup:</h3>
             <ol className="space-y-2 text-sm text-zinc-400 mb-4">
               <li>1. Client adds metadata to Payment Links: <code className="text-white">program=fit1</code></li>
               <li>2. Create separate MailerLite groups per product</li>
-              <li>3. Update integration meta:</li>
+              <li>3. Update MailerLite configuration:</li>
             </ol>
             
             <pre className="bg-zinc-950 p-3 rounded text-xs text-zinc-300 overflow-x-auto">
 {`{
-  "groupIds": {
-    "lead": "123456",
-    "customer": "789012",
-    "customer_fit1": "345678",
-    "customer_premium": "901234"
+  "groups": {
+    "leads": { "id": "123456", "name": "All Leads" },
+    "customers": { "id": "789012", "name": "All Customers" },
+    "fit1_customers": { "id": "345678", "name": "FIT1 Customers" },
+    "premium_customers": { "id": "901234", "name": "Premium Customers" }
+  },
+  "routing": {
+    "lead.captured": "leads",
+    "lead.paid": "customers",
+    "lead.paid:fit1": "fit1_customers",
+    "lead.paid:premium": "premium_customers"
   }
 }`}
             </pre>
             
             <p className="text-xs text-zinc-500 mt-3">
-              System automatically routes based on metadata. No code changes needed.
+              System automatically routes based on Stripe metadata. Program-specific routes take priority over default.
             </p>
           </div>
         </section>
@@ -278,7 +393,8 @@ export default async function OnboardingGuidePage() {
                 <h3 className="font-medium mb-2 text-zinc-300">URLs</h3>
                 <ul className="space-y-1 text-xs text-zinc-400">
                   <li>Subscribe: <code className="text-white">/api/subscribe</code></li>
-                  <li>Webhook: <code className="text-white">/api/stripe-webhook</code></li>
+                  <li>Stripe Webhook: <code className="text-white">/api/stripe-webhook</code></li>
+                  <li>Calendly Webhook: <code className="text-white">/api/calendly-webhook</code></li>
                 </ul>
               </div>
               <div>
@@ -289,6 +405,31 @@ export default async function OnboardingGuidePage() {
                   <li>Test + verify: ~20 min</li>
                   <li>Total: &lt;2 hours</li>
                 </ul>
+              </div>
+            </div>
+            
+            <div className="mt-4 pt-4 border-t border-zinc-800">
+              <h3 className="font-medium mb-2 text-zinc-300">Default Secret Names by Integration</h3>
+              <div className="grid grid-cols-3 gap-4 text-xs">
+                <div>
+                  <span className="text-green-400">MAILERLITE</span>
+                  <ul className="text-zinc-400 mt-1">
+                    <li>• API Key</li>
+                  </ul>
+                </div>
+                <div>
+                  <span className="text-purple-400">STRIPE</span>
+                  <ul className="text-zinc-400 mt-1">
+                    <li>• Webhook Secret</li>
+                    <li>• API Key (optional)</li>
+                  </ul>
+                </div>
+                <div>
+                  <span className="text-cyan-400">CALENDLY</span>
+                  <ul className="text-zinc-400 mt-1">
+                    <li>• Webhook Secret</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
@@ -312,4 +453,3 @@ export default async function OnboardingGuidePage() {
     </div>
   );
 }
-

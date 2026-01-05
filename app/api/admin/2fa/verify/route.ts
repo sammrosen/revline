@@ -7,6 +7,7 @@ import {
   generateRecoveryCodes,
   formatRecoveryCode,
 } from '@/app/_lib/totp';
+import { Prisma } from '@prisma/client';
 
 /**
  * POST /api/admin/2fa/verify
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
       where: { id: adminId },
       data: {
         totpEnabled: true,
-        recoveryCodes: hashedCodes,
+        recoveryCodes: hashedCodes as unknown as Prisma.InputJsonValue,
       },
     });
 

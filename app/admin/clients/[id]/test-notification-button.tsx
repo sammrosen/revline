@@ -6,7 +6,10 @@ interface TestNotificationButtonProps {
   clientId: string;
 }
 
-export function TestNotificationButton({ clientId }: TestNotificationButtonProps) {
+export function TestNotificationButton({ 
+  clientId,
+  isDropdownItem = false 
+}: TestNotificationButtonProps & { isDropdownItem?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -39,6 +42,32 @@ export function TestNotificationButton({ clientId }: TestNotificationButtonProps
     }
   }
 
+  if (isDropdownItem) {
+    return (
+      <>
+        <button
+          onClick={sendTestNotification}
+          disabled={loading}
+          className="w-full text-left px-3 py-2 text-sm rounded hover:bg-zinc-800 transition-colors text-zinc-300 hover:text-white disabled:opacity-50"
+        >
+          {loading ? 'Sending...' : 'Test Notification'}
+        </button>
+
+        {result && (
+          <div
+            className={`fixed top-4 right-4 rounded-lg p-3 text-sm z-50 max-w-md border ${
+              result.success
+                ? 'bg-green-500/10 border-green-500/50 text-green-400'
+                : 'bg-red-500/10 border-red-500/50 text-red-400'
+            }`}
+          >
+            {result.message}
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       <button
@@ -47,7 +76,7 @@ export function TestNotificationButton({ clientId }: TestNotificationButtonProps
         className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
           loading
             ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed'
-            : 'bg-violet-600 hover:bg-violet-700 text-white'
+            : 'bg-zinc-800 hover:bg-zinc-700 text-white'
         }`}
         title="Send a test push notification to your phone"
       >

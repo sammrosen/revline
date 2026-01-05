@@ -43,16 +43,42 @@ export interface IntegrationSummary {
 // INTEGRATION META TYPES
 // =============================================================================
 
+// Import action types for routing
+import type { RevLineAction } from '@/app/_lib/actions';
+
+/**
+ * Base interface for integrations that support action routing
+ */
+export interface RoutableIntegrationMeta {
+  routing?: Partial<Record<RevLineAction, string | null>>;
+}
+
+/**
+ * A named MailerLite group with ID and display name
+ */
+export interface MailerLiteGroup {
+  id: string;
+  name: string;
+}
+
 /**
  * MailerLite integration metadata
- * Stores group IDs for different segments (lead, customer, program-specific)
+ * Uses named groups + action routing for flexible configuration
+ * 
+ * @example
+ * {
+ *   "groups": {
+ *     "welcome": { "id": "123456", "name": "Welcome List" },
+ *     "customers": { "id": "789012", "name": "Paying Customers" }
+ *   },
+ *   "routing": {
+ *     "lead.captured": "welcome",
+ *     "lead.paid": "customers"
+ *   }
+ * }
  */
-export interface MailerLiteMeta {
-  groupIds?: {
-    lead?: string;
-    customer?: string;
-    [key: `customer_${string}`]: string | undefined;
-  };
+export interface MailerLiteMeta extends RoutableIntegrationMeta {
+  groups: Record<string, MailerLiteGroup>;
 }
 
 /**
@@ -93,11 +119,11 @@ export type IntegrationMeta =
   | Record<string, unknown>;
 
 /**
- * Type guard for MailerLite meta
+ * Type guard for MailerLite meta (new format with groups + routing)
  */
 export function isMailerLiteMeta(meta: IntegrationMeta | null): meta is MailerLiteMeta {
   if (!meta) return false;
-  return 'groupIds' in meta || Object.keys(meta).length === 0;
+  return 'groups' in meta;
 }
 
 /**
@@ -200,6 +226,38 @@ export interface CaptureResult {
 }
 
 // =============================================================================
+// INTEGRATION SECRET TYPES
+// =============================================================================
+
+/**
+ * A single named secret within an integration
+ * Stored encrypted in the database, decrypted only in memory
+ */
+export interface IntegrationSecret {
+  id: string;           // UUID for targeting updates/deletes
+  name: string;         // Display name, e.g., "API Key", "Webhook Secret"
+  encryptedValue: string;
+  keyVersion: number;
+}
+
+/**
+ * Input for creating/updating a secret (before encryption)
+ */
+export interface SecretInput {
+  name: string;
+  plaintextValue: string;
+}
+
+/**
+ * Secret summary for API responses (never expose actual values)
+ */
+export interface SecretSummary {
+  id: string;
+  name: string;
+  createdAt?: Date;
+}
+
+// =============================================================================
 // INTEGRATION ADAPTER TYPES
 // =============================================================================
 
@@ -208,7 +266,7 @@ export interface CaptureResult {
  */
 export interface IntegrationConfig {
   clientId: string;
-  secret: string;
+  secrets: IntegrationSecret[];
   meta: IntegrationMeta | null;
 }
 

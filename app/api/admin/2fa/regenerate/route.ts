@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminIdFromHeaders, verifyPassword } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { generateRecoveryCodes, formatRecoveryCode } from '@/app/_lib/totp';
+import { Prisma } from '@prisma/client';
 
 /**
  * POST /api/admin/2fa/regenerate
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
     await prisma.admin.update({
       where: { id: adminId },
       data: {
-        recoveryCodes: hashedCodes,
+        recoveryCodes: hashedCodes as unknown as Prisma.InputJsonValue,
       },
     });
 

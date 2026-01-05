@@ -30,11 +30,13 @@ describe('Crypto Module', () => {
     // Store original env
     originalEnv = {
       SRB_ENCRYPTION_KEY: process.env.SRB_ENCRYPTION_KEY,
+      REVLINE_ENCRYPTION_KEY: process.env.REVLINE_ENCRYPTION_KEY,
       REVLINE_ENCRYPTION_KEY_V1: process.env.REVLINE_ENCRYPTION_KEY_V1,
       REVLINE_ENCRYPTION_KEY_V2: process.env.REVLINE_ENCRYPTION_KEY_V2,
     };
     // Clear all encryption keys
     delete process.env.SRB_ENCRYPTION_KEY;
+    delete process.env.REVLINE_ENCRYPTION_KEY;
     delete process.env.REVLINE_ENCRYPTION_KEY_V1;
     delete process.env.REVLINE_ENCRYPTION_KEY_V2;
     // Clear module cache to pick up new env
@@ -123,7 +125,7 @@ describe('Crypto Module', () => {
     it('should build keyring with legacy key (version 0)', async () => {
       process.env.SRB_ENCRYPTION_KEY = KEY_V0_LEGACY;
       process.env.REVLINE_ENCRYPTION_KEY_V1 = KEY_V1;
-      const { getKeyring, hasKeyVersion, getAvailableKeyVersions, resetKeyring } = await import('@/app/_lib/crypto');
+      const { hasKeyVersion, getAvailableKeyVersions, resetKeyring } = await import('@/app/_lib/crypto');
       resetKeyring();
       
       expect(hasKeyVersion(0)).toBe(true);
@@ -293,9 +295,9 @@ describe('Crypto Module', () => {
       process.env.REVLINE_ENCRYPTION_KEY_V1 = '0123456789abcdef'; // Only 16 chars
       
       const { resetKeyring, getKeyring } = await import('@/app/_lib/crypto');
+      resetKeyring();
       
       expect(() => {
-        resetKeyring();
         getKeyring();
       }).toThrow('must be 64 hex characters');
     });
@@ -304,9 +306,9 @@ describe('Crypto Module', () => {
       process.env.REVLINE_ENCRYPTION_KEY_V1 = KEY_V1 + 'extra';
       
       const { resetKeyring, getKeyring } = await import('@/app/_lib/crypto');
+      resetKeyring();
       
       expect(() => {
-        resetKeyring();
         getKeyring();
       }).toThrow('must be 64 hex characters');
     });

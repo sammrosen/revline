@@ -14,7 +14,7 @@ import { config } from 'dotenv';
 config({ path: '.env.local' });
 config({ path: '.env' });
 
-import { PrismaClient, IntegrationType } from '@prisma/client';
+import { PrismaClient, IntegrationType, Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
 import * as readline from 'readline';
@@ -25,12 +25,14 @@ const prisma = new PrismaClient();
 // Key version 1 = REVLINE_ENCRYPTION_KEY_V1, 0 = legacy SRB_ENCRYPTION_KEY
 const SEED_KEY_VERSION = 1; // New integrations use version 1
 
-interface EncryptResult {
-  encryptedSecret: string;
+interface IntegrationSecret {
+  id: string;
+  name: string;
+  encryptedValue: string;
   keyVersion: number;
 }
 
-function encryptSecret(plaintext: string, keyHex: string): EncryptResult {
+function encryptSecretValue(plaintext: string, keyHex: string): { encryptedValue: string; keyVersion: number } {
   const key = Buffer.from(keyHex, 'hex');
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
@@ -40,8 +42,18 @@ function encryptSecret(plaintext: string, keyHex: string): EncryptResult {
   ]);
   const authTag = cipher.getAuthTag();
   return {
-    encryptedSecret: Buffer.concat([iv, encrypted, authTag]).toString('base64'),
+    encryptedValue: Buffer.concat([iv, encrypted, authTag]).toString('base64'),
     keyVersion: SEED_KEY_VERSION,
+  };
+}
+
+function createSecret(name: string, plaintext: string, keyHex: string): IntegrationSecret {
+  const { encryptedValue, keyVersion } = encryptSecretValue(plaintext, keyHex);
+  return {
+    id: crypto.randomUUID(),
+    name,
+    encryptedValue,
+    keyVersion,
   };
 }
 
@@ -150,18 +162,32 @@ async function main() {
       const leadGroupId = process.env.MAILERLITE_GROUP_ID || process.env.MAILERLITE_GROUP_ID_SAM;
       const customerGroupId = process.env.MAILERLITE_CUSTOMER_GROUP_SAM;
 
-      const { encryptedSecret, keyVersion } = encryptSecret(mailerliteApiKey, encryptionKey);
+      // Create the secrets array with API Key
+      const secrets: IntegrationSecret[] = [
+        createSecret('API Key', mailerliteApiKey, encryptionKey),
+      ];
+
+      // Build meta with new format (groups + routing)
+      const groups: Record<string, { id: string; name: string }> = {};
+      const routing: Record<string, string> = {};
+      
+      if (leadGroupId) {
+        groups['leads'] = { id: leadGroupId, name: 'Leads' };
+        routing['lead.captured'] = 'leads';
+      }
+      if (customerGroupId) {
+        groups['customers'] = { id: customerGroupId, name: 'Customers' };
+        routing['lead.paid'] = 'customers';
+      }
+
       await prisma.clientIntegration.create({
         data: {
           clientId: client.id,
           integration: IntegrationType.MAILERLITE,
-          encryptedSecret,
-          keyVersion,
+          secrets: secrets as unknown as Prisma.InputJsonValue,
           meta: {
-            groupIds: {
-              lead: leadGroupId || null,
-              customer: customerGroupId || null,
-            },
+            groups,
+            routing,
           },
         },
       });
@@ -189,14 +215,21 @@ async function main() {
     if (!stripeWebhookSecret) {
       console.log('   ⚠ STRIPE_WEBHOOK_SECRET_SAM not found in env - skipping\n');
     } else {
-      const { encryptedSecret: stripeEncrypted, keyVersion: stripeKeyVersion } = encryptSecret(stripeWebhookSecret, encryptionKey);
+      // Create the secrets array
+      const secrets: IntegrationSecret[] = [
+        createSecret('Webhook Secret', stripeWebhookSecret, encryptionKey),
+      ];
+      
+      // Add API key as a secret if provided
+      if (stripeApiKey) {
+        secrets.push(createSecret('API Key', stripeApiKey, encryptionKey));
+      }
+
       await prisma.clientIntegration.create({
         data: {
           clientId: client.id,
           integration: IntegrationType.STRIPE,
-          encryptedSecret: stripeEncrypted,
-          keyVersion: stripeKeyVersion,
-          meta: stripeApiKey ? { apiKey: stripeApiKey } : undefined,
+          secrets: secrets as unknown as Prisma.InputJsonValue,
         },
       });
       console.log('   ✓ Stripe integration created\n');
@@ -219,4 +252,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-

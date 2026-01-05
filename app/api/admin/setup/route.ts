@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/_lib/db';
 import { hashPassword, createSession, setSessionCookie } from '@/app/_lib/auth';
 import { validatePasswordComplexity } from '@/app/_lib/totp';
+import { Prisma } from '@prisma/client';
 
 /**
  * POST /api/admin/setup
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
         passwordHash,
         totpEnabled: false,
         totpSecret: null,
-        recoveryCodes: null,
+        recoveryCodes: Prisma.DbNull,
       },
     });
 

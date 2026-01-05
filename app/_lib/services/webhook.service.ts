@@ -1,16 +1,19 @@
 /**
  * Webhook Service
  * 
- * Orchestrates webhook processing for payment events.
- * Handles lead updates, event emission, and integration calls.
+ * Orchestrates webhook processing for payment and booking events.
+ * Handles lead updates, event emission, and dispatches to integrations.
  * 
  * STANDARDS:
  * - Webhook verification is done in the adapter before calling this service
  * - Always emits events for debugging
+ * - Uses action dispatcher for integration routing
  * - Returns 200 for partial failures (to prevent retries)
  */
 
 import { emitEvent, EventSystem, upsertLead, updateLeadStage } from '@/app/_lib/event-logger';
+import { dispatchAction } from '@/app/_lib/actions/dispatcher';
+import { RevLineAction } from '@/app/_lib/actions';
 import { MailerLiteAdapter } from '@/app/_lib/integrations/mailerlite.adapter';
 import { CheckoutData } from '@/app/_lib/integrations/stripe.adapter';
 import { IntegrationResult, WebhookResult } from '@/app/_lib/types';
@@ -21,6 +24,16 @@ import { IntegrationResult, WebhookResult } from '@/app/_lib/types';
 export interface ProcessCheckoutParams {
   clientId: string;
   checkoutData: CheckoutData;
+}
+
+/**
+ * Input parameters for processing Calendly booking
+ */
+export interface ProcessBookingParams {
+  clientId: string;
+  email: string;
+  name?: string;
+  eventType?: string;
 }
 
 /**
@@ -44,16 +57,14 @@ export class WebhookService {
    * Flow:
    * 1. Create/update lead record and mark as PAID
    * 2. Emit payment_succeeded event
-   * 3. Load MailerLite adapter
-   * 4. Add to customer group
-   * 5. Emit success/failure event
-   * 6. Return result
+   * 3. Dispatch 'lead.paid' action to all integrations
+   * 4. Return result
    */
   static async processStripeCheckout(
     params: ProcessCheckoutParams
   ): Promise<IntegrationResult<WebhookResult>> {
     const { clientId, checkoutData } = params;
-    const { email, name, program } = checkoutData;
+    const { email, name, program, amountTotal } = checkoutData;
 
     // Step 1: Create/update lead and mark as paid
     let leadId: string;
@@ -85,62 +96,189 @@ export class WebhookService {
       success: true,
     });
 
-    // Step 3: Load MailerLite adapter
-    const adapter = await MailerLiteAdapter.forClient(clientId);
-    if (!adapter) {
-      // Not configured - return partial success
-      return {
-        success: true,
-        data: {
-          received: true,
-          processed: true,
-          leadId,
-          warning: 'MailerLite not configured',
-        },
-      };
-    }
-
-    // Step 4: Add to customer group
-    const result = await adapter.addToCustomerGroup(email, name, program);
-
-    // Step 5: Emit success/failure event
-    if (!result.success) {
-      await emitEvent({
-        clientId,
-        leadId,
-        system: EventSystem.MAILERLITE,
-        eventType: 'mailerlite_subscribe_failed',
-        success: false,
-        errorMessage: result.error,
-      });
-
-      // Return partial success - payment succeeded even if MailerLite failed
-      return {
-        success: true,
-        data: {
-          received: true,
-          processed: true,
-          leadId,
-          warning: `MailerLite sync failed: ${result.error}`,
-        },
-      };
-    }
-
-    await emitEvent({
-      clientId,
-      leadId,
-      system: EventSystem.MAILERLITE,
-      eventType: 'mailerlite_subscribe_success',
-      success: true,
+    // Step 3: Dispatch 'lead.paid' action to all integrations
+    // Use program-specific action if program is specified
+    const action: RevLineAction = program ? `lead.paid:${program}` : 'lead.paid';
+    
+    const dispatchResult = await dispatchAction(clientId, action, {
+      email,
+      name,
+      program,
+      amount: amountTotal,
     });
 
-    // Step 6: Return success
+    // Check for warnings (integration failures)
+    const failedResults = dispatchResult.results.filter(r => !r.result.success);
+    let warning: string | undefined;
+    
+    if (failedResults.length > 0) {
+      warning = failedResults
+        .map(r => `${r.integration}: ${r.result.error}`)
+        .join('; ');
+      
+      console.warn('Some integrations failed for lead.paid:', {
+        clientId,
+        leadId,
+        failures: failedResults.map(r => ({
+          integration: r.integration,
+          error: r.result.error,
+        })),
+      });
+    }
+
+    // Step 4: Return success (payment processed, integrations may have warnings)
     return {
       success: true,
       data: {
         received: true,
         processed: true,
         leadId,
+        warning,
+      },
+    };
+  }
+
+  /**
+   * Process a Calendly booking created event
+   * 
+   * Flow:
+   * 1. Create/update lead record and mark as BOOKED
+   * 2. Emit booking_created event
+   * 3. Dispatch 'lead.booked' action to all integrations
+   * 4. Return result
+   */
+  static async processCalendlyBooking(
+    params: ProcessBookingParams
+  ): Promise<IntegrationResult<WebhookResult>> {
+    const { clientId, email, name, eventType } = params;
+
+    // Step 1: Create/update lead and mark as booked
+    let leadId: string;
+    try {
+      leadId = await upsertLead({
+        clientId,
+        email,
+        source: 'calendly',
+      });
+      await updateLeadStage(leadId, 'BOOKED');
+    } catch (error) {
+      console.error('Failed to upsert lead:', {
+        clientId,
+        email,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      return {
+        success: false,
+        error: 'Failed to create lead record',
+      };
+    }
+
+    // Step 2: Emit booking created event
+    await emitEvent({
+      clientId,
+      leadId,
+      system: EventSystem.CALENDLY,
+      eventType: 'calendly_booking_created',
+      success: true,
+    });
+
+    // Step 3: Dispatch 'lead.booked' action to all integrations
+    const dispatchResult = await dispatchAction(clientId, 'lead.booked', {
+      email,
+      name,
+      metadata: { eventType },
+    });
+
+    // Check for warnings
+    const failedResults = dispatchResult.results.filter(r => !r.result.success);
+    let warning: string | undefined;
+    
+    if (failedResults.length > 0) {
+      warning = failedResults
+        .map(r => `${r.integration}: ${r.result.error}`)
+        .join('; ');
+    }
+
+    // Step 4: Return success
+    return {
+      success: true,
+      data: {
+        received: true,
+        processed: true,
+        leadId,
+        warning,
+      },
+    };
+  }
+
+  /**
+   * Process a Calendly booking canceled event
+   * 
+   * Flow:
+   * 1. Update lead stage back to CAPTURED
+   * 2. Emit booking_canceled event
+   * 3. Dispatch 'lead.canceled' action to all integrations
+   * 4. Return result
+   */
+  static async processCalendlyCancellation(
+    params: ProcessBookingParams
+  ): Promise<IntegrationResult<WebhookResult>> {
+    const { clientId, email, name } = params;
+
+    // Step 1: Find lead and revert to captured
+    let leadId: string;
+    try {
+      leadId = await upsertLead({
+        clientId,
+        email,
+        source: 'calendly',
+      });
+      await updateLeadStage(leadId, 'CAPTURED');
+    } catch (error) {
+      console.error('Failed to update lead:', {
+        clientId,
+        email,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      return {
+        success: false,
+        error: 'Failed to update lead record',
+      };
+    }
+
+    // Step 2: Emit booking canceled event
+    await emitEvent({
+      clientId,
+      leadId,
+      system: EventSystem.CALENDLY,
+      eventType: 'calendly_booking_canceled',
+      success: true,
+    });
+
+    // Step 3: Dispatch 'lead.canceled' action to all integrations
+    const dispatchResult = await dispatchAction(clientId, 'lead.canceled', {
+      email,
+      name,
+    });
+
+    // Check for warnings
+    const failedResults = dispatchResult.results.filter(r => !r.result.success);
+    let warning: string | undefined;
+    
+    if (failedResults.length > 0) {
+      warning = failedResults
+        .map(r => `${r.integration}: ${r.result.error}`)
+        .join('; ');
+    }
+
+    // Step 4: Return success
+    return {
+      success: true,
+      data: {
+        received: true,
+        processed: true,
+        leadId,
+        warning,
       },
     };
   }
@@ -152,14 +290,11 @@ export class WebhookService {
     stripe: boolean;
     mailerlite: boolean;
   }> {
-    const [mailerliteAdapter] = await Promise.all([
-      MailerLiteAdapter.forClient(clientId),
-    ]);
+    const mailerliteAdapter = await MailerLiteAdapter.forClient(clientId);
 
     return {
       stripe: true, // If we get here, Stripe is configured (verified in route)
-      mailerlite: !!mailerliteAdapter && !!mailerliteAdapter.getCustomerGroupId(),
+      mailerlite: !!mailerliteAdapter && mailerliteAdapter.hasRoutingFor('lead.paid'),
     };
   }
 }
-
