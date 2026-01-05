@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedAdmin } from '@/app/_lib/auth';
+import { getAdminIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { HealthStatus } from '@prisma/client';
 
 // GET /api/admin/clients - List all clients with health status
 export async function GET() {
-  const adminId = await getAuthenticatedAdmin();
+  // Middleware handles auth - if we reach here, user is authenticated
+  const adminId = await getAdminIdFromHeaders();
   if (!adminId) {
+    // This should not happen if middleware is working correctly
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -57,8 +59,10 @@ export async function GET() {
 
 // POST /api/admin/clients - Create a new client
 export async function POST(request: NextRequest) {
-  const adminId = await getAuthenticatedAdmin();
+  // Middleware handles auth - if we reach here, user is authenticated
+  const adminId = await getAdminIdFromHeaders();
   if (!adminId) {
+    // This should not happen if middleware is working correctly
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

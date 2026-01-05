@@ -1,14 +1,9 @@
-import { redirect } from 'next/navigation';
-import { getAuthenticatedAdmin } from '@/app/_lib/auth';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
 export default async function OnboardingGuidePage() {
-  const adminId = await getAuthenticatedAdmin();
-  if (!adminId) {
-    redirect('/admin/login');
-  }
+  // Middleware handles auth - if we reach here, user is authenticated
 
   return (
     <div className="min-h-screen p-8">

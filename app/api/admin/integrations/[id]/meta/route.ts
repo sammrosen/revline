@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedAdmin } from '@/app/_lib/auth';
+import { getAdminIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 
@@ -8,7 +8,8 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const adminId = await getAuthenticatedAdmin();
+  // Middleware handles auth - if we reach here, user is authenticated
+  const adminId = await getAdminIdFromHeaders();
   if (!adminId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -50,6 +51,7 @@ export async function PATCH(
     );
   }
 }
+
 
 
 

@@ -1,5 +1,4 @@
-import { redirect, notFound } from 'next/navigation';
-import { getAuthenticatedAdmin } from '@/app/_lib/auth';
+import { notFound } from 'next/navigation';
 import { prisma } from '@/app/_lib/db';
 import Link from 'next/link';
 import { ClientActions } from '../client-actions';
@@ -48,11 +47,7 @@ export default async function ClientDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const adminId = await getAuthenticatedAdmin();
-  if (!adminId) {
-    redirect('/admin/login');
-  }
-
+  // Middleware handles auth - if we reach here, user is authenticated
   const { id } = await params;
   const client = await getClient(id);
 

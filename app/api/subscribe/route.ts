@@ -1,122 +1,97 @@
-import { NextRequest, NextResponse } from 'next/server';
+/**
+ * Email Capture Endpoint
+ * 
+ * POST /api/subscribe
+ * 
+ * Captures email addresses from landing pages and adds them to MailerLite.
+ * Uses the source parameter to route to the correct client.
+ * 
+ * STANDARDS:
+ * - Route only handles HTTP concerns
+ * - Business logic delegated to CaptureService
+ * - Uses standardized validation and responses
+ */
+
+import { NextRequest } from 'next/server';
 import { getActiveClient } from '@/app/_lib/client-gate';
-import { getClientIntegration, touchIntegration } from '@/app/_lib/integrations';
-import { emitEvent, EventSystem, upsertLead } from '@/app/_lib/event-logger';
-import { addSubscriberToGroup } from '@/app/_lib/mailerlite';
-import { IntegrationType } from '@prisma/client';
+import { CaptureService } from '@/app/_lib/services';
+import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
+import { validateCaptureInput } from '@/app/_lib/utils/validation';
+import { 
+  rateLimitByIP, 
+  getClientIP, 
+  getRateLimitHeaders,
+  RATE_LIMITS,
+} from '@/app/_lib/middleware';
 
 export async function POST(request: NextRequest) {
+  // 1. Rate limit check
+  const clientIP = getClientIP(request.headers);
+  const rateLimit = rateLimitByIP(clientIP, RATE_LIMITS.SUBSCRIBE);
+  
+  if (!rateLimit.allowed) {
+    return ApiResponse.rateLimited(rateLimit.retryAfter);
+  }
+
   try {
+    // 2. Parse and validate input
     const body = await request.json();
-    const { email, name, source } = body;
-
-    // Validate email
-    if (!email || !email.includes('@')) {
-      return NextResponse.json(
-        { error: 'Valid email is required' },
-        { status: 400 }
+    const validation = validateCaptureInput(body);
+    
+    if (!validation.success) {
+      return ApiResponse.error(
+        validation.error || 'Invalid input',
+        400,
+        ErrorCodes.INVALID_EMAIL
       );
     }
 
-    // Get source identifier (defaults to 'default')
-    const clientSlug = (source || 'default').toLowerCase();
+    const { email, name, source } = validation.data!;
 
-    // Look up client and check if active
-    const client = await getActiveClient(clientSlug);
+    // 3. Get active client
+    const client = await getActiveClient(source);
     if (!client) {
-      // Client not found or paused
-      return NextResponse.json(
-        { error: 'Service unavailable' },
-        { status: 503 }
-      );
+      return ApiResponse.unavailable();
     }
 
-    // Get MailerLite integration config
-    const integration = await getClientIntegration(client.id, IntegrationType.MAILERLITE);
-    if (!integration) {
-      console.error(`MailerLite not configured for client: ${clientSlug}`);
-      return NextResponse.json(
-        { error: 'Server configuration error' },
-        { status: 500 }
-      );
-    }
-
-    // Extract group ID from meta
-    const meta = integration.meta as { groupIds?: { lead?: string } } | null;
-    const groupId = meta?.groupIds?.lead;
-    if (!groupId) {
-      console.error(`No lead group ID configured for client: ${clientSlug}`);
-      return NextResponse.json(
-        { error: 'Server configuration error' },
-        { status: 500 }
-      );
-    }
-
-    // Create/update lead record
-    const leadId = await upsertLead({
+    // 4. Capture email via service
+    const result = await CaptureService.captureEmail({
       clientId: client.id,
-      email,
-      source: 'landing',
-    });
-
-    // Emit email_captured event
-    await emitEvent({
-      clientId: client.id,
-      leadId,
-      system: EventSystem.BACKEND,
-      eventType: 'email_captured',
-      success: true,
-    });
-
-    // Add subscriber to MailerLite group
-    const result = await addSubscriberToGroup({
       email,
       name,
-      groupId,
-      apiKey: integration.secret,
+      source,
     });
 
+    // 5. Return response
     if (!result.success) {
-      await emitEvent({
-        clientId: client.id,
-        leadId,
-        system: EventSystem.MAILERLITE,
-        eventType: 'mailerlite_subscribe_failed',
-        success: false,
-        errorMessage: result.error,
-      });
-
-      return NextResponse.json(
-        { error: result.error || 'Failed to subscribe' },
-        { status: 500 }
+      return ApiResponse.error(
+        result.error || 'Failed to subscribe',
+        500,
+        ErrorCodes.INTEGRATION_ERROR
       );
     }
 
-    // Success - touch integration and emit event
-    await touchIntegration(client.id, IntegrationType.MAILERLITE);
-    await emitEvent({
-      clientId: client.id,
-      leadId,
-      system: EventSystem.MAILERLITE,
-      eventType: 'mailerlite_subscribe_success',
-      success: true,
+    // Add rate limit headers to successful response
+    const response = ApiResponse.success({
+      message: result.data!.message,
+        subscriber: {
+        email: result.data!.email,
+        id: result.data!.subscriberId,
+        },
     });
 
-    return NextResponse.json(
-      {
-        message: result.message || 'Successfully subscribed!',
-        subscriber: {
-          email,
-          id: result.subscriberId,
-        },
-      },
-      { status: 200 }
-    );
+    // Add rate limit headers
+    const headers = getRateLimitHeaders(rateLimit);
+    for (const [key, value] of Object.entries(headers)) {
+      response.headers.set(key, value);
+    }
+
+    return response;
+
   } catch (error) {
-    console.error('Subscribe API error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Subscribe API error:', {
+      error: error instanceof Error ? error.message : 'Unknown',
+    });
+    return ApiResponse.internalError();
   }
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedAdmin } from '@/app/_lib/auth';
+import { getAdminIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { decryptSecret } from '@/app/_lib/crypto';
 
@@ -516,7 +516,8 @@ export async function GET(
   const overallStart = Date.now();
   
   // Check admin authentication
-  const adminId = await getAuthenticatedAdmin();
+  // Middleware handles auth - if we reach here, user is authenticated
+  const adminId = await getAdminIdFromHeaders();
   if (!adminId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -566,4 +567,5 @@ export async function GET(
   
   return NextResponse.json(response);
 }
+
 

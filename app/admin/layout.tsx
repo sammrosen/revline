@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'SRB Admin',
+  title: 'RevLine Admin',
   robots: 'noindex, nofollow',
 };
 

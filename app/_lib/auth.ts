@@ -2,7 +2,7 @@ import * as argon2 from 'argon2';
 import { cookies } from 'next/headers';
 import { prisma } from './db';
 
-const SESSION_COOKIE_NAME = 'srb_admin_session';
+const SESSION_COOKIE_NAME = 'revline_admin_session';
 const SESSION_DURATION_DAYS = 14;
 
 /**
@@ -150,6 +150,18 @@ export async function createAdmin(password: string): Promise<string> {
   });
   return admin.id;
 }
+
+/**
+ * Get admin ID from middleware headers
+ * Used in server components after middleware has validated the session
+ * Returns null if not set (should not happen if middleware is working correctly)
+ */
+export async function getAdminIdFromHeaders(): Promise<string | null> {
+  const { headers } = await import('next/headers');
+  const headersList = await headers();
+  return headersList.get('x-admin-id');
+}
+
 
 
 

@@ -9,12 +9,13 @@ const AUTH_TAG_LENGTH = 16; // 128 bits
  * Key must be 32 bytes (256 bits) hex-encoded = 64 hex characters
  */
 function getEncryptionKey(): Buffer {
-  const keyHex = process.env.SRB_ENCRYPTION_KEY;
+  // Support both REVLINE_ENCRYPTION_KEY (new) and SRB_ENCRYPTION_KEY (legacy)
+  const keyHex = process.env.REVLINE_ENCRYPTION_KEY || process.env.SRB_ENCRYPTION_KEY;
   if (!keyHex) {
-    throw new Error('SRB_ENCRYPTION_KEY environment variable is not set');
+    throw new Error('REVLINE_ENCRYPTION_KEY environment variable is not set');
   }
   if (keyHex.length !== 64) {
-    throw new Error('SRB_ENCRYPTION_KEY must be 64 hex characters (32 bytes)');
+    throw new Error('REVLINE_ENCRYPTION_KEY must be 64 hex characters (32 bytes)');
   }
   return Buffer.from(keyHex, 'hex');
 }
@@ -50,7 +51,9 @@ export function decryptSecret(ciphertext: string): string {
   const key = getEncryptionKey();
   const combined = Buffer.from(ciphertext, 'base64');
   
-  if (combined.length < IV_LENGTH + AUTH_TAG_LENGTH + 1) {
+  // Minimum length is IV (12) + auth tag (16) = 28 bytes
+  // Empty plaintext produces 0 bytes of ciphertext, which is valid
+  if (combined.length < IV_LENGTH + AUTH_TAG_LENGTH) {
     throw new Error('Invalid ciphertext: too short');
   }
   
@@ -72,11 +75,12 @@ export function decryptSecret(ciphertext: string): string {
 
 /**
  * Generate a new random encryption key (for initial setup)
- * Returns 64-character hex string suitable for SRB_ENCRYPTION_KEY
+ * Returns 64-character hex string suitable for REVLINE_ENCRYPTION_KEY
  */
 export function generateEncryptionKey(): string {
   return randomBytes(32).toString('hex');
 }
+
 
 
 

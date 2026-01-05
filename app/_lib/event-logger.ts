@@ -1,5 +1,5 @@
 import { prisma } from './db';
-import { EventSystem } from '@prisma/client';
+import { EventSystem, Prisma } from '@prisma/client';
 
 export { EventSystem };
 
@@ -10,6 +10,7 @@ interface EmitEventParams {
   eventType: string;
   success: boolean;
   errorMessage?: string;
+  tx?: Prisma.TransactionClient; // Optional transaction client
 }
 
 /**
@@ -33,9 +34,11 @@ export async function emitEvent({
   eventType,
   success,
   errorMessage,
+  tx,
 }: EmitEventParams): Promise<void> {
+  const db = tx || prisma;
   try {
-    await prisma.event.create({
+    await db.event.create({
       data: {
         clientId,
         leadId,
@@ -73,21 +76,27 @@ export async function touchLead(leadId: string): Promise<void> {
 /**
  * Create or update a lead record
  * Returns the lead ID for event correlation
+ * 
+ * Uses unique constraint on (clientId, email) to prevent duplicates
  */
 export async function upsertLead({
   clientId,
   email,
   source,
+  tx,
 }: {
   clientId: string;
   email: string;
   source?: string;
+  tx?: Prisma.TransactionClient;
 }): Promise<string> {
-  const lead = await prisma.lead.upsert({
+  const db = tx || prisma;
+  const lead = await db.lead.upsert({
     where: {
-      // Need a unique constraint on clientId + email for upsert
-      // For now, we'll just create and handle duplicates
-      id: 'temp', // This will fail, so we catch and find
+      clientId_email: {
+        clientId,
+        email,
+      },
     },
     update: {
       lastEventAt: new Date(),
@@ -97,20 +106,6 @@ export async function upsertLead({
       email,
       source,
     },
-  }).catch(async () => {
-    // Find existing or create new
-    const existing = await prisma.lead.findFirst({
-      where: { clientId, email },
-    });
-    if (existing) {
-      return prisma.lead.update({
-        where: { id: existing.id },
-        data: { lastEventAt: new Date() },
-      });
-    }
-    return prisma.lead.create({
-      data: { clientId, email, source },
-    });
   });
 
   return lead.id;
@@ -131,6 +126,7 @@ export async function updateLeadStage(
     },
   });
 }
+
 
 
 

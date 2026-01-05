@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedAdmin } from '@/app/_lib/auth';
+import { getAdminIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { encryptSecret } from '@/app/_lib/crypto';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
@@ -7,7 +7,8 @@ import { IntegrationType } from '@prisma/client';
 
 // POST /api/admin/integrations - Add a new integration for a client
 export async function POST(request: NextRequest) {
-  const adminId = await getAuthenticatedAdmin();
+  // Middleware handles auth - if we reach here, user is authenticated
+  const adminId = await getAdminIdFromHeaders();
   if (!adminId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -91,6 +92,7 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
 
 
 

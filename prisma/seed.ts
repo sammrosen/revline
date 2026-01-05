@@ -60,12 +60,12 @@ async function main() {
     process.exit(1);
   }
 
-  // Check for encryption key
-  const encryptionKey = process.env.SRB_ENCRYPTION_KEY;
+  // Check for encryption key (support both new and legacy names)
+  const encryptionKey = process.env.REVLINE_ENCRYPTION_KEY || process.env.SRB_ENCRYPTION_KEY;
   if (!encryptionKey || encryptionKey.length !== 64) {
-    console.log('⚠️  SRB_ENCRYPTION_KEY not set or invalid.');
+    console.log('⚠️  REVLINE_ENCRYPTION_KEY not set or invalid.');
     console.log('   Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
-    console.log('   Add it to your .env file as SRB_ENCRYPTION_KEY=<key>\n');
+    console.log('   Add it to your .env file as REVLINE_ENCRYPTION_KEY=<key>\n');
     process.exit(1);
   }
 

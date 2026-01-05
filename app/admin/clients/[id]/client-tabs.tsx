@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { HealthStatus } from '@prisma/client';
+import { HealthStatus, LeadStage } from '@prisma/client';
 import { IntegrationActions } from './integration-actions';
 import { AddIntegrationForm } from './add-integration-form';
 import { LeadsView } from './leads-view';
@@ -30,8 +30,8 @@ interface Event {
 interface Lead {
   id: string;
   email: string;
-  stage: string;
-  source: string;
+  stage: LeadStage;
+  source: string | null;
   lastEventAt: Date | null;
   createdAt: Date;
 }

@@ -370,6 +370,38 @@ Returns JSON with issues found (if any).
 
 ---
 
+## Rate Limiting
+
+### Current Implementation
+
+RevLine uses **in-memory rate limiting** for public API endpoints (`/api/subscribe`, `/api/stripe-webhook`, etc.).
+
+**How it works:**
+- Tracks request counts per IP address or client ID
+- Limits: 100 requests per 15 minutes per IP (configurable)
+- Rate limit headers included in responses: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
+
+**Limitations:**
+- ✅ Works correctly with single Railway instance
+- ⚠️ Rate limits reset on server restart (in-memory store)
+- ⚠️ Multiple instances = separate counters (not shared)
+  - If you scale to 2+ Railway containers, each has its own rate limit counter
+  - A user could make 100 requests to instance 1, then 100 more to instance 2
+
+**When to upgrade:**
+- Scaling to 2+ Railway instances (horizontal scaling)
+- Need persistent rate limits across restarts
+- Need more sophisticated rate limiting (per-client, per-endpoint, etc.)
+
+**Upgrade path:**
+- Implement Redis-backed rate limiter (see `app/_lib/middleware/rate-limit.ts`)
+- Use Redis for shared state across instances
+- No code changes needed in routes (abstraction handles it)
+
+**For now (single instance):** Current implementation is production-ready and sufficient.
+
+---
+
 ## Scaling Considerations
 
 ### When you hit 10 clients

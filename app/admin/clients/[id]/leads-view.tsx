@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { LeadStage } from '@prisma/client';
 
 interface Lead {
@@ -8,7 +8,7 @@ interface Lead {
   email: string;
   stage: LeadStage;
   source: string | null;
-  lastEventAt: Date | string;
+  lastEventAt: Date | string | null;
   createdAt: Date | string;
 }
 
@@ -50,6 +50,9 @@ function StageBadge({ stage }: { stage: LeadStage }) {
 
 export function LeadsView({ leads }: LeadsViewProps) {
   const [selectedStage, setSelectedStage] = useState<LeadStage | 'ALL'>('ALL');
+  
+  // Capture current time once to avoid calling Date.now() during render
+  const now = useMemo(() => Date.now(), []);
 
   const filteredLeads = selectedStage === 'ALL' 
     ? leads 
@@ -108,8 +111,9 @@ export function LeadsView({ leads }: LeadsViewProps) {
             </thead>
             <tbody>
               {filteredLeads.map((lead) => {
+                const lastEventTime = lead.lastEventAt ? new Date(lead.lastEventAt).getTime() : now;
                 const daysSinceActivity = Math.floor(
-                  (Date.now() - new Date(lead.lastEventAt).getTime()) / (1000 * 60 * 60 * 24)
+                  (now - lastEventTime) / (1000 * 60 * 60 * 24)
                 );
                 const isStale = daysSinceActivity > 1;
 
@@ -126,8 +130,8 @@ export function LeadsView({ leads }: LeadsViewProps) {
                     </td>
                     <td className="px-4 py-2 text-zinc-400">{lead.source || '—'}</td>
                     <td className="px-4 py-2 text-zinc-400">
-                      {formatDate(lead.lastEventAt)}
-                      {isStale && (
+                      {lead.lastEventAt ? formatDate(lead.lastEventAt) : '—'}
+                      {isStale && lead.lastEventAt && (
                         <span className="ml-2 text-yellow-400 text-xs">
                           ({daysSinceActivity}d ago)
                         </span>
@@ -146,6 +150,7 @@ export function LeadsView({ leads }: LeadsViewProps) {
     </div>
   );
 }
+
 
 
 

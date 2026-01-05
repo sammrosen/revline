@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedAdmin } from '@/app/_lib/auth';
+import { getAdminIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { pauseClient, unpauseClient } from '@/app/_lib/client-gate';
 
@@ -8,7 +8,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const adminId = await getAuthenticatedAdmin();
+  // Middleware handles auth - if we reach here, user is authenticated
+  const adminId = await getAdminIdFromHeaders();
   if (!adminId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -69,7 +70,8 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const adminId = await getAuthenticatedAdmin();
+  // Middleware handles auth - if we reach here, user is authenticated
+  const adminId = await getAdminIdFromHeaders();
   if (!adminId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -96,7 +98,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const adminId = await getAuthenticatedAdmin();
+  // Middleware handles auth - if we reach here, user is authenticated
+  const adminId = await getAdminIdFromHeaders();
   if (!adminId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

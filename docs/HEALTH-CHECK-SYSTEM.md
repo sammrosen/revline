@@ -284,3 +284,4 @@ For issues or questions:
 3. Check the event log on the client detail page
 4. Review MailerLite/Stripe dashboards for external issues
 
+

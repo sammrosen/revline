@@ -1,249 +1,144 @@
-import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
+/**
+ * Stripe Webhook Endpoint
+ * 
+ * POST /api/stripe-webhook?source={clientSlug}
+ * 
+ * Processes Stripe webhooks for payment events.
+ * Verifies signature, extracts data, and triggers MailerLite sync.
+ * 
+ * STANDARDS:
+ * - Route only handles HTTP concerns
+ * - Webhook verification via StripeAdapter
+ * - Business logic delegated to WebhookService
+ * - Always returns 200 for partial failures (prevents retries)
+ */
+
+import { NextRequest } from 'next/server';
 import { getActiveClient } from '@/app/_lib/client-gate';
-import { getClientIntegration, touchIntegration } from '@/app/_lib/integrations';
-import { emitEvent, EventSystem, upsertLead, updateLeadStage } from '@/app/_lib/event-logger';
-import { addSubscriberToGroup } from '@/app/_lib/mailerlite';
-import { IntegrationType } from '@prisma/client';
+import { StripeAdapter } from '@/app/_lib/integrations/stripe.adapter';
+import { WebhookService } from '@/app/_lib/services';
+import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
+import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
+import { 
+  rateLimitByClient,
+  getRateLimitHeaders,
+} from '@/app/_lib/middleware';
 
 export async function POST(request: NextRequest) {
+  // 1. Get source from query params
+  const { searchParams } = new URL(request.url);
+  const source = searchParams.get('source');
+
+  if (!source) {
+    return ApiResponse.error(
+      'Missing source parameter',
+      400,
+      ErrorCodes.MISSING_REQUIRED
+    );
+  }
+
+  const clientSlug = source.toLowerCase();
+
+  // 2. Rate limit check by client
+  const rateLimit = rateLimitByClient(clientSlug);
+  if (!rateLimit.allowed) {
+    // For webhooks, still return 200 to prevent retries
+    return ApiResponse.webhookAck({ 
+      warning: 'Rate limited - retry later' 
+    });
+  }
+
   try {
-    // Get source from query params (e.g., ?source=sam)
-    const { searchParams } = new URL(request.url);
-    const source = searchParams.get('source');
-
-    if (!source) {
-      console.error('No source parameter provided in webhook URL');
-      return NextResponse.json(
-        { error: 'Missing source parameter' },
-        { status: 400 }
-      );
-    }
-
-    const clientSlug = source.toLowerCase();
-
-    // Look up client and check if active
+    // 3. Get active client
     const client = await getActiveClient(clientSlug);
     if (!client) {
-      // Client not found or paused - still return 200 to prevent Stripe retries
-      console.error(`Client not found or paused: ${clientSlug}`);
-      return NextResponse.json(
-        { received: true, error: 'Client unavailable' },
-        { status: 200 }
-      );
+      // Return 200 to prevent Stripe retries
+      return ApiResponse.webhookAck({ 
+        warning: 'Client unavailable' 
+      });
     }
 
-    // Get Stripe integration (webhook secret)
-    const stripeIntegration = await getClientIntegration(client.id, IntegrationType.STRIPE);
-    if (!stripeIntegration) {
-      console.error(`Stripe not configured for client: ${clientSlug}`);
-      return NextResponse.json(
-        { error: 'Webhook not configured' },
-        { status: 500 }
-      );
+    // 4. Load Stripe adapter
+    const stripeAdapter = await StripeAdapter.forClient(client.id);
+    if (!stripeAdapter) {
+      return ApiResponse.webhookAck({ 
+        warning: 'Stripe not configured' 
+      });
     }
 
-    // Get the raw body and signature
+    // Check if Stripe API key is available
+    if (!stripeAdapter.hasApiKey()) {
+      return ApiResponse.webhookAck({ 
+        warning: 'Stripe API key not configured' 
+      });
+    }
+
+    // 5. Get raw body and signature
     const body = await request.text();
     const signature = request.headers.get('stripe-signature');
 
     if (!signature) {
-      console.error('No Stripe signature header found');
-      return NextResponse.json(
-        { error: 'Missing signature' },
-        { status: 400 }
+      return ApiResponse.error(
+        'Missing signature',
+        400,
+        ErrorCodes.MISSING_SIGNATURE
       );
     }
 
-    // Verify webhook signature
-    let event: Stripe.Event;
-    try {
-      // We need a Stripe API key for constructEvent - get it from meta or use a default
-      const stripeMeta = stripeIntegration.meta as { apiKey?: string } | null;
-      const stripeApiKey = stripeMeta?.apiKey || process.env.STRIPE_API_KEY;
-      
-      if (!stripeApiKey) {
-        console.error('No Stripe API key available');
-        return NextResponse.json(
-          { error: 'Server configuration error' },
-          { status: 500 }
-        );
-      }
+    // 6. Verify webhook and process checkout
+    const result = await stripeAdapter.processCheckoutWebhook(body, signature);
 
-      const stripe = new Stripe(stripeApiKey);
-      event = stripe.webhooks.constructEvent(body, signature, stripeIntegration.secret);
-    } catch (err) {
-      const error = err as Error;
-      console.error('Webhook signature verification failed:', error.message);
-      
+    if (!result.success) {
+      // Emit failure event for signature verification failures
       await emitEvent({
         clientId: client.id,
         system: EventSystem.STRIPE,
         eventType: 'stripe_webhook_invalid_signature',
         success: false,
-        errorMessage: error.message,
-      });
-
-      return NextResponse.json(
-        { error: `Webhook Error: ${error.message}` },
-        { status: 400 }
-      );
-    }
-
-    // Touch Stripe integration - signature verified successfully
-    await touchIntegration(client.id, IntegrationType.STRIPE);
-
-    // Only handle checkout.session.completed events
-    if (event.type !== 'checkout.session.completed') {
-      return NextResponse.json({ received: true }, { status: 200 });
-    }
-
-    // Extract customer information from the checkout session
-    const session = event.data.object as Stripe.Checkout.Session;
-    const email = session.customer_details?.email || session.customer_email;
-    const name = session.customer_details?.name;
-
-    if (!email) {
-      console.error('No customer email found in checkout session:', session.id);
-      
-      await emitEvent({
-        clientId: client.id,
-        system: EventSystem.STRIPE,
-        eventType: 'stripe_payment_failed',
-        success: false,
-        errorMessage: 'No customer email in session',
-      });
-
-      return NextResponse.json(
-        { error: 'No customer email in session' },
-        { status: 400 }
-      );
-    }
-
-    // Create/update lead and mark as paid
-    const leadId = await upsertLead({
-      clientId: client.id,
-      email,
-      source: 'stripe',
-    });
-    await updateLeadStage(leadId, 'PAID');
-
-    // Emit payment success event
-    await emitEvent({
-      clientId: client.id,
-      leadId,
-      system: EventSystem.STRIPE,
-      eventType: 'stripe_payment_succeeded',
-      success: true,
-    });
-
-    // Get MailerLite integration for adding customer to group
-    const mailerliteIntegration = await getClientIntegration(client.id, IntegrationType.MAILERLITE);
-    if (!mailerliteIntegration) {
-      console.error(`MailerLite not configured for client: ${clientSlug}`);
-      return NextResponse.json(
-        {
-          received: true,
-          processed: true,
-          warning: 'MailerLite not configured',
-        },
-        { status: 200 }
-      );
-    }
-
-    // Check for program/product metadata for multi-product routing
-    const program = session.metadata?.program;
-    const mlMeta = mailerliteIntegration.meta as {
-      groupIds?: { customer?: string; [key: string]: string | undefined };
-    } | null;
-
-    // Try program-specific group first, fall back to default customer group
-    let customerGroupId: string | undefined;
-    if (program && mlMeta?.groupIds?.[`customer_${program}`]) {
-      customerGroupId = mlMeta.groupIds[`customer_${program}`];
-    } else {
-      customerGroupId = mlMeta?.groupIds?.customer;
-    }
-
-    if (!customerGroupId) {
-      console.error(`No customer group ID configured for client: ${clientSlug}`);
-      
-      await emitEvent({
-        clientId: client.id,
-        leadId,
-        system: EventSystem.MAILERLITE,
-        eventType: 'mailerlite_subscribe_failed',
-        success: false,
-        errorMessage: 'No customer group configured',
-      });
-
-      return NextResponse.json(
-        {
-          received: true,
-          processed: true,
-          warning: 'Customer group not configured',
-        },
-        { status: 200 }
-      );
-    }
-
-    // Add customer to MailerLite group
-    const result = await addSubscriberToGroup({
-      email,
-      name: name ?? undefined,
-      groupId: customerGroupId,
-      apiKey: mailerliteIntegration.secret,
-    });
-
-    if (!result.success) {
-      console.error(`Failed to add ${email} to MailerLite:`, result.error);
-      
-      await emitEvent({
-        clientId: client.id,
-        leadId,
-        system: EventSystem.MAILERLITE,
-        eventType: 'mailerlite_subscribe_failed',
-        success: false,
         errorMessage: result.error,
       });
 
-      return NextResponse.json(
-        {
-          received: true,
-          warning: 'Webhook received but MailerLite sync failed',
-        },
-        { status: 200 }
+      return ApiResponse.error(
+        result.error || 'Webhook verification failed',
+        400,
+        ErrorCodes.INVALID_SIGNATURE
       );
     }
 
-    // Success
-    await touchIntegration(client.id, IntegrationType.MAILERLITE);
-    await emitEvent({
+    // 7. If not a checkout event, acknowledge and return
+    if (!result.data) {
+      return ApiResponse.webhookAck({ processed: false });
+    }
+
+    // 8. Process checkout via service
+    const checkoutResult = await WebhookService.processStripeCheckout({
       clientId: client.id,
-      leadId,
-      system: EventSystem.MAILERLITE,
-      eventType: 'mailerlite_subscribe_success',
-      success: true,
+      checkoutData: result.data,
     });
 
-    return NextResponse.json(
-      {
-        received: true,
-        processed: true,
-        email,
-        source,
-        program: program || null,
-      },
-      { status: 200 }
-    );
+    // 9. Return response with rate limit headers
+    const response = ApiResponse.webhookAck({
+      processed: true,
+      leadId: checkoutResult.data?.leadId,
+      warning: checkoutResult.data?.warning,
+    });
+
+    const headers = getRateLimitHeaders(rateLimit);
+    for (const [key, value] of Object.entries(headers)) {
+      response.headers.set(key, value);
+    }
+
+    return response;
+
   } catch (error) {
-    console.error('Stripe webhook error:', error);
-    return NextResponse.json(
-      {
-        received: true,
-        error: 'Internal error processing webhook',
-      },
-      { status: 200 }
-    );
+    console.error('Stripe webhook error:', {
+      clientSlug,
+      error: error instanceof Error ? error.message : 'Unknown',
+    });
+
+    // Return 200 to prevent retries
+    return ApiResponse.webhookAck({
+      warning: 'Internal error processing webhook',
+    });
   }
 }

@@ -282,6 +282,34 @@ Note: Webhook signing key is stored in encrypted_secret field, not in meta.
 
 ## Authentication & Sessions
 
+### Authentication Middleware
+
+All `/admin/*` routes and `/api/admin/*` routes are protected by Next.js middleware (`middleware.ts`).
+
+**How it works:**
+1. Middleware intercepts all requests to `/admin/*` and `/api/admin/*`
+2. Checks for `revline_admin_session` cookie
+3. Validates session against database (checks expiration)
+4. If valid:
+   - Adds `x-admin-id` header to request
+   - Allows request to proceed
+5. If invalid or missing:
+   - **Page routes**: Redirects to `/admin/login?redirect={pathname}`
+   - **API routes**: Returns `401 Unauthorized` JSON response
+
+**Benefits:**
+- ✅ Centralized auth logic (no per-page checks)
+- ✅ Automatic redirects for pages
+- ✅ Proper HTTP status codes for API routes
+- ✅ Session validation happens before route handlers run
+- ✅ Admin ID available via headers in server components
+
+**Implementation:**
+- Middleware runs before route handlers
+- Server components can access admin ID via `getAdminIdFromHeaders()`
+- No manual auth checks needed in pages or API routes
+- Login page (`/admin/login`) is excluded from protection
+
 **Admin Auth:**
 - Password-only (no username)
 - Argon2id hashing with:

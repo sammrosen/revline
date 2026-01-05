@@ -84,6 +84,7 @@ model Lead {
   client Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   events Event[]
 
+  @@unique([clientId, email])
   @@index([clientId, stage])
   @@index([clientId, lastEventAt])
   @@map("leads")

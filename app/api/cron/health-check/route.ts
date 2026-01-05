@@ -137,7 +137,7 @@ async function sendAlertEmail(issues: string[]): Promise<void> {
     const resend = new Resend(resendApiKey);
 
     await resend.emails.send({
-      from: 'SRB RevOps <alerts@resend.dev>',
+      from: 'RevLine RevOps <alerts@resend.dev>',
       to: alertEmail,
       subject: `⚠️ RevOps Alert: ${issues.length} issue(s) detected`,
       text: `Health check detected the following issues:\n\n${issues.map((i) => `• ${i}`).join('\n')}\n\nCheck the admin dashboard for details: /admin/clients`,

@@ -1,5 +1,3 @@
-import { redirect } from 'next/navigation';
-import { getAuthenticatedAdmin } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { HealthStatus } from '@prisma/client';
 import Link from 'next/link';
@@ -82,11 +80,7 @@ function formatDate(date: Date | null) {
 }
 
 export default async function AdminClientsPage() {
-  const adminId = await getAuthenticatedAdmin();
-  if (!adminId) {
-    redirect('/admin/login');
-  }
-
+  // Middleware handles auth - if we reach here, user is authenticated
   const clients = await getClients();
 
   return (
