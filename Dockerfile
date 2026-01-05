@@ -40,11 +40,14 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy Prisma files for migrations
+# Copy Prisma schema and generated client for the app runtime
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+
+# Install Prisma CLI for migrations (simpler than copying all transitive deps)
+COPY --from=builder /app/package.json ./package.json
+RUN npm install prisma --omit=dev --ignore-scripts
 
 # Set correct permissions
 RUN chown -R nextjs:nodejs /app
