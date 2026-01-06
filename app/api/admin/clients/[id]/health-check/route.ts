@@ -193,58 +193,16 @@ async function testMailerLiteMetaValid(clientId: string): Promise<TestResult> {
         category: 'configuration',
         name: 'MailerLite Config',
         status: 'WARN',
-        message: 'No groups defined',
+        message: 'No groups defined (configure groups, then set up workflows to use them)',
         duration,
       };
     }
     
-    // Check routing
-    if (!meta.routing) {
-      return {
-        category: 'configuration',
-        name: 'MailerLite Config',
-        status: 'WARN',
-        message: `${groupCount} group(s) but no routing configured`,
-        duration,
-      };
-    }
-    
-    // Check lead.captured routing
-    const hasCaptureRouting = meta.routing['lead.captured'] != null;
-    if (!hasCaptureRouting) {
-      return {
-        category: 'configuration',
-        name: 'MailerLite Config',
-        status: 'WARN',
-        message: 'No routing for lead.captured (email captures won\'t be added to any group)',
-        duration,
-      };
-    }
-    
-    // Validate routing references exist
-    const errors: string[] = [];
-    for (const [action, groupKey] of Object.entries(meta.routing)) {
-      if (groupKey && !meta.groups[groupKey]) {
-        errors.push(`'${action}' routes to unknown group '${groupKey}'`);
-      }
-    }
-    
-    if (errors.length > 0) {
-      return {
-        category: 'configuration',
-        name: 'MailerLite Config',
-        status: 'FAIL',
-        message: `Invalid routing: ${errors.join(', ')}`,
-        duration,
-      };
-    }
-    
-    const routingCount = Object.values(meta.routing).filter(v => v != null).length;
     return {
       category: 'configuration',
       name: 'MailerLite Config',
       status: 'PASS',
-      message: `${groupCount} group(s), ${routingCount} routed action(s)`,
+      message: `${groupCount} group(s) configured`,
       duration,
     };
   } catch (error: unknown) {

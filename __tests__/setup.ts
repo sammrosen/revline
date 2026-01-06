@@ -136,6 +136,8 @@ afterAll(async () => {
 afterEach(async () => {
   // Clean up test data after each test
   // Order matters due to foreign key constraints
+  await testPrisma.workflowExecution.deleteMany();
+  await testPrisma.workflow.deleteMany();
   await testPrisma.event.deleteMany();
   await testPrisma.lead.deleteMany();
   await testPrisma.clientIntegration.deleteMany();
@@ -224,6 +226,31 @@ export async function getEventsForClient(clientId: string) {
   return testPrisma.event.findMany({
     where: { clientId },
     orderBy: { createdAt: 'desc' },
+  });
+}
+
+/**
+ * Test helper: Create a test workflow
+ */
+export async function createTestWorkflow(
+  clientId: string,
+  overrides: Partial<{
+    name: string;
+    enabled: boolean;
+    triggerAdapter: string;
+    triggerOperation: string;
+    actions: Array<{ adapter: string; operation: string; params: Record<string, unknown> }>;
+  }> = {}
+) {
+  return testPrisma.workflow.create({
+    data: {
+      clientId,
+      name: overrides.name ?? 'Test Workflow',
+      enabled: overrides.enabled ?? true,
+      triggerAdapter: overrides.triggerAdapter ?? 'revline',
+      triggerOperation: overrides.triggerOperation ?? 'email_captured',
+      actions: (overrides.actions ?? []) as Parameters<typeof testPrisma.workflow.create>[0]['data']['actions'],
+    },
   });
 }
 

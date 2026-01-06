@@ -16,7 +16,6 @@ interface SecretInput {
 
 interface AddIntegrationFormProps {
   clientId: string;
-  stripeProducts?: string[]; // Product names from existing Stripe integration
 }
 
 // Available secret names by integration type
@@ -30,7 +29,6 @@ const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
 // Default MailerLite meta template
 const DEFAULT_MAILERLITE_META = JSON.stringify({
   groups: {},
-  routing: {},
 }, null, 2);
 
 // Default Stripe meta template
@@ -38,7 +36,7 @@ const DEFAULT_STRIPE_META = JSON.stringify({
   products: {},
 }, null, 2);
 
-export function AddIntegrationForm({ clientId, stripeProducts = [] }: AddIntegrationFormProps) {
+export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [integration, setIntegration] = useState<IntegrationType>('MAILERLITE');
   const [secrets, setSecrets] = useState<SecretInput[]>([{ name: 'API Key', value: '' }]);
@@ -308,7 +306,6 @@ export function AddIntegrationForm({ clientId, stripeProducts = [] }: AddIntegra
               <MailerLiteConfigEditor
                 value={meta}
                 onChange={setMeta}
-                stripeProducts={stripeProducts}
               />
             ) : isStripe ? (
               <StripeConfigEditor

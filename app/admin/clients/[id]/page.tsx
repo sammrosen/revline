@@ -3,24 +3,16 @@ import { prisma } from '@/app/_lib/db';
 import Link from 'next/link';
 import { ClientActionsDropdown } from './client-actions-dropdown';
 import { ClientTabs } from './client-tabs';
+import { IntegrationType } from '@prisma/client';
+import { MailerLiteMeta, isMailerLiteMeta } from '@/app/_lib/types';
 
 export const dynamic = 'force-dynamic';
 
 async function getClient(id: string) {
-  return prisma.client.findUnique({
+  const client = await prisma.client.findUnique({
     where: { id },
     include: {
-      integrations: {
-        select: {
-          id: true,
-          integration: true,
-          healthStatus: true,
-          lastSeenAt: true,
-          meta: true,
-          secrets: true,
-          createdAt: true,
-        },
-      },
+      integrations: true,
       events: {
         take: 50,
         orderBy: { createdAt: 'desc' },
@@ -38,6 +30,26 @@ async function getClient(id: string) {
       },
     },
   });
+
+  if (!client) {
+    return null;
+  }
+
+  // Fetch workflows separately to avoid Prisma type issues
+  const workflows = await prisma.workflow.findMany({
+    where: { clientId: id },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      _count: {
+        select: { executions: true },
+      },
+    },
+  });
+
+  return {
+    ...client,
+    workflows,
+  };
 }
 
 export default async function ClientDetailPage({
@@ -51,6 +63,16 @@ export default async function ClientDetailPage({
   if (!client) {
     notFound();
   }
+
+
+  // Get MailerLite groups if configured
+  const mailerliteIntegration = client.integrations.find(
+    (i) => i.integration === IntegrationType.MAILERLITE
+  );
+  const mailerliteMeta = mailerliteIntegration?.meta as MailerLiteMeta | null;
+  const mailerliteGroups = isMailerLiteMeta(mailerliteMeta)
+    ? mailerliteMeta.groups
+    : {};
 
   return (
     <div className="min-h-screen p-4 sm:p-8">
@@ -89,9 +111,32 @@ export default async function ClientDetailPage({
         {/* Tabbed Content */}
         <ClientTabs
           clientId={client.id}
-          integrations={client.integrations}
+          integrations={client.integrations.map((i) => ({
+            id: i.id,
+            integration: i.integration,
+            healthStatus: i.healthStatus,
+            lastSeenAt: i.lastSeenAt,
+            meta: i.meta,
+            secrets: (i as { secrets?: unknown }).secrets ?? null,
+            createdAt: i.createdAt,
+          }))}
           events={client.events}
           leads={client.leads}
+          workflows={client.workflows.map((w: typeof client.workflows[0]) => ({
+            id: w.id,
+            name: w.name,
+            description: w.description,
+            enabled: w.enabled,
+            triggerAdapter: w.triggerAdapter,
+            triggerOperation: w.triggerOperation,
+            actions: (w.actions as Array<{ adapter: string; operation: string; params: Record<string, unknown> }>) || [],
+            actionsCount: (w.actions as unknown[])?.length || 0,
+            totalExecutions: w._count.executions,
+            createdAt: w.createdAt,
+            updatedAt: w.updatedAt,
+          }))}
+          configuredIntegrations={client.integrations.map((i) => i.integration)}
+          mailerliteGroups={mailerliteGroups}
         />
       </div>
     </div>

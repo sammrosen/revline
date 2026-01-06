@@ -264,7 +264,7 @@ export class WebhookService {
 
     return {
       stripe: true, // If we get here, Stripe is configured
-      mailerlite: !!mailerliteAdapter && mailerliteAdapter.hasRoutingFor('lead.paid'),
+      mailerlite: !!mailerliteAdapter && mailerliteAdapter.hasGroups(),
     };
   }
 }

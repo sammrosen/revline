@@ -5,7 +5,7 @@
  * Run with: npx ts-node prisma/seed-workflows.ts
  */
 
-import { PrismaClient, IntegrationType } from '@prisma/client';
+import { PrismaClient, IntegrationType, Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -161,8 +161,10 @@ async function seedWorkflows() {
           enabled: false, // Start disabled so admin can review
           triggerAdapter: template.triggerAdapter,
           triggerOperation: template.triggerOperation,
-          triggerFilter: template.triggerFilter || null,
-          actions: adjustedActions,
+          triggerFilter: template.triggerFilter
+            ? (template.triggerFilter as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+          actions: adjustedActions as unknown as Prisma.InputJsonValue,
         },
       });
 

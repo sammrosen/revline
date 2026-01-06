@@ -1,38 +1,53 @@
 /**
  * Test Action API Route
- * 
- * Fires a RevLine action for testing purposes and returns detailed results.
+ *
+ * Fires a workflow trigger for testing purposes and returns detailed results.
  * Used by the client test suite modal.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/_lib/db';
-import { dispatchAction } from '@/app/_lib/actions/dispatcher';
-import { RevLineAction, ActionPayload } from '@/app/_lib/actions';
+import { emitTrigger } from '@/app/_lib/workflow';
+import { getAuthenticatedAdmin } from '@/app/_lib/auth';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Require admin auth
+  const adminId = await getAuthenticatedAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const startTime = Date.now();
   const { id: clientId } = await params;
 
   try {
     // Parse request body
     const body = await request.json();
-    const { action, email, name } = body;
+    const { trigger, email, name, payload } = body;
 
     // Validate required fields
-    if (!action) {
+    if (!trigger) {
       return NextResponse.json(
-        { error: 'Action is required' },
+        { error: 'Trigger is required (e.g., "revline.email_captured")' },
         { status: 400 }
       );
     }
 
     if (!email) {
+      return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+    }
+
+    // Parse trigger string (adapter.operation)
+    const [adapter, operation] = trigger.split('.');
+    if (!adapter || !operation) {
       return NextResponse.json(
-        { error: 'Email is required' },
+        {
+          error:
+            'Invalid trigger format. Use "adapter.operation" (e.g., "revline.email_captured")',
+        },
         { status: 400 }
       );
     }
@@ -44,40 +59,54 @@ export async function POST(
     });
 
     if (!client) {
-      return NextResponse.json(
-        { error: 'Client not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
-    // Build payload
-    const payload: ActionPayload = {
+    // Build trigger payload
+    const triggerPayload = {
       email,
       name: name || undefined,
       source: 'test-suite',
+      ...(payload || {}),
     };
 
-    // Dispatch the action
-    const result = await dispatchAction(
+    // Emit the trigger
+    const result = await emitTrigger(
       clientId,
-      action as RevLineAction,
-      payload
+      { adapter, operation },
+      triggerPayload
     );
 
     const duration = Date.now() - startTime;
 
     return NextResponse.json({
-      action: result.action,
-      results: result.results,
-      allSucceeded: result.allSucceeded,
+      trigger: `${adapter}.${operation}`,
+      workflowsFound: result.workflowsFound,
+      workflowsExecuted: result.workflowsExecuted,
+      executions: result.executions.map((exec) => ({
+        workflowId: exec.workflowId,
+        workflowName: exec.workflowName,
+        status: exec.status,
+        actionsExecuted: exec.actionsExecuted,
+        actionsTotal: exec.actionsTotal,
+        error: exec.error,
+        results: exec.results.map((r) => ({
+          action: `${r.action.adapter}.${r.action.operation}`,
+          success: r.result.success,
+          error: r.result.error,
+          data: r.result.data,
+        })),
+      })),
+      allSucceeded: result.executions.every((e) => e.status === 'completed'),
       duration,
     });
   } catch (error) {
     console.error('Test action error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
+      {
+        error: error instanceof Error ? error.message : 'Internal server error',
+      },
       { status: 500 }
     );
   }
 }
-

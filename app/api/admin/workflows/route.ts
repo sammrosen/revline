@@ -7,9 +7,10 @@
 
 import { NextRequest } from 'next/server';
 import { prisma } from '@/app/_lib/db';
-import { requireAdmin } from '@/app/_lib/auth';
+import { getAuthenticatedAdmin } from '@/app/_lib/auth';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 
 // =============================================================================
 // VALIDATION SCHEMAS
@@ -18,28 +19,41 @@ import { z } from 'zod';
 const WorkflowActionSchema = z.object({
   adapter: z.string().min(1),
   operation: z.string().min(1),
-  params: z.record(z.unknown()),
-  conditions: z.record(z.unknown()).optional(),
+  params: z.record(z.string(), z.unknown()),
+  conditions: z.record(z.string(), z.unknown()).optional(),
 });
 
-const CreateWorkflowSchema = z.object({
-  clientId: z.string().uuid(),
-  name: z.string().min(1).max(100),
-  description: z.string().max(500).optional(),
-  triggerAdapter: z.string().min(1),
-  triggerOperation: z.string().min(1),
-  triggerFilter: z.record(z.unknown()).optional(),
-  actions: z.array(WorkflowActionSchema).min(1),
-  enabled: z.boolean().optional().default(true),
-});
+const CreateWorkflowSchema = z.preprocess(
+  (data) => {
+    // Normalize actions: convert null/undefined/missing to empty array for better error messages
+    if (data && typeof data === 'object') {
+      const normalized = data as Record<string, unknown>;
+      if (!('actions' in normalized) || normalized.actions === null || normalized.actions === undefined) {
+        normalized.actions = [];
+      }
+      return normalized;
+    }
+    return data;
+  },
+  z.object({
+    clientId: z.string().uuid(),
+    name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),
+    description: z.string().max(500, 'Description must be 500 characters or less').optional(),
+    triggerAdapter: z.string().min(1, 'Trigger adapter is required'),
+    triggerOperation: z.string().min(1, 'Trigger operation is required'),
+    triggerFilter: z.record(z.string(), z.unknown()).nullable().optional(),
+    actions: z.array(WorkflowActionSchema).min(1, 'At least one action is required'),
+    enabled: z.boolean().optional().default(true),
+  })
+);
 
 // =============================================================================
 // GET - List workflows
 // =============================================================================
 
 export async function GET(request: NextRequest) {
-  const admin = await requireAdmin();
-  if (!admin) {
+  const adminId = await getAuthenticatedAdmin();
+  if (!adminId) {
     return ApiResponse.unauthorized();
   }
 
@@ -119,8 +133,8 @@ export async function GET(request: NextRequest) {
 // =============================================================================
 
 export async function POST(request: NextRequest) {
-  const admin = await requireAdmin();
-  if (!admin) {
+  const adminId = await getAuthenticatedAdmin();
+  if (!adminId) {
     return ApiResponse.unauthorized();
   }
 
@@ -129,11 +143,39 @@ export async function POST(request: NextRequest) {
     const validation = CreateWorkflowSchema.safeParse(body);
 
     if (!validation.success) {
-      return ApiResponse.error(
-        validation.error.errors[0]?.message || 'Invalid input',
-        400,
-        ErrorCodes.VALIDATION_FAILED
+      // Build a helpful error message from all validation issues
+      const errorMessages = validation.error.issues.map((issue) => {
+        const path = issue.path.join('.');
+        return path ? `${path}: ${issue.message}` : issue.message;
+      });
+
+      // Special handling for actions field
+      const actionsIssue = validation.error.issues.find(
+        (issue) => issue.path.includes('actions')
       );
+      
+      let errorMessage = errorMessages.join('; ');
+      
+      // Provide more helpful message for actions field
+      if (actionsIssue) {
+        // Check if actions was null/undefined in original body
+        const originalActions = body?.actions;
+        if (originalActions === null || originalActions === undefined) {
+          errorMessage = 'At least one action is required. Please add an action to your workflow before saving.';
+        } else if (actionsIssue.code === 'too_small' && Array.isArray(originalActions) && originalActions.length === 0) {
+          errorMessage = 'At least one action is required. Please add an action to your workflow before saving.';
+        } else {
+          errorMessage = `Actions: ${actionsIssue.message}`;
+        }
+      }
+
+      console.error('Workflow validation failed:', {
+        errors: validation.error.issues,
+        received: body,
+        originalActions: body?.actions,
+      });
+
+      return ApiResponse.error(errorMessage, 400, ErrorCodes.VALIDATION_FAILED);
     }
 
     const data = validation.data;
@@ -156,8 +198,10 @@ export async function POST(request: NextRequest) {
         enabled: data.enabled,
         triggerAdapter: data.triggerAdapter,
         triggerOperation: data.triggerOperation,
-        triggerFilter: data.triggerFilter || null,
-        actions: data.actions,
+        triggerFilter: data.triggerFilter
+          ? (data.triggerFilter as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+        actions: data.actions as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -176,4 +220,3 @@ export async function POST(request: NextRequest) {
     return ApiResponse.internalError();
   }
 }
-

@@ -7,12 +7,12 @@
 
 import { prisma } from '@/app/_lib/db';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
+import { Prisma } from '@prisma/client';
 import {
   WorkflowContext,
   WorkflowAction,
   WorkflowExecutionResult,
   TriggerEmitResult,
-  ActionResult,
   ActionExecutionResult,
   WorkflowTrigger,
 } from './types';
@@ -87,7 +87,7 @@ export async function emitTrigger(
       {
         id: workflow.id,
         name: workflow.name,
-        actions: workflow.actions as WorkflowAction[],
+        actions: workflow.actions as unknown as WorkflowAction[],
       },
       { ...baseContext, leadId: undefined }
     );
@@ -127,7 +127,7 @@ async function executeWorkflow(
       clientId: baseContext.clientId,
       triggerAdapter: baseContext.trigger.adapter,
       triggerOperation: baseContext.trigger.operation,
-      triggerPayload: baseContext.trigger.payload,
+      triggerPayload: baseContext.trigger.payload as Prisma.InputJsonValue,
       status: 'RUNNING',
     },
   });
@@ -202,7 +202,7 @@ async function executeWorkflow(
       actionResults: results.map((r) => ({
         action: r.action,
         result: r.result,
-      })),
+      })) as unknown as Prisma.InputJsonValue,
       error: errorMessage,
       completedAt: new Date(),
     },

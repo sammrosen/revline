@@ -1,22 +1,58 @@
 'use client';
 
 import { useState } from 'react';
-import { getRegisteredActions } from '@/app/_lib/actions';
 
-type BaseRevLineAction = 'lead.captured' | 'lead.booked' | 'lead.canceled' | 'lead.paid';
+/**
+ * Available workflow triggers for testing
+ * These match the workflow registry adapters and operations
+ */
+const AVAILABLE_TRIGGERS = [
+  {
+    trigger: 'revline.email_captured',
+    label: 'Email Captured',
+    description: 'Simulates a lead submitting their email',
+  },
+  {
+    trigger: 'calendly.booking_created',
+    label: 'Calendly Booking Created',
+    description: 'Simulates a Calendly booking',
+  },
+  {
+    trigger: 'calendly.booking_canceled',
+    label: 'Calendly Booking Canceled',
+    description: 'Simulates a Calendly cancellation',
+  },
+  {
+    trigger: 'stripe.payment_succeeded',
+    label: 'Stripe Payment Succeeded',
+    description: 'Simulates a successful payment',
+  },
+] as const;
 
-interface IntegrationResult {
-  integration: string;
-  result: {
-    success: boolean;
-    error?: string;
-    data?: unknown;
-  };
+type TriggerValue = typeof AVAILABLE_TRIGGERS[number]['trigger'];
+
+interface ActionExecutionResult {
+  action: string;
+  success: boolean;
+  error?: string;
+  data?: unknown;
 }
 
-interface TestActionResponse {
-  action: string;
-  results: IntegrationResult[];
+interface WorkflowExecution {
+  workflowId: string;
+  workflowName: string;
+  status: 'completed' | 'failed';
+  actionsExecuted: number;
+  actionsTotal: number;
+  error?: string;
+  results: ActionExecutionResult[];
+}
+
+interface TestTriggerResponse {
+  trigger: string;
+  workflowsFound: number;
+  workflowsExecuted: number;
+  executions: WorkflowExecution[];
   allSucceeded: boolean;
   duration: number;
 }
@@ -36,16 +72,14 @@ function TestSuiteDialog({
   clientId: string;
   onClose: () => void;
 }) {
-  const [action, setAction] = useState<BaseRevLineAction>('lead.captured');
+  const [trigger, setTrigger] = useState<TriggerValue>('revline.email_captured');
   const [email, setEmail] = useState(`test-${Date.now()}@revline.test`);
   const [name, setName] = useState('Test User');
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<TestActionResponse | null>(null);
+  const [results, setResults] = useState<TestTriggerResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const registeredActions = getRegisteredActions();
-
-  async function fireAction() {
+  async function fireTrigger() {
     setLoading(true);
     setError(null);
     setResults(null);
@@ -54,7 +88,7 @@ function TestSuiteDialog({
       const res = await fetch(`/api/admin/clients/${clientId}/test-action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, email, name: name || undefined }),
+        body: JSON.stringify({ trigger, email, name: name || undefined }),
       });
 
       if (!res.ok) {
@@ -65,28 +99,11 @@ function TestSuiteDialog({
       const data = await res.json();
       setResults(data);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to fire action';
+      const message = err instanceof Error ? err.message : 'Failed to fire trigger';
       setError(message);
     } finally {
       setLoading(false);
     }
-  }
-
-  function getResultMessage(result: IntegrationResult): string {
-    if (!result.result.success) {
-      return result.result.error || 'Unknown error';
-    }
-    
-    // Extract friendly message from data if available
-    const data = result.result.data as Record<string, unknown> | undefined;
-    if (data?.groupName) {
-      return `Added to group "${data.groupName}"`;
-    }
-    if (data?.message) {
-      return String(data.message);
-    }
-    
-    return 'Action completed successfully';
   }
 
   return (
@@ -101,7 +118,7 @@ function TestSuiteDialog({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-zinc-800">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold">Test Suite</h2>
+            <h2 className="text-xl font-semibold">Test Workflows</h2>
             <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 text-xs rounded font-medium">
               TESTING
             </span>
@@ -129,19 +146,19 @@ function TestSuiteDialog({
 
         {/* Content */}
         <div className="overflow-y-auto p-6 space-y-5">
-          {/* Action Selector */}
+          {/* Trigger Selector */}
           <div>
             <label className="block text-sm font-medium text-zinc-300 mb-2">
-              Action
+              Trigger
             </label>
             <select
-              value={action}
-              onChange={(e) => setAction(e.target.value as BaseRevLineAction)}
+              value={trigger}
+              onChange={(e) => setTrigger(e.target.value as TriggerValue)}
               className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
             >
-              {registeredActions.map((a) => (
-                <option key={a.action} value={a.action}>
-                  {a.name} — {a.description}
+              {AVAILABLE_TRIGGERS.map((t) => (
+                <option key={t.trigger} value={t.trigger}>
+                  {t.label} — {t.description}
                 </option>
               ))}
             </select>
@@ -177,7 +194,7 @@ function TestSuiteDialog({
 
           {/* Fire Button */}
           <button
-            onClick={fireAction}
+            onClick={fireTrigger}
             disabled={loading || !email}
             className={`w-full py-3 rounded font-medium transition-colors ${
               loading || !email
@@ -207,10 +224,10 @@ function TestSuiteDialog({
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   ></path>
                 </svg>
-                Firing Action...
+                Firing Trigger...
               </span>
             ) : (
-              'Fire Action'
+              'Fire Trigger'
             )}
           </button>
 
@@ -231,42 +248,66 @@ function TestSuiteDialog({
                 </span>
               </div>
 
-              {results.results.length === 0 ? (
+              {results.workflowsFound === 0 ? (
                 <div className="text-sm text-zinc-500 bg-zinc-950 rounded p-4 text-center">
-                  No integrations configured for this client
+                  No workflows configured for this trigger
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {results.results.map((r, idx) => (
+                  {results.executions.map((exec, idx) => (
                     <div
                       key={idx}
                       className="bg-zinc-950 rounded p-4"
                     >
-                      <div className="flex items-center gap-2 mb-1">
-                        <StatusIcon success={r.result.success} />
-                        <span className="font-medium text-white uppercase text-sm">
-                          {r.integration}
+                      <div className="flex items-center gap-2 mb-2">
+                        <StatusIcon success={exec.status === 'completed'} />
+                        <span className="font-medium text-white text-sm">
+                          {exec.workflowName}
+                        </span>
+                        <span className="text-xs text-zinc-500">
+                          ({exec.actionsExecuted}/{exec.actionsTotal} actions)
                         </span>
                       </div>
-                      <div
-                        className={`text-xs ${
-                          r.result.success ? 'text-zinc-400' : 'text-red-400'
-                        }`}
-                      >
-                        {getResultMessage(r)}
-                      </div>
+                      
+                      {/* Show action results */}
+                      {exec.results.length > 0 && (
+                        <div className="ml-5 space-y-1">
+                          {exec.results.map((r, actionIdx) => (
+                            <div
+                              key={actionIdx}
+                              className={`text-xs ${
+                                r.success ? 'text-zinc-400' : 'text-red-400'
+                              }`}
+                            >
+                              <span className="font-mono">{r.action}</span>
+                              {r.error && <span> — {r.error}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {exec.error && (
+                        <div className="text-xs text-red-400 mt-2">
+                          {exec.error}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
 
+              {/* Summary */}
+              <div className="mt-4 text-xs text-zinc-500 text-center">
+                {results.workflowsExecuted} of {results.workflowsFound} workflows executed
+              </div>
+
               {/* Overall Status */}
-              <div className={`mt-4 text-sm font-medium text-center ${
+              <div className={`mt-2 text-sm font-medium text-center ${
                 results.allSucceeded ? 'text-green-400' : 'text-red-400'
               }`}>
                 {results.allSucceeded
-                  ? '✓ All integrations succeeded'
-                  : '✗ Some integrations failed'}
+                  ? '✓ All workflows succeeded'
+                  : '✗ Some workflows failed'}
               </div>
             </div>
           )}
@@ -305,7 +346,7 @@ export function TestSuiteButton({
           }}
           className="w-full text-left px-3 py-2 text-sm rounded hover:bg-zinc-800 transition-colors text-zinc-300 hover:text-white"
         >
-          Test Suite
+          Test Workflows
         </button>
 
         {showModal && (
@@ -321,7 +362,7 @@ export function TestSuiteButton({
         onClick={() => setShowModal(true)}
         className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded text-sm font-medium transition-colors"
       >
-        Test Suite
+        Test Workflows
       </button>
 
       {showModal && (
@@ -330,4 +371,3 @@ export function TestSuiteButton({
     </>
   );
 }
-

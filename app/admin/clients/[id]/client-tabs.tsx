@@ -1,15 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { HealthStatus, LeadStage } from '@prisma/client';
 import { IntegrationActions } from './integration-actions';
 import { AddIntegrationForm } from './add-integration-form';
 import { LeadsView } from './leads-view';
 import MailerLiteInsights from './mailerlite-insights';
-import { getStripeProductNames } from './stripe-config-editor';
+import { WorkflowList } from './workflows/workflow-list';
 
-type TabType = 'integrations' | 'leads' | 'events' | 'insights';
+type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'insights';
 
 interface SecretSummary {
   id: string;
@@ -44,11 +43,34 @@ interface Lead {
   createdAt: Date;
 }
 
+interface WorkflowAction {
+  adapter: string;
+  operation: string;
+  params: Record<string, unknown>;
+}
+
+interface Workflow {
+  id: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  triggerAdapter: string;
+  triggerOperation: string;
+  actions: WorkflowAction[];
+  actionsCount: number;
+  totalExecutions: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 interface ClientTabsProps {
   clientId: string;
   integrations: Integration[];
   events: Event[];
   leads: Lead[];
+  workflows: Workflow[];
+  configuredIntegrations: string[];
+  mailerliteGroups?: Record<string, { id: string; name: string }>;
 }
 
 // Parse secrets from JSON, returning only id and name (never values)
@@ -85,24 +107,16 @@ function formatDate(date: Date | string | null) {
   }).format(new Date(date));
 }
 
-export function ClientTabs({ clientId, integrations, events, leads }: ClientTabsProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('integrations');
-
-  // Extract Stripe product names for MailerLite routing dropdown
-  const stripeIntegration = integrations.find(i => i.integration === 'STRIPE');
-  const stripeProducts = stripeIntegration?.meta 
-    ? getStripeProductNames(JSON.stringify(stripeIntegration.meta))
-    : [];
+export function ClientTabs({ clientId, integrations, events, leads, workflows, configuredIntegrations, mailerliteGroups = {} }: ClientTabsProps) {
+  const [activeTab, setActiveTab] = useState<TabType>('workflows');
 
   const tabs: { id: TabType; label: string; count?: number }[] = [
+    { id: 'workflows', label: 'Workflows', count: workflows.length },
     { id: 'integrations', label: 'Integrations', count: integrations.length },
     { id: 'leads', label: 'Leads', count: leads.length },
     { id: 'insights', label: 'Insights' },
     { id: 'events', label: 'Events', count: events.length },
   ];
-
-  // Workflows link (separate page)
-  const workflowsHref = `/admin/clients/${clientId}/workflows`;
 
   return (
     <div>
@@ -113,12 +127,17 @@ export function ClientTabs({ clientId, integrations, events, leads }: ClientTabs
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+              className={`px-4 py-2 text-sm font-medium transition-colors relative flex items-center gap-1.5 ${
                 activeTab === tab.id
                   ? 'text-white'
                   : 'text-zinc-400 hover:text-zinc-300'
               }`}
             >
+              {tab.id === 'workflows' && (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                </svg>
+              )}
               {tab.label}
               {tab.count !== undefined && (
                 <span className="ml-2 text-xs text-zinc-500">({tab.count})</span>
@@ -128,21 +147,25 @@ export function ClientTabs({ clientId, integrations, events, leads }: ClientTabs
               )}
             </button>
           ))}
-          {/* Workflows link (separate page) */}
-          <Link
-            href={workflowsHref}
-            className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-300 transition-colors relative flex items-center gap-1.5"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-            </svg>
-            Workflows
-          </Link>
         </div>
       </div>
 
       {/* Tab Content */}
       <div className="min-h-[400px]">
+        {activeTab === 'workflows' && (
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold">Workflows</h2>
+            </div>
+            <WorkflowList
+              clientId={clientId}
+              workflows={workflows}
+              configuredIntegrations={configuredIntegrations}
+              mailerliteGroups={mailerliteGroups}
+            />
+          </div>
+        )}
+
         {activeTab === 'integrations' && (
           <div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -165,7 +188,6 @@ export function ClientTabs({ clientId, integrations, events, leads }: ClientTabs
                           meta: integration.meta,
                           secrets: parseSecrets(integration.secrets),
                         }}
-                        stripeProducts={integration.integration === 'MAILERLITE' ? stripeProducts : undefined}
                       />
                     </div>
                   </div>
@@ -206,7 +228,7 @@ export function ClientTabs({ clientId, integrations, events, leads }: ClientTabs
               ))}
             </div>
             <div className="mt-4">
-              <AddIntegrationForm clientId={clientId} stripeProducts={stripeProducts} />
+              <AddIntegrationForm clientId={clientId} />
             </div>
           </div>
         )}

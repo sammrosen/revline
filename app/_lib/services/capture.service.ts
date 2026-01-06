@@ -121,7 +121,7 @@ export class CaptureService {
     const adapter = await MailerLiteAdapter.forClient(clientId);
     if (!adapter) return false;
     
-    // Check if MailerLite has groups and routing for lead.captured
-    return adapter.hasGroups() && adapter.hasRoutingFor('lead.captured');
+    // Check if MailerLite has groups configured
+    return adapter.hasGroups();
   }
 }

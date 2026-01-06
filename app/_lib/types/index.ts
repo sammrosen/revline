@@ -43,16 +43,6 @@ export interface IntegrationSummary {
 // INTEGRATION META TYPES
 // =============================================================================
 
-// Import action types for routing
-import type { RevLineAction } from '@/app/_lib/actions';
-
-/**
- * Base interface for integrations that support action routing
- */
-export interface RoutableIntegrationMeta {
-  routing?: Partial<Record<RevLineAction, string | null>>;
-}
-
 /**
  * A named MailerLite group with ID and display name
  */
@@ -63,21 +53,17 @@ export interface MailerLiteGroup {
 
 /**
  * MailerLite integration metadata
- * Uses named groups + action routing for flexible configuration
+ * Groups are referenced by key in workflow actions (e.g., add_to_group with group: "welcome")
  * 
  * @example
  * {
  *   "groups": {
  *     "welcome": { "id": "123456", "name": "Welcome List" },
  *     "customers": { "id": "789012", "name": "Paying Customers" }
- *   },
- *   "routing": {
- *     "lead.captured": "welcome",
- *     "lead.paid": "customers"
  *   }
  * }
  */
-export interface MailerLiteMeta extends RoutableIntegrationMeta {
+export interface MailerLiteMeta {
   groups: Record<string, MailerLiteGroup>;
 }
 
@@ -119,7 +105,7 @@ export type IntegrationMeta =
   | Record<string, unknown>;
 
 /**
- * Type guard for MailerLite meta (new format with groups + routing)
+ * Type guard for MailerLite meta
  */
 export function isMailerLiteMeta(meta: IntegrationMeta | null): meta is MailerLiteMeta {
   if (!meta) return false;

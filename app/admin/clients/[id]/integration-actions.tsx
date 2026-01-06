@@ -30,10 +30,9 @@ interface Integration {
 
 interface IntegrationActionsProps {
   integration: Integration;
-  stripeProducts?: string[]; // Product names from Stripe integration (for MailerLite routing)
 }
 
-export function IntegrationActions({ integration, stripeProducts = [] }: IntegrationActionsProps) {
+export function IntegrationActions({ integration }: IntegrationActionsProps) {
   const [showEditMeta, setShowEditMeta] = useState(false);
   const [showManageSecrets, setShowManageSecrets] = useState(false);
   const [metaText, setMetaText] = useState(JSON.stringify(integration.meta || {}, null, 2));
@@ -252,7 +251,7 @@ export function IntegrationActions({ integration, stripeProducts = [] }: Integra
         ? 'Stripe Configuration' 
         : 'Meta Config';
     const modalDescription = isMailerLite 
-      ? 'Configure groups and action routing for MailerLite.'
+      ? 'Configure MailerLite groups. Use the Workflows tab to set up automations.'
       : isStripe
         ? 'Configure product mappings for payment routing.'
         : 'Update non-sensitive configuration (group IDs, product maps, etc.)';
@@ -277,7 +276,6 @@ export function IntegrationActions({ integration, stripeProducts = [] }: Integra
               value={metaText}
               onChange={setMetaText}
               error={error}
-              stripeProducts={stripeProducts}
             />
           ) : isStripe ? (
             <StripeConfigEditor

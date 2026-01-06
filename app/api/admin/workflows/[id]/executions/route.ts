@@ -6,15 +6,15 @@
 
 import { NextRequest } from 'next/server';
 import { prisma } from '@/app/_lib/db';
-import { requireAdmin } from '@/app/_lib/auth';
+import { getAuthenticatedAdmin } from '@/app/_lib/auth';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const admin = await requireAdmin();
-  if (!admin) {
+  const adminId = await getAuthenticatedAdmin();
+  if (!adminId) {
     return ApiResponse.unauthorized();
   }
 

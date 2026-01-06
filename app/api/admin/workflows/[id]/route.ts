@@ -8,9 +8,10 @@
 
 import { NextRequest } from 'next/server';
 import { prisma } from '@/app/_lib/db';
-import { requireAdmin } from '@/app/_lib/auth';
+import { getAuthenticatedAdmin } from '@/app/_lib/auth';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 
 // =============================================================================
 // VALIDATION SCHEMAS
@@ -19,16 +20,16 @@ import { z } from 'zod';
 const WorkflowActionSchema = z.object({
   adapter: z.string().min(1),
   operation: z.string().min(1),
-  params: z.record(z.unknown()),
-  conditions: z.record(z.unknown()).optional(),
+  params: z.record(z.string(), z.unknown()),
+  conditions: z.record(z.string(), z.unknown()).optional(),
 });
 
 const UpdateWorkflowSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  description: z.string().max(500).optional().nullable(),
+  description: z.string().max(500).nullish(),
   triggerAdapter: z.string().min(1).optional(),
   triggerOperation: z.string().min(1).optional(),
-  triggerFilter: z.record(z.unknown()).optional().nullable(),
+  triggerFilter: z.record(z.string(), z.unknown()).nullish(),
   actions: z.array(WorkflowActionSchema).min(1).optional(),
   enabled: z.boolean().optional(),
 });
@@ -41,8 +42,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const admin = await requireAdmin();
-  if (!admin) {
+  const adminId = await getAuthenticatedAdmin();
+  if (!adminId) {
     return ApiResponse.unauthorized();
   }
 
@@ -112,8 +113,8 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const admin = await requireAdmin();
-  if (!admin) {
+  const adminId = await getAuthenticatedAdmin();
+  if (!adminId) {
     return ApiResponse.unauthorized();
   }
 
@@ -125,7 +126,7 @@ export async function PUT(
 
     if (!validation.success) {
       return ApiResponse.error(
-        validation.error.errors[0]?.message || 'Invalid input',
+        validation.error.issues[0]?.message || 'Invalid input',
         400,
         ErrorCodes.VALIDATION_FAILED
       );
@@ -140,19 +141,33 @@ export async function PUT(
       return ApiResponse.error('Workflow not found', 404, ErrorCodes.NOT_FOUND);
     }
 
-    // Update workflow
+    // Build update data
     const data = validation.data;
+    const updateData: Prisma.WorkflowUpdateInput = {};
+
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.description !== undefined)
+      updateData.description = data.description;
+    if (data.triggerAdapter !== undefined)
+      updateData.triggerAdapter = data.triggerAdapter;
+    if (data.triggerOperation !== undefined)
+      updateData.triggerOperation = data.triggerOperation;
+    if (data.enabled !== undefined) updateData.enabled = data.enabled;
+
+    if (data.triggerFilter !== undefined) {
+      updateData.triggerFilter = data.triggerFilter
+        ? (data.triggerFilter as Prisma.InputJsonValue)
+        : Prisma.JsonNull;
+    }
+
+    if (data.actions !== undefined) {
+      updateData.actions = data.actions as unknown as Prisma.InputJsonValue;
+    }
+
+    // Update workflow
     const workflow = await prisma.workflow.update({
       where: { id },
-      data: {
-        ...(data.name !== undefined && { name: data.name }),
-        ...(data.description !== undefined && { description: data.description }),
-        ...(data.triggerAdapter !== undefined && { triggerAdapter: data.triggerAdapter }),
-        ...(data.triggerOperation !== undefined && { triggerOperation: data.triggerOperation }),
-        ...(data.triggerFilter !== undefined && { triggerFilter: data.triggerFilter }),
-        ...(data.actions !== undefined && { actions: data.actions }),
-        ...(data.enabled !== undefined && { enabled: data.enabled }),
-      },
+      data: updateData,
     });
 
     return ApiResponse.success({
@@ -177,8 +192,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const admin = await requireAdmin();
-  if (!admin) {
+  const adminId = await getAuthenticatedAdmin();
+  if (!adminId) {
     return ApiResponse.unauthorized();
   }
 
@@ -205,4 +220,3 @@ export async function DELETE(
     return ApiResponse.internalError();
   }
 }
-

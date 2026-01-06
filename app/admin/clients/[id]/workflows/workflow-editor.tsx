@@ -38,13 +38,20 @@ interface WorkflowEditorProps {
   mailerliteGroups?: Record<string, { id: string; name: string }>;
 }
 
+interface WorkflowEditorModalProps extends WorkflowEditorProps {
+  onClose?: () => void;
+  onSave?: () => void;
+}
+
 export function WorkflowEditor({
   clientId,
   workflowId,
   initialData,
   configuredIntegrations,
   mailerliteGroups = {},
-}: WorkflowEditorProps) {
+  onClose,
+  onSave,
+}: WorkflowEditorModalProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,8 +124,8 @@ export function WorkflowEditor({
       newActions[index] = { adapter: value as string, operation: '', params: {} };
     } else if (field === 'operation') {
       newActions[index] = { ...newActions[index], operation: value as string, params: {} };
-    } else {
-      newActions[index] = { ...newActions[index], [field]: value };
+    } else if (field === 'params') {
+      newActions[index] = { ...newActions[index], params: value as Record<string, unknown> };
     }
     setActions(newActions);
   };
@@ -205,7 +212,17 @@ export function WorkflowEditor({
         throw new Error(data.error || 'Failed to save workflow');
       }
 
-      router.push(`/admin/clients/${clientId}/workflows`);
+      // Close modal and refresh
+      if (onSave) {
+        onSave();
+      }
+      if (onClose) {
+        onClose();
+      } else {
+        // Fallback for page-based usage
+        router.push(`/admin/clients/${clientId}`);
+        router.refresh();
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save workflow');
@@ -214,8 +231,9 @@ export function WorkflowEditor({
     }
   };
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+  // Form content (shared between modal and page)
+  const formContent = (
+    <form onSubmit={handleSubmit} className={onClose ? "space-y-6" : "space-y-8"}>
       {error && (
         <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
           {error}
@@ -389,24 +407,80 @@ export function WorkflowEditor({
       </div>
 
       {/* Submit */}
-      <div className="flex items-center justify-end gap-4">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="px-4 py-2 text-zinc-400 hover:text-white transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-6 py-2 bg-white text-black font-medium rounded hover:bg-zinc-200 transition-colors disabled:opacity-50"
-        >
-          {loading ? 'Saving...' : workflowId ? 'Save Changes' : 'Create Workflow'}
-        </button>
+      <div className={onClose ? "flex gap-3 pt-4 border-t border-zinc-800" : "flex items-center justify-end gap-4"}>
+        {onClose ? (
+          <>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-white text-black rounded hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            >
+              {loading ? 'Saving...' : workflowId ? 'Update Workflow' : 'Create Workflow'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="px-4 py-2 text-zinc-400 hover:text-white text-sm disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="px-4 py-2 text-zinc-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-6 py-2 bg-white text-black font-medium rounded hover:bg-zinc-200 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Saving...' : workflowId ? 'Save Changes' : 'Create Workflow'}
+            </button>
+          </>
+        )}
       </div>
     </form>
   );
+
+  // Render as modal if onClose is provided, otherwise render as page
+  if (onClose) {
+    return (
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={onClose}>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-white">
+                {workflowId ? 'Edit Workflow' : 'New Workflow'}
+              </h3>
+              <p className="text-sm text-zinc-400 mt-1">
+                {workflowId ? 'Update workflow configuration' : 'Create a new automation workflow'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-zinc-400 hover:text-white transition-colors"
+              aria-label="Close"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          {formContent}
+        </div>
+      </div>
+    );
+  }
+
+  // Page-based rendering (for backwards compatibility)
+  return formContent;
 }
 
 // =============================================================================

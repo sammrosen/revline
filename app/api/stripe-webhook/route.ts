@@ -118,7 +118,6 @@ export async function POST(request: NextRequest) {
         amount: checkoutData.amountTotal,
         currency: checkoutData.currency || 'usd',
         product: checkoutData.program,
-        priceId: checkoutData.priceId,
       }
     );
 
@@ -142,7 +141,6 @@ export async function POST(request: NextRequest) {
     // 9. Return response with rate limit headers
     const response = ApiResponse.webhookAck({
       processed: true,
-      workflowsExecuted: triggerResult.workflowsExecuted,
       warning,
     });
 

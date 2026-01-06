@@ -330,19 +330,3 @@ export function StripeConfigEditor({
   );
 }
 
-/**
- * Extract product names from Stripe meta JSON string
- * Used by MailerLite editor to populate the program dropdown
- */
-export function getStripeProductNames(metaJson: string): string[] {
-  try {
-    const meta = JSON.parse(metaJson);
-    if (meta.products && typeof meta.products === 'object') {
-      return Object.values(meta.products) as string[];
-    }
-  } catch {
-    // Invalid JSON
-  }
-  return [];
-}
-

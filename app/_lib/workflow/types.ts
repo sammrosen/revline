@@ -216,3 +216,4 @@ export const CapturePayloadSchema = z.object({
 /** Lead stage values */
 export const LeadStageSchema = z.enum(['CAPTURED', 'BOOKED', 'PAID', 'DEAD']);
 
+

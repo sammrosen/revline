@@ -2,8 +2,7 @@
  * MailerLite Integration Adapter
  * 
  * Handles MailerLite API operations for a specific client.
- * This adapter only handles operations (addToGroup, getGroups, etc.)
- * Routing logic is handled by the action dispatcher.
+ * Groups are configured in the integration meta and referenced by key in workflows.
  * 
  * Secret names:
  * - "API Key" - Required for all operations
@@ -45,7 +44,7 @@ export interface AddSubscriberResult {
  * const adapter = await MailerLiteAdapter.forClient(clientId);
  * if (!adapter) return ApiResponse.configError();
  * 
- * // Add to a specific group (routing handled by dispatcher)
+ * // Add to a specific group
  * const result = await adapter.addToGroup('user@example.com', '123456', 'John');
  */
 export class MailerLiteAdapter extends BaseIntegrationAdapter<MailerLiteMeta> {
@@ -98,7 +97,6 @@ export class MailerLiteAdapter extends BaseIntegrationAdapter<MailerLiteMeta> {
 
   /**
    * Add subscriber to a specific group by ID
-   * This is the core operation - routing is handled by the dispatcher
    */
   async addToGroup(
     email: string,
@@ -201,15 +199,6 @@ export class MailerLiteAdapter extends BaseIntegrationAdapter<MailerLiteMeta> {
   }
 
   /**
-   * Check if routing is configured for an action
-   */
-  hasRoutingFor(action: string): boolean {
-    const routing = this.meta?.routing;
-    if (!routing) return false;
-    return action in routing && routing[action as keyof typeof routing] !== null;
-  }
-
-  /**
    * Validate the meta configuration
    */
   validateConfig(): { valid: boolean; errors: string[] } {
@@ -217,15 +206,6 @@ export class MailerLiteAdapter extends BaseIntegrationAdapter<MailerLiteMeta> {
     
     if (!this.meta?.groups || Object.keys(this.meta.groups).length === 0) {
       errors.push('No groups configured');
-    }
-
-    // Check that all routing references valid groups
-    if (this.meta?.routing && this.meta?.groups) {
-      for (const [action, groupKey] of Object.entries(this.meta.routing)) {
-        if (groupKey && !this.meta.groups[groupKey]) {
-          errors.push(`Routing for '${action}' references unknown group '${groupKey}'`);
-        }
-      }
     }
 
     return {

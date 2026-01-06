@@ -88,7 +88,7 @@ export default async function EditWorkflowPage({
             triggerAdapter: workflow.triggerAdapter,
             triggerOperation: workflow.triggerOperation,
             triggerFilter: workflow.triggerFilter as Record<string, unknown> | null,
-            actions: workflow.actions as WorkflowAction[],
+            actions: workflow.actions as unknown as WorkflowAction[],
           }}
           configuredIntegrations={configuredIntegrations}
           mailerliteGroups={mailerliteGroups}

@@ -70,3 +70,4 @@ export function getAdapterOperations(adapter: string): string[] {
   return Object.keys(adapterExecutors);
 }
 
+

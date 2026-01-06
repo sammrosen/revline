@@ -5,7 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { requireAdmin } from '@/app/_lib/auth';
+import { getAuthenticatedAdmin } from '@/app/_lib/auth';
 import { ApiResponse } from '@/app/_lib/utils/api-response';
 import {
   ADAPTER_REGISTRY,
@@ -13,9 +13,10 @@ import {
   getActionsForUI,
 } from '@/app/_lib/workflow';
 
-export async function GET(request: NextRequest) {
-  const admin = await requireAdmin();
-  if (!admin) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function GET(_request: NextRequest) {
+  const adminId = await getAuthenticatedAdmin();
+  if (!adminId) {
     return ApiResponse.unauthorized();
   }
 

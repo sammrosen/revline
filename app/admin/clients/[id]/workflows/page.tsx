@@ -6,17 +6,9 @@ import { WorkflowList } from './workflow-list';
 export const dynamic = 'force-dynamic';
 
 async function getClientWithWorkflows(id: string) {
-  return prisma.client.findUnique({
+  const client = await prisma.client.findUnique({
     where: { id },
     include: {
-      workflows: {
-        orderBy: { createdAt: 'desc' },
-        include: {
-          _count: {
-            select: { executions: true },
-          },
-        },
-      },
       integrations: {
         select: {
           integration: true,
@@ -24,6 +16,26 @@ async function getClientWithWorkflows(id: string) {
       },
     },
   });
+
+  if (!client) {
+    return null;
+  }
+
+  // Fetch workflows separately to avoid Prisma type issues
+  const workflows = await prisma.workflow.findMany({
+    where: { clientId: id },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      _count: {
+        select: { executions: true },
+      },
+    },
+  });
+
+  return {
+    ...client,
+    workflows,
+  };
 }
 
 export default async function WorkflowsPage({
@@ -90,13 +102,14 @@ export default async function WorkflowsPage({
         {/* Workflow List */}
         <WorkflowList
           clientId={client.id}
-          workflows={client.workflows.map((w) => ({
+          workflows={client.workflows.map((w: typeof client.workflows[0]) => ({
             id: w.id,
             name: w.name,
             description: w.description,
             enabled: w.enabled,
             triggerAdapter: w.triggerAdapter,
             triggerOperation: w.triggerOperation,
+            actions: (w.actions as Array<{ adapter: string; operation: string; params: Record<string, unknown> }>) || [],
             actionsCount: (w.actions as unknown[])?.length || 0,
             totalExecutions: w._count.executions,
             createdAt: w.createdAt,
