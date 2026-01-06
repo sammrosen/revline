@@ -23,6 +23,12 @@ flowchart TB
         Cron["/api/cron/health-check"]
     end
 
+    subgraph workflow [Workflow Engine]
+        Trigger[Trigger Emitter]
+        Engine[Workflow Executor]
+        Executors[Action Executors]
+    end
+
     subgraph core [Core Infrastructure]
         ClientGate[Execution Gate]
         SecretMgr[Secret Manager]
@@ -34,26 +40,33 @@ flowchart TB
         Integrations[(client_integrations)]
         Events[(events)]
         Leads[(leads)]
+        Workflows[(workflows)]
     end
 
     Stripe --> StripeWH
     Calendly --> CalendlyWH
     StripeWH --> ClientGate
     CalendlyWH --> ClientGate
+    Subscribe --> ClientGate
+    ClientGate --> Trigger
+    Trigger --> Engine
+    Engine --> Executors
+    Executors --> ML
+    Executors --> EventLog
+    Executors --> Leads
+    Engine --> Workflows
     ClientGate --> SecretMgr
     SecretMgr --> Integrations
-    StripeWH --> EventLog
-    CalendlyWH --> EventLog
     EventLog --> Events
-    StripeWH --> ML
-    Subscribe --> ClientGate
-    Subscribe --> ML
     Cron --> Events
     Cron --> Integrations
     Cron --> Resend
     Admin --> Clients
     Admin --> Events
+    Admin --> Workflows
 ```
+
+> **Note:** The Workflow Engine is the central automation layer. All triggers (webhooks, email captures) emit events that the engine matches against configured workflows. See [Workflow Engine Documentation](./WORKFLOW-ENGINE.md) for details.
 
 ---
 
@@ -115,6 +128,34 @@ flowchart TB
 - `admin_id` (foreign key)
 - `expires_at` (timestamp)
 - `created_at` (timestamp)
+
+**`workflows`** - Configurable automation workflows
+- `id` (uuid, primary key)
+- `client_id` (foreign key)
+- `name` (text) - Display name
+- `description` (text, nullable) - Optional description
+- `enabled` (boolean) - Whether workflow is active
+- `trigger_adapter` (text) - e.g., "calendly", "stripe"
+- `trigger_operation` (text) - e.g., "booking_created"
+- `trigger_filter` (jsonb, nullable) - Filter conditions
+- `actions` (jsonb) - Array of action definitions
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
+- Index: `(client_id, trigger_adapter, trigger_operation)`
+
+**`workflow_executions`** - Execution history and audit trail
+- `id` (uuid, primary key)
+- `workflow_id` (foreign key)
+- `client_id` (foreign key)
+- `trigger_adapter` (text)
+- `trigger_operation` (text)
+- `trigger_payload` (jsonb) - Full trigger data
+- `status` (RUNNING | COMPLETED | FAILED)
+- `action_results` (jsonb, nullable) - Array of action outcomes
+- `error` (text, nullable)
+- `started_at` (timestamp)
+- `completed_at` (timestamp, nullable)
+- Indexes: `(client_id, started_at)`, `(workflow_id, started_at)`
 
 ---
 
@@ -194,7 +235,52 @@ const CURRENT_KEY_VERSION = 1;
 
 **Use case:** Instant non-payment handling. Click "Pause" in admin UI → all webhooks/forms blocked.
 
-### 4. Integration Manager (`app/_lib/integrations.ts`)
+### 4. Workflow Engine (`app/_lib/workflow/`)
+
+The workflow engine is the central automation layer that connects triggers to actions.
+
+**Key Components:**
+
+| File | Purpose |
+|------|---------|
+| `types.ts` | TypeScript interfaces for workflows, contexts, results |
+| `registry.ts` | Adapter definitions (triggers & actions) |
+| `engine.ts` | Core execution logic |
+| `executors/` | Action executor implementations |
+
+**How it works:**
+
+1. **Trigger Emission:** Webhook handlers call `emitTrigger()` with event data
+2. **Workflow Matching:** Engine finds all enabled workflows for this trigger
+3. **Filter Evaluation:** Optional filter conditions checked against payload
+4. **Action Execution:** Actions run sequentially; stops on first error
+5. **Result Recording:** Execution logged to `workflow_executions` table
+
+**Available Adapters:**
+
+| Adapter | Triggers | Actions |
+|---------|----------|---------|
+| `calendly` | booking_created, booking_canceled | — |
+| `stripe` | payment_succeeded, subscription_created | — |
+| `mailerlite` | — | add_to_group, remove_from_group, add_tag |
+| `revline` | email_captured | create_lead, update_lead_stage, emit_event |
+
+**Example workflow:**
+```json
+{
+  "triggerAdapter": "stripe",
+  "triggerOperation": "payment_succeeded",
+  "triggerFilter": { "product": "coaching" },
+  "actions": [
+    { "adapter": "revline", "operation": "update_lead_stage", "params": { "stage": "PAID" } },
+    { "adapter": "mailerlite", "operation": "add_to_group", "params": { "group": "customers" } }
+  ]
+}
+```
+
+**For full details:** See [Workflow Engine Documentation](./WORKFLOW-ENGINE.md)
+
+### 5. Integration Manager (`app/_lib/integrations.ts`)
 
 **Functions:**
 - `getClientSecret(clientId, integration)` - Fetch + decrypt secret
@@ -331,6 +417,38 @@ Note: Webhook signing key is stored in encrypted_secret field, not in meta.
 **`GET /api/admin/clients/[id]/mailerlite-insights`**
 - Fetch MailerLite subscriber stats for client
 - Shows group membership counts
+
+### Workflow Routes
+
+**`GET /api/admin/workflows?clientId={clientId}`**
+- List all workflows for a client
+- Returns workflow definitions with enabled status
+
+**`POST /api/admin/workflows`**
+- Create a new workflow
+- Body: `{ clientId, name, triggerAdapter, triggerOperation, triggerFilter?, actions }`
+
+**`GET /api/admin/workflows/{id}`**
+- Get a single workflow by ID
+
+**`PATCH /api/admin/workflows/{id}`**
+- Update a workflow
+- Body: Any subset of workflow fields
+
+**`DELETE /api/admin/workflows/{id}`**
+- Delete a workflow and its execution history
+
+**`PATCH /api/admin/workflows/{id}/toggle`**
+- Enable or disable a workflow
+- Body: `{ enabled: boolean }`
+
+**`GET /api/admin/workflows/{id}/executions`**
+- Get execution history for a workflow
+- Returns last 50 executions with status and results
+
+**`GET /api/admin/workflow-registry`**
+- Get all available adapters with their triggers and actions
+- Used by admin UI for building workflow forms
 
 ### 2FA Routes
 

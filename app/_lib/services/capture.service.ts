@@ -1,18 +1,15 @@
 /**
  * Capture Service
  * 
- * Orchestrates the email capture flow from landing pages.
- * Handles lead creation, event emission, and dispatches to integrations.
+ * @deprecated This service is deprecated in favor of the workflow engine.
+ * Use emitTrigger() from '@/app/_lib/workflow' instead.
  * 
- * STANDARDS:
- * - Single responsibility: email capture orchestration
- * - Always emits events for debugging
- * - Uses action dispatcher for integration routing
- * - Returns structured results for route handlers
+ * This file is kept for backwards compatibility with existing tests.
+ * New code should use emitTrigger() directly.
  */
 
 import { emitEvent, EventSystem, upsertLead } from '@/app/_lib/event-logger';
-import { dispatchAction } from '@/app/_lib/actions/dispatcher';
+import { emitTrigger } from '@/app/_lib/workflow';
 import { MailerLiteAdapter } from '@/app/_lib/integrations/mailerlite.adapter';
 import { IntegrationResult, CaptureResult } from '@/app/_lib/types';
 import { withTransaction } from '@/app/_lib/utils/transaction';
@@ -28,31 +25,21 @@ export interface CaptureEmailParams {
 }
 
 /**
- * Service for handling email capture operations
+ * @deprecated Use emitTrigger() from '@/app/_lib/workflow' instead.
  * 
- * @example
- * // In route handler:
- * const result = await CaptureService.captureEmail({
- *   clientId: client.id,
- *   email: 'user@example.com',
- *   name: 'John',
- *   source: 'landing',
- * });
- * 
- * if (!result.success) {
- *   return ApiResponse.error(result.error, 500);
- * }
- * return ApiResponse.success(result.data);
+ * Service for handling email capture operations.
+ * This is a compatibility wrapper around the workflow engine.
  */
 export class CaptureService {
   /**
-   * Capture an email from a landing page
+   * @deprecated Use emitTrigger() instead:
    * 
-   * Flow:
-   * 1. Create/update lead record
-   * 2. Emit email_captured event
-   * 3. Dispatch 'lead.captured' action to all integrations
-   * 4. Return result
+   * ```typescript
+   * await emitTrigger(clientId, {
+   *   adapter: 'revline',
+   *   operation: 'email_captured',
+   * }, { email, name, source });
+   * ```
    */
   static async captureEmail(
     params: CaptureEmailParams
@@ -95,33 +82,22 @@ export class CaptureService {
       };
     }
 
-    // Step 3: Dispatch 'lead.captured' action to all integrations
-    const dispatchResult = await dispatchAction(clientId, 'lead.captured', {
-      email,
-      name,
-      source,
-    });
+    // Step 3: Emit trigger to workflow engine
+    const result = await emitTrigger(
+      clientId,
+      { adapter: 'revline', operation: 'email_captured' },
+      { email, name, source }
+    );
 
-    // Check if any integration failed
-    const failedResults = dispatchResult.results.filter(r => !r.result.success);
-    if (failedResults.length > 0) {
-      // Log failures but don't fail the overall capture
-      // The lead is captured, just integration forwarding had issues
-      console.warn('Some integrations failed for lead.captured:', {
+    // Check if any workflow failed
+    const hasFailure = result.executions.some(e => e.status === 'failed');
+    if (hasFailure) {
+      console.warn('Some workflows failed for email capture:', {
         clientId,
         leadId,
-        failures: failedResults.map(r => ({
-          integration: r.integration,
-          error: r.result.error,
-        })),
+        failures: result.executions.filter(e => e.status === 'failed'),
       });
     }
-
-    // Get MailerLite result for subscriber ID if available
-    const mlResult = dispatchResult.results.find(r => r.integration === 'MAILERLITE');
-    const subscriberId = mlResult?.result.success 
-      ? (mlResult.result.data as { subscriberId?: string })?.subscriberId 
-      : undefined;
 
     // Step 4: Return result
     return {
@@ -129,10 +105,10 @@ export class CaptureService {
       data: {
         leadId,
         email,
-        subscriberId,
-        message: dispatchResult.allSucceeded 
+        subscriberId: undefined, // Workflow results don't expose this directly
+        message: result.workflowsExecuted > 0 
           ? 'Successfully subscribed' 
-          : 'Subscribed (some integrations pending)',
+          : 'Received (no workflows configured)',
       },
     };
   }

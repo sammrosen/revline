@@ -1,14 +1,15 @@
 /**
  * RevLine Action Registry
  * 
- * Central definition of all actions that can occur in the system.
- * Integrations can route these actions to their specific handlers.
+ * @deprecated This module is deprecated in favor of the workflow engine.
+ * Use the workflow registry from '@/app/_lib/workflow' instead.
  * 
- * To add a new action:
- * 1. Add to ACTION_REGISTRY below
- * 2. Call dispatchAction() from wherever the action occurs
- * 3. Integration handlers automatically check routing - no handler changes needed
- * 4. Admin UI automatically shows new action in routing dropdowns
+ * The action types and registry are kept for backwards compatibility with
+ * existing code that references them. New code should use workflows.
+ * 
+ * Migration guide:
+ * - dispatchAction() → emitTrigger() from '@/app/_lib/workflow'
+ * - ACTION_REGISTRY → ADAPTER_REGISTRY from '@/app/_lib/workflow'
  */
 
 /**
