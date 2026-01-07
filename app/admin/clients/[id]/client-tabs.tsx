@@ -121,7 +121,7 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
   return (
     <div>
       {/* Tab Navigation */}
-      <div className="border-b border-zinc-800 mb-6">
+      <div className="border-b border-zinc-800 mb-4">
         <div className="flex gap-1">
           {tabs.map((tab) => (
             <button
@@ -154,9 +154,6 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
       <div className="min-h-[400px]">
         {activeTab === 'workflows' && (
           <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold">Workflows</h2>
-            </div>
             <WorkflowList
               clientId={clientId}
               workflows={workflows}

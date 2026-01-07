@@ -78,33 +78,31 @@ export default async function ClientDetailPage({
     <div className="min-h-screen p-4 sm:p-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex flex-wrap gap-4 mb-4">
-            <Link
-              href="/admin/clients"
-              className="text-zinc-400 hover:text-white text-sm inline-block"
-            >
-              ← Back to Clients
-            </Link>
-            <Link
-              href="/admin/onboarding"
-              className="text-zinc-400 hover:text-white text-sm inline-block"
-            >
-              Onboarding Guide
-            </Link>
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-wrap gap-4 text-xs">
+              <Link
+                href="/admin/clients"
+                className="text-zinc-400 hover:text-white inline-block"
+              >
+                ← Back to Clients
+              </Link>
+              <Link
+                href="/admin/onboarding"
+                className="text-zinc-400 hover:text-white inline-block"
+              >
+                Onboarding Guide
+              </Link>
+            </div>
+            <ClientActionsDropdown 
+              clientId={client.id} 
+              clientName={client.name}
+              currentStatus={client.status}
+            />
           </div>
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 relative">
-            <div className="space-y-1">
-              <h1 className="text-3xl font-bold tracking-tight text-white">{client.name}</h1>
-              <p className="text-zinc-500 font-mono text-xs bg-zinc-900/50 w-fit px-2 py-0.5 rounded border border-zinc-800/50">{client.slug}</p>
-            </div>
-            <div className="flex items-center justify-end">
-              <ClientActionsDropdown 
-                clientId={client.id} 
-                clientName={client.name}
-                currentStatus={client.status}
-              />
-            </div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight text-white">{client.name}</h1>
+            <span className="text-zinc-500 font-mono text-xs bg-zinc-900/50 px-2 py-0.5 rounded border border-zinc-800/50">{client.slug}</span>
           </div>
         </div>
 
