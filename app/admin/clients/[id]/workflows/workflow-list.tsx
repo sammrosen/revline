@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Workflow } from 'lucide-react';
+import { Plus, Workflow, AlertTriangle, RefreshCw, List, GitBranch } from 'lucide-react';
 import { WorkflowEditor } from './workflow-editor';
 import { WorkflowCard } from '../_components/workflow-card';
+import { DependencyTree } from '../_components/dependency-tree';
 import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
 
 interface WorkflowAction {
@@ -27,11 +28,18 @@ interface Workflow {
   updatedAt: Date;
 }
 
+interface ValidationStatus {
+  canEnable: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
 interface WorkflowListProps {
   clientId: string;
   workflows: Workflow[];
   configuredIntegrations: string[];
   mailerliteGroups?: Record<string, { id: string; name: string }>;
+  stripeProducts?: Record<string, string>;
 }
 
 export function WorkflowList({
@@ -39,9 +47,11 @@ export function WorkflowList({
   workflows,
   configuredIntegrations,
   mailerliteGroups = {},
+  stripeProducts = {},
 }: WorkflowListProps) {
   const router = useRouter();
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
   const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null);
   const [workflowData, setWorkflowData] = useState<{
@@ -53,9 +63,49 @@ export function WorkflowList({
     triggerFilter: Record<string, unknown> | null;
     actions: WorkflowAction[];
   } | null>(null);
+  
+  // Validation status per workflow
+  const [validationMap, setValidationMap] = useState<Record<string, ValidationStatus>>({});
+  const [isLoadingValidation, setIsLoadingValidation] = useState(false);
+  
+  // View mode toggle
+  const [viewMode, setViewMode] = useState<'list' | 'dependencies'>('list');
+
+  // Fetch validation status for all workflows
+  const fetchValidation = useCallback(async () => {
+    setIsLoadingValidation(true);
+    try {
+      const response = await fetch(`/api/admin/clients/${clientId}/dependency-graph`);
+      if (response.ok) {
+        const data = await response.json();
+        const graph = data.data?.graph;
+        if (graph?.workflows) {
+          const newValidationMap: Record<string, ValidationStatus> = {};
+          for (const w of graph.workflows) {
+            newValidationMap[w.id] = {
+              canEnable: w.canEnable,
+              errors: w.validationErrors || [],
+              warnings: w.validationWarnings || [],
+            };
+          }
+          setValidationMap(newValidationMap);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch validation status:', error);
+    } finally {
+      setIsLoadingValidation(false);
+    }
+  }, [clientId]);
+
+  // Fetch validation on mount and when workflows change
+  useEffect(() => {
+    fetchValidation();
+  }, [fetchValidation, workflows.length]);
 
   const handleToggle = async (workflowId: string) => {
     setTogglingId(workflowId);
+    setToggleError(null);
     try {
       const response = await fetch(`/api/admin/workflows/${workflowId}/toggle`, {
         method: 'PATCH',
@@ -63,9 +113,28 @@ export function WorkflowList({
 
       if (response.ok) {
         router.refresh();
+        // Refresh validation after toggle
+        fetchValidation();
+      } else {
+        const data = await response.json();
+        const errorMessage = data.error || data.data?.errors?.[0]?.message || 'Failed to toggle';
+        setToggleError(errorMessage);
+        
+        // Update validation map with errors
+        if (data.data?.errors) {
+          setValidationMap(prev => ({
+            ...prev,
+            [workflowId]: {
+              canEnable: false,
+              errors: data.data.errors.map((e: { message: string }) => e.message),
+              warnings: data.data.warnings?.map((w: { message: string }) => w.message) || [],
+            },
+          }));
+        }
       }
     } catch (error) {
       console.error('Failed to toggle workflow:', error);
+      setToggleError('Network error');
     } finally {
       setTogglingId(null);
     }
@@ -121,6 +190,7 @@ export function WorkflowList({
             initialData={workflowData || undefined}
             configuredIntegrations={configuredIntegrations}
             mailerliteGroups={mailerliteGroups}
+            stripeProducts={stripeProducts}
             onClose={handleCloseEditor}
             onSave={handleSaveWorkflow}
           />
@@ -155,13 +225,14 @@ export function WorkflowList({
           initialData={workflowData || undefined}
           configuredIntegrations={configuredIntegrations}
           mailerliteGroups={mailerliteGroups}
+          stripeProducts={stripeProducts}
           onClose={handleCloseEditor}
           onSave={handleSaveWorkflow}
         />
       )}
 
       <div className="space-y-3">
-        {/* Header: Integrations + Add Button */}
+        {/* Header: Integrations + View Toggle + Add Button */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 flex-wrap">
             {configuredIntegrations.map((integration) => {
@@ -183,33 +254,92 @@ export function WorkflowList({
               <span className="text-xs text-zinc-500">No integrations</span>
             )}
           </div>
-          <button
-            onClick={handleNewWorkflow}
-            className="p-2 bg-white text-black rounded hover:bg-zinc-200 transition-colors"
-            title="New Workflow"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* View Mode Toggle */}
+            <div className="flex items-center bg-zinc-800 rounded p-0.5">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-1.5 rounded transition-colors ${
+                  viewMode === 'list'
+                    ? 'bg-zinc-700 text-white'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+                title="List view"
+              >
+                <List className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('dependencies')}
+                className={`p-1.5 rounded transition-colors ${
+                  viewMode === 'dependencies'
+                    ? 'bg-zinc-700 text-white'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+                title="Dependencies view"
+              >
+                <GitBranch className="w-4 h-4" />
+              </button>
+            </div>
+            {viewMode === 'list' && (
+              <button
+                onClick={fetchValidation}
+                disabled={isLoadingValidation}
+                className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors disabled:opacity-50"
+                title="Refresh validation"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoadingValidation ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+            <button
+              onClick={handleNewWorkflow}
+              className="p-2 bg-white text-black rounded hover:bg-zinc-200 transition-colors"
+              title="New Workflow"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        {/* Workflow Cards */}
-        {workflows.map((workflow) => (
-          <WorkflowCard
-            key={workflow.id}
-            id={workflow.id}
-            clientId={clientId}
-            name={workflow.name}
-            description={workflow.description}
-            enabled={workflow.enabled}
-            triggerAdapter={workflow.triggerAdapter}
-            triggerOperation={workflow.triggerOperation}
-            actions={workflow.actions}
-            totalExecutions={workflow.totalExecutions}
-            onToggle={() => handleToggle(workflow.id)}
-            isToggling={togglingId === workflow.id}
-            onEdit={() => handleEditWorkflow(workflow.id)}
-          />
-        ))}
+        {/* Dependency Tree View */}
+        {viewMode === 'dependencies' ? (
+          <DependencyTree clientId={clientId} />
+        ) : (
+          <>
+            {/* Toggle Error Banner */}
+            {toggleError && (
+              <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>{toggleError}</span>
+                <button 
+                  onClick={() => setToggleError(null)} 
+                  className="ml-auto text-red-400/60 hover:text-red-400"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            {/* Workflow Cards */}
+            {workflows.map((workflow) => (
+              <WorkflowCard
+                key={workflow.id}
+                id={workflow.id}
+                clientId={clientId}
+                name={workflow.name}
+                description={workflow.description}
+                enabled={workflow.enabled}
+                triggerAdapter={workflow.triggerAdapter}
+                triggerOperation={workflow.triggerOperation}
+                actions={workflow.actions}
+                totalExecutions={workflow.totalExecutions}
+                onToggle={() => handleToggle(workflow.id)}
+                isToggling={togglingId === workflow.id}
+                onEdit={() => handleEditWorkflow(workflow.id)}
+                validationStatus={validationMap[workflow.id]}
+              />
+            ))}
+          </>
+        )}
       </div>
     </>
   );

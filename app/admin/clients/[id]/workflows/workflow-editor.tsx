@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { AlertTriangle } from 'lucide-react';
 
 interface WorkflowAction {
   adapter: string;
@@ -36,6 +37,7 @@ interface WorkflowEditorProps {
   };
   configuredIntegrations: string[];
   mailerliteGroups?: Record<string, { id: string; name: string }>;
+  stripeProducts?: Record<string, string>; // key -> product name
 }
 
 interface WorkflowEditorModalProps extends WorkflowEditorProps {
@@ -49,6 +51,7 @@ export function WorkflowEditor({
   initialData,
   configuredIntegrations,
   mailerliteGroups = {},
+  stripeProducts = {},
   onClose,
   onSave,
 }: WorkflowEditorModalProps) {
@@ -76,6 +79,23 @@ export function WorkflowEditor({
   const [actions, setActions] = useState<WorkflowAction[]>(
     initialData?.actions || []
   );
+  
+  // Stripe product filter (extracted from triggerFilter for UI)
+  const [selectedStripeProduct, setSelectedStripeProduct] = useState<string>(
+    (initialData?.triggerFilter?.product as string) || ''
+  );
+  
+  // Determine if we should show structured filter UI vs raw JSON
+  // Always show product selector for Stripe, even if no products configured yet
+  const isStripeTrigger = triggerAdapter === 'stripe';
+  const hasStripeProducts = Object.keys(stripeProducts).length > 0;
+  
+  // Disable-first modal state
+  const [showDisableModal, setShowDisableModal] = useState(false);
+  const [isDisabling, setIsDisabling] = useState(false);
+  
+  // Check if workflow is active and being edited
+  const isEditingActiveWorkflow = workflowId && initialData?.enabled;
 
   // Load registry data
   useEffect(() => {
@@ -93,6 +113,31 @@ export function WorkflowEditor({
     }
     loadRegistry();
   }, []);
+
+  // Handle disabling workflow before editing
+  const handleDisableWorkflow = async () => {
+    if (!workflowId) return;
+    
+    setIsDisabling(true);
+    try {
+      const response = await fetch(`/api/admin/workflows/${workflowId}/toggle`, {
+        method: 'PATCH',
+      });
+      
+      if (response.ok) {
+        setEnabled(false);
+        setShowDisableModal(false);
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to disable workflow');
+      }
+    } catch (err) {
+      console.error('Failed to disable workflow:', err);
+      setError('Failed to disable workflow');
+    } finally {
+      setIsDisabling(false);
+    }
+  };
 
   // Get available triggers for selected adapter
   const availableTriggers =
@@ -148,9 +193,14 @@ export function WorkflowEditor({
     setLoading(true);
     setError(null);
 
-    // Parse trigger filter
-    let triggerFilter = null;
-    if (triggerFilterJson.trim()) {
+    // Build trigger filter - prefer structured UI over raw JSON
+    let triggerFilter: Record<string, unknown> | null = null;
+    
+    if (isStripeTrigger && selectedStripeProduct) {
+      // Use the Stripe product selector
+      triggerFilter = { product: selectedStripeProduct };
+    } else if (!isStripeTrigger && triggerFilterJson.trim()) {
+      // Use raw JSON for other integrations
       try {
         triggerFilter = JSON.parse(triggerFilterJson);
       } catch {
@@ -234,6 +284,64 @@ export function WorkflowEditor({
   // Form content (shared between modal and page)
   const formContent = (
     <form onSubmit={handleSubmit} className={onClose ? "space-y-6" : "space-y-8"}>
+      {/* Disable-First Modal */}
+      {showDisableModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-md w-full">
+            <div className="flex items-start gap-3 mb-4">
+              <AlertTriangle className="w-6 h-6 text-yellow-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-lg font-semibold text-white">Workflow is Active</h3>
+                <p className="text-sm text-zinc-400 mt-1">
+                  This workflow is currently enabled and processing events.
+                  You must disable it before making changes.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleDisableWorkflow}
+                disabled={isDisabling}
+                className="flex-1 px-4 py-2 bg-yellow-500 text-black rounded hover:bg-yellow-400 disabled:opacity-50 text-sm font-medium transition-colors"
+              >
+                {isDisabling ? 'Disabling...' : 'Disable & Edit'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDisableModal(false);
+                  if (onClose) onClose();
+                }}
+                disabled={isDisabling}
+                className="px-4 py-2 text-zinc-400 hover:text-white text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active Workflow Warning Banner */}
+      {isEditingActiveWorkflow && enabled && (
+        <div className="flex items-center gap-3 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+          <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm text-yellow-400">
+              This workflow is active. Disable it to make changes.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowDisableModal(true)}
+            className="px-3 py-1.5 bg-yellow-500/20 text-yellow-400 text-sm rounded hover:bg-yellow-500/30 transition-colors"
+          >
+            Disable
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
           {error}
@@ -337,21 +445,63 @@ export function WorkflowEditor({
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-zinc-400 mb-1">
-            Filter (optional, JSON)
-          </label>
-          <textarea
-            value={triggerFilterJson}
-            onChange={(e) => setTriggerFilterJson(e.target.value)}
-            placeholder='e.g., {"product": "fit1"}'
-            rows={2}
-            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600 font-mono text-sm resize-none"
-          />
-          <p className="mt-1 text-xs text-zinc-500">
-            Only run workflow when payload matches this filter
-          </p>
-        </div>
+        {/* Stripe Product Filter */}
+        {isStripeTrigger && (
+          <div>
+            <label className="block text-sm font-medium text-zinc-400 mb-1">
+              Product (optional)
+            </label>
+            {hasStripeProducts ? (
+              <select
+                value={selectedStripeProduct}
+                onChange={(e) => setSelectedStripeProduct(e.target.value)}
+                className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded text-white focus:outline-none focus:border-zinc-600"
+              >
+                <option value="">All products</option>
+                {Object.entries(stripeProducts).map(([key, productName]) => (
+                  <option key={key} value={key}>
+                    {productName} ({key})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  value={selectedStripeProduct}
+                  onChange={(e) => setSelectedStripeProduct(e.target.value)}
+                  placeholder="e.g., coaching, fit1"
+                  className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
+                />
+                <p className="mt-1 text-xs text-yellow-500">
+                  💡 Tip: Configure products in Stripe integration settings to use a dropdown
+                </p>
+              </>
+            )}
+            <p className="mt-1 text-xs text-zinc-500">
+              Only trigger for payments matching this product key
+            </p>
+          </div>
+        )}
+
+        {/* Raw JSON Filter (for other integrations) */}
+        {!isStripeTrigger && (
+          <div>
+            <label className="block text-sm font-medium text-zinc-400 mb-1">
+              Filter (optional, JSON)
+            </label>
+            <textarea
+              value={triggerFilterJson}
+              onChange={(e) => setTriggerFilterJson(e.target.value)}
+              placeholder='e.g., {"product": "fit1"}'
+              rows={2}
+              className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600 font-mono text-sm resize-none"
+            />
+            <p className="mt-1 text-xs text-zinc-500">
+              Only run workflow when payload matches this filter
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Actions */}
@@ -396,6 +546,8 @@ export function WorkflowEditor({
                 index={index}
                 action={action}
                 actionOptions={availableActions}
+                allActionOptions={actionOptions}
+                configuredIntegrations={configuredIntegrations}
                 mailerliteGroups={mailerliteGroups}
                 onChange={handleActionChange}
                 onParamChange={handleParamChange}
@@ -491,6 +643,8 @@ interface ActionEditorProps {
   index: number;
   action: WorkflowAction;
   actionOptions: ActionOption[];
+  allActionOptions: ActionOption[]; // All options including unconfigured
+  configuredIntegrations: string[];
   mailerliteGroups: Record<string, { id: string; name: string }>;
   onChange: (index: number, field: keyof WorkflowAction, value: unknown) => void;
   onParamChange: (index: number, param: string, value: unknown) => void;
@@ -501,6 +655,8 @@ function ActionEditor({
   index,
   action,
   actionOptions,
+  allActionOptions,
+  configuredIntegrations,
   mailerliteGroups,
   onChange,
   onParamChange,
@@ -508,13 +664,41 @@ function ActionEditor({
 }: ActionEditorProps) {
   const selectedAdapter = actionOptions.find((a) => a.adapterId === action.adapter);
   const availableOperations = selectedAdapter?.actions || [];
+  
+  // Check if the selected adapter requires integration but isn't configured
+  const adapterInfo = allActionOptions.find((a) => a.adapterId === action.adapter);
+  const isUnconfiguredIntegration = adapterInfo?.requiresIntegration && 
+    !configuredIntegrations.includes(adapterInfo.adapterId.toUpperCase());
+  
+  // Check for missing group param when using MailerLite
+  const isMissingGroup = action.adapter === 'mailerlite' && 
+    (action.operation === 'add_to_group' || action.operation === 'remove_from_group') &&
+    Object.keys(mailerliteGroups).length === 0;
 
   return (
-    <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4 space-y-4">
+    <div className={`bg-zinc-800/50 border rounded-lg p-4 space-y-4 ${
+      isUnconfiguredIntegration || isMissingGroup 
+        ? 'border-yellow-500/50' 
+        : 'border-zinc-700'
+    }`}>
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-zinc-400">
-          Action {index + 1}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-zinc-400">
+            Action {index + 1}
+          </span>
+          {isUnconfiguredIntegration && (
+            <span className="flex items-center gap-1 text-xs text-yellow-500">
+              <AlertTriangle className="w-3 h-3" />
+              Not configured
+            </span>
+          )}
+          {isMissingGroup && (
+            <span className="flex items-center gap-1 text-xs text-yellow-500">
+              <AlertTriangle className="w-3 h-3" />
+              No groups configured
+            </span>
+          )}
+        </div>
         <button
           type="button"
           onClick={onRemove}
@@ -544,7 +728,9 @@ function ActionEditor({
           <select
             value={action.adapter}
             onChange={(e) => onChange(index, 'adapter', e.target.value)}
-            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm focus:outline-none focus:border-zinc-600"
+            className={`w-full px-3 py-2 bg-zinc-900 border rounded text-white text-sm focus:outline-none focus:border-zinc-600 ${
+              isUnconfiguredIntegration ? 'border-yellow-500/50' : 'border-zinc-700'
+            }`}
           >
             <option value="">Select...</option>
             {actionOptions.map((a) => (

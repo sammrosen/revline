@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { ClientActionsDropdown } from './client-actions-dropdown';
 import { ClientTabs } from './client-tabs';
 import { IntegrationType } from '@prisma/client';
-import { MailerLiteMeta, isMailerLiteMeta } from '@/app/_lib/types';
+import { MailerLiteMeta, isMailerLiteMeta, StripeMeta, isStripeMeta } from '@/app/_lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,6 +74,16 @@ export default async function ClientDetailPage({
     ? mailerliteMeta.groups
     : {};
 
+  // Get Stripe products if configured
+  // Support both 'productMap' (official) and 'products' (legacy) field names
+  const stripeIntegration = client.integrations.find(
+    (i) => i.integration === IntegrationType.STRIPE
+  );
+  const stripeMeta = stripeIntegration?.meta as StripeMeta & { products?: Record<string, string> } | null;
+  const stripeProducts = stripeMeta?.productMap 
+    ?? stripeMeta?.products  // fallback for legacy data
+    ?? {};
+
   return (
     <div className="min-h-screen p-4 sm:p-8">
       <div className="max-w-6xl mx-auto">
@@ -135,6 +145,7 @@ export default async function ClientDetailPage({
           }))}
           configuredIntegrations={client.integrations.map((i) => i.integration)}
           mailerliteGroups={mailerliteGroups}
+          stripeProducts={stripeProducts}
         />
       </div>
     </div>

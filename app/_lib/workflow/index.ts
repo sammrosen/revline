@@ -28,10 +28,34 @@ export {
 // Executors
 export { getActionExecutor, hasActionExecutor } from './executors';
 
+// Validation
+export {
+  validateCanEnable,
+  validateCanEdit,
+  validateWorkflowConfig,
+  validateCanDeleteIntegration,
+  getWorkflowsUsingIntegration,
+  getWorkflowDependencies,
+  validateAllWorkflows,
+  getClientIntegrations,
+  checkAdapterAvailability,
+} from './validation';
+
+// Custom validators
+export {
+  registerValidator,
+  getValidator,
+  hasValidator,
+  validationSuccess,
+  validationFailure,
+  validationWarning,
+} from './validators';
+
 // Types
 export type {
   OperationDefinition,
   AdapterDefinition,
+  AdapterRequirements,
   WorkflowAction,
   WorkflowTrigger,
   WorkflowContext,
@@ -40,6 +64,12 @@ export type {
   WorkflowExecutionResult,
   TriggerEmitResult,
   ActionExecutor,
+  ValidationResult,
+  ValidationError,
+  ValidationWarning,
+  ValidationErrorCode,
+  AdapterValidator,
+  WorkflowConfig,
 } from './types';
 
 // Payload schemas

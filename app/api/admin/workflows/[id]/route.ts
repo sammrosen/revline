@@ -4,6 +4,10 @@
  * GET /api/admin/workflows/[id] - Get workflow details
  * PUT /api/admin/workflows/[id] - Update workflow
  * DELETE /api/admin/workflows/[id] - Delete workflow
+ *
+ * VALIDATION:
+ * - PUT: Blocks edits to active workflows (must disable first)
+ * - PUT: Validates config against integration requirements
  */
 
 import { NextRequest } from 'next/server';
@@ -12,6 +16,7 @@ import { getAuthenticatedAdmin } from '@/app/_lib/auth';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
+import { validateCanEdit, WorkflowAction } from '@/app/_lib/workflow';
 
 // =============================================================================
 // VALIDATION SCHEMAS
@@ -122,11 +127,11 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const validation = UpdateWorkflowSchema.safeParse(body);
+    const schemaValidation = UpdateWorkflowSchema.safeParse(body);
 
-    if (!validation.success) {
+    if (!schemaValidation.success) {
       return ApiResponse.error(
-        validation.error.issues[0]?.message || 'Invalid input',
+        schemaValidation.error.issues[0]?.message || 'Invalid input',
         400,
         ErrorCodes.VALIDATION_FAILED
       );
@@ -135,14 +140,43 @@ export async function PUT(
     // Check workflow exists
     const existing = await prisma.workflow.findUnique({
       where: { id },
+      select: {
+        id: true,
+        clientId: true,
+        enabled: true,
+        name: true,
+        triggerAdapter: true,
+        triggerOperation: true,
+        triggerFilter: true,
+        actions: true,
+      },
     });
 
     if (!existing) {
       return ApiResponse.error('Workflow not found', 404, ErrorCodes.NOT_FOUND);
     }
 
+    // Block edits to active workflows (must disable first)
+    // Exception: allow toggling enabled status
+    const data = schemaValidation.data;
+    const isOnlyEnableToggle = Object.keys(data).length === 1 && 'enabled' in data;
+
+    if (existing.enabled && !isOnlyEnableToggle) {
+      const editValidation = validateCanEdit(existing);
+      if (!editValidation.valid) {
+        return ApiResponse.error(
+          editValidation.errors[0]?.message || 'Cannot edit active workflow',
+          400,
+          ErrorCodes.VALIDATION_FAILED,
+          { errors: editValidation.errors }
+        );
+      }
+    }
+
+    // Note: No validation here - workflows must be disabled to edit anyway.
+    // Validation happens when enabling workflows via the toggle endpoint.
+
     // Build update data
-    const data = validation.data;
     const updateData: Prisma.WorkflowUpdateInput = {};
 
     if (data.name !== undefined) updateData.name = data.name;

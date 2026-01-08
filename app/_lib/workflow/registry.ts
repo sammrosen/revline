@@ -28,6 +28,9 @@ export const CALENDLY_ADAPTER: AdapterDefinition = {
   id: 'calendly',
   name: 'Calendly',
   requiresIntegration: true,
+  requirements: {
+    secrets: ['Webhook Secret'], // Matches UI form naming
+  },
   triggers: {
     booking_created: {
       name: 'booking_created',
@@ -57,6 +60,9 @@ export const STRIPE_ADAPTER: AdapterDefinition = {
   id: 'stripe',
   name: 'Stripe',
   requiresIntegration: true,
+  requirements: {
+    secrets: ['Webhook Secret'], // API Key only needed for actions (none exist yet)
+  },
   triggers: {
     payment_succeeded: {
       name: 'payment_succeeded',
@@ -99,6 +105,10 @@ export const MAILERLITE_ADAPTER: AdapterDefinition = {
   id: 'mailerlite',
   name: 'MailerLite',
   requiresIntegration: true,
+  requirements: {
+    secrets: ['API Key'],
+    metaKeys: ['groups'],
+  },
   triggers: {},
   actions: {
     add_to_group: {
@@ -109,6 +119,9 @@ export const MAILERLITE_ADAPTER: AdapterDefinition = {
       paramsSchema: z.object({
         group: z.string().describe('Group key from client config'),
       }),
+      paramRequirements: {
+        group: 'meta.groups', // params.group must be a key in meta.groups
+      },
     },
     remove_from_group: {
       name: 'remove_from_group',
@@ -118,6 +131,9 @@ export const MAILERLITE_ADAPTER: AdapterDefinition = {
       paramsSchema: z.object({
         group: z.string().describe('Group key from client config'),
       }),
+      paramRequirements: {
+        group: 'meta.groups',
+      },
     },
     add_tag: {
       name: 'add_tag',
@@ -187,6 +203,10 @@ export const MANYCHAT_ADAPTER: AdapterDefinition = {
   id: 'manychat',
   name: 'ManyChat',
   requiresIntegration: true,
+  requirements: {
+    secrets: ['API Key'],
+    metaKeys: ['flows'],
+  },
   triggers: {
     dm_received: {
       name: 'dm_received',
@@ -211,6 +231,9 @@ export const MANYCHAT_ADAPTER: AdapterDefinition = {
       paramsSchema: z.object({
         flowId: z.string().describe('ManyChat flow ID'),
       }),
+      paramRequirements: {
+        flowId: 'meta.flows', // params.flowId must be a key in meta.flows
+      },
     },
     add_tag: {
       name: 'add_tag',

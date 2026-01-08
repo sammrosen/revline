@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, ClipboardList, Pencil } from 'lucide-react';
+import { ChevronDown, ChevronUp, ClipboardList, Pencil, AlertTriangle } from 'lucide-react';
 import { WorkflowFlow } from './workflow-flow';
 import { ExecutionsModal } from './executions-modal';
 
@@ -9,6 +9,15 @@ interface WorkflowAction {
   adapter: string;
   operation: string;
   params: Record<string, unknown>;
+}
+
+interface ValidationStatus {
+  /** Whether the workflow can be enabled */
+  canEnable: boolean;
+  /** Validation error messages */
+  errors: string[];
+  /** Validation warning messages */
+  warnings: string[];
 }
 
 interface WorkflowCardProps {
@@ -36,6 +45,8 @@ interface WorkflowCardProps {
   isToggling: boolean;
   /** Callback when edit is clicked */
   onEdit: () => void;
+  /** Validation status (optional - if not provided, no validation UI shown) */
+  validationStatus?: ValidationStatus;
 }
 
 /**
@@ -46,6 +57,7 @@ interface WorkflowCardProps {
  * - Toggle switch for enabling/disabling
  * - Edit and execution log modals
  * - Stats display
+ * - Validation status indicators
  */
 export function WorkflowCard({
   id,
@@ -59,9 +71,25 @@ export function WorkflowCard({
   onToggle,
   isToggling,
   onEdit,
+  validationStatus,
 }: WorkflowCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showExecutions, setShowExecutions] = useState(false);
+  const [showValidationTooltip, setShowValidationTooltip] = useState(false);
+
+  // Determine if toggle should be disabled
+  const cannotEnable = !enabled && validationStatus && !validationStatus.canEnable;
+  const toggleDisabled = isToggling || cannotEnable;
+  const hasWarnings = validationStatus?.warnings && validationStatus.warnings.length > 0;
+
+  // Build tooltip message
+  const getToggleTitle = () => {
+    if (isToggling) return 'Processing...';
+    if (cannotEnable) {
+      return validationStatus.errors[0] || 'Cannot enable workflow';
+    }
+    return enabled ? 'Disable workflow' : 'Enable workflow';
+  };
 
   return (
     <>
@@ -74,25 +102,55 @@ export function WorkflowCard({
         />
       )}
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden hover:border-zinc-700 transition-colors">
+      <div className={`bg-zinc-900 border rounded-lg overflow-hidden transition-colors ${
+        cannotEnable ? 'border-yellow-500/30' : 'border-zinc-800 hover:border-zinc-700'
+      }`}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/50">
           <div className="flex items-center gap-3 min-w-0">
             {/* Toggle Switch */}
-            <button
-              onClick={onToggle}
-              disabled={isToggling}
-              className={`w-10 h-5 rounded-full relative transition-colors flex-shrink-0 ${
-                enabled ? 'bg-green-500' : 'bg-zinc-700'
-              } ${isToggling ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-              title={enabled ? 'Disable workflow' : 'Enable workflow'}
-            >
-              <span
-                className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-                  enabled ? 'left-5' : 'left-0.5'
-                }`}
-              />
-            </button>
+            <div className="relative">
+              <button
+                onClick={onToggle}
+                disabled={toggleDisabled}
+                className={`w-10 h-5 rounded-full relative transition-colors flex-shrink-0 ${
+                  enabled ? 'bg-green-500' : cannotEnable ? 'bg-yellow-500/30' : 'bg-zinc-700'
+                } ${toggleDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                title={getToggleTitle()}
+              >
+                <span
+                  className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                    enabled ? 'left-5' : 'left-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Validation Warning Icon */}
+            {(cannotEnable || hasWarnings) && (
+              <div 
+                className="relative"
+                onMouseEnter={() => setShowValidationTooltip(true)}
+                onMouseLeave={() => setShowValidationTooltip(false)}
+              >
+                <AlertTriangle 
+                  className={`w-4 h-4 flex-shrink-0 ${
+                    cannotEnable ? 'text-yellow-500' : 'text-yellow-500/60'
+                  }`}
+                />
+                {/* Tooltip */}
+                {showValidationTooltip && (
+                  <div className="absolute left-0 top-6 z-50 w-64 p-2 bg-zinc-800 border border-zinc-700 rounded shadow-lg text-xs">
+                    {validationStatus?.errors.map((error, i) => (
+                      <div key={i} className="text-yellow-400 mb-1">{error}</div>
+                    ))}
+                    {validationStatus?.warnings.map((warning, i) => (
+                      <div key={i} className="text-zinc-400">{warning}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Name and Description */}
             <div className="min-w-0">

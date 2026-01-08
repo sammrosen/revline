@@ -25,22 +25,27 @@ const WorkflowActionSchema = z.object({
 
 const CreateWorkflowSchema = z.preprocess(
   (data) => {
-    // Normalize actions: convert null/undefined/missing to empty array for better error messages
+    // Normalize fields: convert null/undefined to appropriate defaults
     if (data && typeof data === 'object') {
       const normalized = data as Record<string, unknown>;
+      // Normalize actions
       if (!('actions' in normalized) || normalized.actions === null || normalized.actions === undefined) {
         normalized.actions = [];
+      }
+      // Normalize description: convert null to undefined (optional field)
+      if (normalized.description === null) {
+        normalized.description = undefined;
       }
       return normalized;
     }
     return data;
   },
   z.object({
-    clientId: z.string().uuid(),
+    clientId: z.string().uuid('Invalid client ID'),
     name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),
     description: z.string().max(500, 'Description must be 500 characters or less').optional(),
-    triggerAdapter: z.string().min(1, 'Trigger adapter is required'),
-    triggerOperation: z.string().min(1, 'Trigger operation is required'),
+    triggerAdapter: z.string().min(1, 'Trigger integration is required'),
+    triggerOperation: z.string().min(1, 'Trigger event is required'),
     triggerFilter: z.record(z.string(), z.unknown()).nullable().optional(),
     actions: z.array(WorkflowActionSchema).min(1, 'At least one action is required'),
     enabled: z.boolean().optional().default(true),

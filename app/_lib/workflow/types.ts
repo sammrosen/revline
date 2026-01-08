@@ -25,6 +25,25 @@ export interface OperationDefinition {
   payloadSchema: z.ZodSchema;
   /** Schema for configuration params (actions only, e.g., which group to add to) */
   paramsSchema?: z.ZodSchema;
+  /**
+   * Param-to-config mapping for validation
+   * Maps param name to config path where value must exist
+   * e.g., { group: 'meta.groups' } means params.group must be a key in integration.meta.groups
+   */
+  paramRequirements?: Record<string, string>;
+}
+
+/**
+ * Declarative requirements for an adapter
+ * Used by the central validator to check if client has proper config
+ */
+export interface AdapterRequirements {
+  /** Secret names that must exist in client_integrations.secrets */
+  secrets?: string[];
+  /** Meta keys that must exist (e.g., 'groups' for MailerLite) */
+  metaKeys?: string[];
+  /** Minimum health status required (default: any non-RED) */
+  minHealthStatus?: 'GREEN' | 'YELLOW';
 }
 
 /**
@@ -37,6 +56,8 @@ export interface AdapterDefinition {
   name: string;
   /** Whether client needs this integration configured to use it */
   requiresIntegration: boolean;
+  /** Declarative validation requirements */
+  requirements?: AdapterRequirements;
   /** Events this adapter can emit */
   triggers: Record<string, OperationDefinition>;
   /** Operations this adapter can execute */
@@ -215,5 +236,93 @@ export const CapturePayloadSchema = z.object({
 
 /** Lead stage values */
 export const LeadStageSchema = z.enum(['CAPTURED', 'BOOKED', 'PAID', 'DEAD']);
+
+// =============================================================================
+// VALIDATION TYPES
+// =============================================================================
+
+/**
+ * Validation error codes
+ */
+export type ValidationErrorCode =
+  | 'INTEGRATION_NOT_CONFIGURED'
+  | 'SECRET_NOT_CONFIGURED'
+  | 'META_KEY_MISSING'
+  | 'INTEGRATION_UNHEALTHY'
+  | 'PARAM_NOT_IN_CONFIG'
+  | 'WORKFLOW_ACTIVE'
+  | 'HAS_DEPENDENTS'
+  | 'INVALID_CONFIG';
+
+/**
+ * A single validation error
+ */
+export interface ValidationError {
+  /** Error code for programmatic handling */
+  code: ValidationErrorCode;
+  /** Human-readable error message */
+  message: string;
+  /** Which adapter caused the error */
+  adapter?: string;
+  /** Which operation caused the error */
+  operation?: string;
+  /** Which param caused the error */
+  param?: string;
+}
+
+/**
+ * A single validation warning (non-blocking)
+ */
+export interface ValidationWarning {
+  /** Warning code */
+  code: string;
+  /** Human-readable warning message */
+  message: string;
+  /** Optional suggestion for resolution */
+  suggestion?: string;
+}
+
+/**
+ * Result of a validation check
+ */
+export interface ValidationResult {
+  /** Whether validation passed (no errors) */
+  valid: boolean;
+  /** List of blocking errors */
+  errors: ValidationError[];
+  /** List of non-blocking warnings */
+  warnings: ValidationWarning[];
+}
+
+/**
+ * Interface for optional custom validators per adapter
+ * Use when declarative validation isn't sufficient
+ */
+export interface AdapterValidator {
+  /**
+   * Validate adapter-specific requirements
+   * @param clientId - Client ID to validate for
+   * @param operation - Operation name being validated
+   * @param params - Operation params
+   * @returns Validation result
+   */
+  validate(
+    clientId: string,
+    operation: string,
+    params: Record<string, unknown>
+  ): Promise<ValidationResult>;
+}
+
+/**
+ * Workflow configuration for validation
+ */
+export interface WorkflowConfig {
+  name: string;
+  triggerAdapter: string;
+  triggerOperation: string;
+  triggerFilter?: Record<string, unknown> | null;
+  actions: WorkflowAction[];
+  enabled?: boolean;
+}
 
 

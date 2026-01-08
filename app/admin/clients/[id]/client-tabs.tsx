@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { HealthStatus, LeadStage } from '@prisma/client';
 import { IntegrationActions } from './integration-actions';
 import { AddIntegrationForm } from './add-integration-form';
 import { LeadsView } from './leads-view';
 import MailerLiteInsights from './mailerlite-insights';
 import { WorkflowList } from './workflows/workflow-list';
+import { Workflow as WorkflowIcon } from 'lucide-react';
 
 type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'insights';
 
@@ -71,6 +72,7 @@ interface ClientTabsProps {
   workflows: Workflow[];
   configuredIntegrations: string[];
   mailerliteGroups?: Record<string, { id: string; name: string }>;
+  stripeProducts?: Record<string, string>;
 }
 
 // Parse secrets from JSON, returning only id and name (never values)
@@ -107,8 +109,44 @@ function formatDate(date: Date | string | null) {
   }).format(new Date(date));
 }
 
-export function ClientTabs({ clientId, integrations, events, leads, workflows, configuredIntegrations, mailerliteGroups = {} }: ClientTabsProps) {
+interface IntegrationDependency {
+  type: string;
+  usedBy: Array<{ workflowId: string; workflowName: string }>;
+}
+
+export function ClientTabs({ clientId, integrations, events, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {} }: ClientTabsProps) {
   const [activeTab, setActiveTab] = useState<TabType>('workflows');
+  const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
+
+  // Fetch integration dependencies when integrations tab is active
+  const fetchDependencies = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/admin/clients/${clientId}/dependency-graph`);
+      if (response.ok) {
+        const data = await response.json();
+        const graph = data.data?.graph;
+        if (graph?.integrations) {
+          setIntegrationDeps(graph.integrations);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch dependencies:', error);
+    }
+  }, [clientId]);
+
+  useEffect(() => {
+    if (activeTab === 'integrations') {
+      fetchDependencies();
+    }
+  }, [activeTab, fetchDependencies]);
+
+  // Helper to get dependent workflows for an integration
+  const getDependentWorkflows = (integrationType: string) => {
+    const key = integrationType.toLowerCase();
+    const deps = integrationDeps[key];
+    if (!deps?.usedBy?.length) return [];
+    return deps.usedBy.map(u => ({ id: u.workflowId, name: u.workflowName }));
+  };
 
   const tabs: { id: TabType; label: string; count?: number }[] = [
     { id: 'workflows', label: 'Workflows', count: workflows.length },
@@ -159,6 +197,7 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
               workflows={workflows}
               configuredIntegrations={configuredIntegrations}
               mailerliteGroups={mailerliteGroups}
+              stripeProducts={stripeProducts}
             />
           </div>
         )}
@@ -166,63 +205,75 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
         {activeTab === 'integrations' && (
           <div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-              {integrations.map((integration) => (
-                <div
-                  key={integration.id}
-                  className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex flex-col gap-4 relative"
-                >
-                  {/* Header: Title and Actions */}
-                  <div className="flex flex-row justify-between items-center gap-4 relative">
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="font-bold tracking-tight text-white">{integration.integration}</span>
-                      <HealthBadge status={integration.healthStatus} />
-                    </div>
-                    <div className="flex justify-end">
-                      <IntegrationActions
-                        integration={{
-                          id: integration.id,
-                          integration: integration.integration,
-                          meta: integration.meta,
-                          secrets: parseSecrets(integration.secrets),
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Body: Last seen and JSON Toggle row */}
-                  <details className="group relative">
-                    <summary className="flex items-center justify-between text-zinc-400 border-t border-zinc-800/50 pt-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-                      <div className="text-[10px] sm:text-xs">
-                        <span className="text-zinc-500 uppercase tracking-widest text-[9px] mr-1">Last seen:</span>
-                        {formatDate(integration.lastSeenAt)}
+              {integrations.map((integration) => {
+                const dependentWorkflows = getDependentWorkflows(integration.integration);
+                const usedByCount = dependentWorkflows.length;
+                
+                return (
+                  <div
+                    key={integration.id}
+                    className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex flex-col gap-4 relative"
+                  >
+                    {/* Header: Title and Actions */}
+                    <div className="flex flex-row justify-between items-center gap-4 relative">
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-bold tracking-tight text-white">{integration.integration}</span>
+                        <HealthBadge status={integration.healthStatus} />
+                        {usedByCount > 0 && (
+                          <span className="flex items-center gap-1 px-2 py-0.5 bg-zinc-800 text-zinc-400 text-xs rounded" title={dependentWorkflows.map(w => w.name).join(', ')}>
+                            <WorkflowIcon className="w-3 h-3" />
+                            {usedByCount}
+                          </span>
+                        )}
                       </div>
-                      
+                      <div className="flex justify-end">
+                        <IntegrationActions
+                          integration={{
+                            id: integration.id,
+                            integration: integration.integration,
+                            meta: integration.meta,
+                            secrets: parseSecrets(integration.secrets),
+                          }}
+                          dependentWorkflows={dependentWorkflows}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Body: Last seen and JSON Toggle row */}
+                    <details className="group relative">
+                      <summary className="flex items-center justify-between text-zinc-400 border-t border-zinc-800/50 pt-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                        <div className="text-[10px] sm:text-xs">
+                          <span className="text-zinc-500 uppercase tracking-widest text-[9px] mr-1">Last seen:</span>
+                          {formatDate(integration.lastSeenAt)}
+                        </div>
+                        
+                        {integration.meta != null && (
+                          <div className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1.5 py-1">
+                            <span className="font-medium uppercase tracking-wider text-[9px]">JSON</span>
+                            <svg 
+                              className="w-2.5 h-2.5 transition-transform duration-200 group-open:rotate-180 text-zinc-600 group-hover:text-zinc-400" 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        )}
+                      </summary>
+
                       {integration.meta != null && (
-                        <div className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1.5 py-1">
-                          <span className="font-medium uppercase tracking-wider text-[9px]">JSON</span>
-                          <svg 
-                            className="w-2.5 h-2.5 transition-transform duration-200 group-open:rotate-180 text-zinc-600 group-hover:text-zinc-400" 
-                            fill="none" 
-                            stroke="currentColor" 
-                            viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" />
-                          </svg>
+                        <div className="mt-4 border-t border-zinc-800/50 pt-3 overflow-hidden">
+                          <pre className="text-[10px] sm:text-xs bg-zinc-950 border border-zinc-800 p-3 rounded-md overflow-x-auto max-h-64 font-mono text-zinc-400 leading-relaxed scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+                            {JSON.stringify(integration.meta, null, 2)}
+                          </pre>
                         </div>
                       )}
-                    </summary>
-
-                    {integration.meta != null && (
-                      <div className="mt-4 border-t border-zinc-800/50 pt-3 overflow-hidden">
-                        <pre className="text-[10px] sm:text-xs bg-zinc-950 border border-zinc-800 p-3 rounded-md overflow-x-auto max-h-64 font-mono text-zinc-400 leading-relaxed scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
-                          {JSON.stringify(integration.meta, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                  </details>
-                </div>
-              ))}
+                    </details>
+                  </div>
+                );
+              })}
             </div>
             <div className="mt-4">
               <AddIntegrationForm clientId={clientId} />
