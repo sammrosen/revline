@@ -21,8 +21,9 @@ Transform your single-client landing page system into a **multi-client managed s
 ✅ **Failures visible in one place** - Admin dashboard shows all issues  
 ✅ **Can pause a client instantly** - One-click execution blocking  
 ✅ **Health monitoring runs every 15min** - Proactive failure detection  
-✅ **Can onboard new client in <2 hours** - Streamlined process
-✅ **Full funnel tracking** - Captured → Booked → Paid
+✅ **Can onboard new client in <2 hours** - Streamlined process  
+✅ **Full funnel tracking** - Captured → Booked → Paid  
+✅ **Decoupled workflows** - Configurable trigger → action automation
 
 ---
 
@@ -32,6 +33,7 @@ Transform your single-client landing page system into a **multi-client managed s
 
 - [Setup Guide](./SETUP.md) - Get the system running locally
 - [Architecture](./ARCHITECTURE.md) - How the system works
+- [Workflow Engine](./WORKFLOW-ENGINE.md) - Configurable automation system
 - [Operations](./OPERATIONS.md) - Daily usage, client onboarding, troubleshooting
 - [Environment Variables](./ENV.md) - Configuration reference
 
@@ -82,6 +84,17 @@ All client secrets stored encrypted in Postgres, decrypted at runtime only.
 | Stripe | ✅ Complete | Payment webhooks, customer tracking |
 | Calendly | ✅ Complete | Booking webhooks, stage tracking |
 | ManyChat | ✅ Docs | Traffic driver (no backend needed) |
+
+### Workflow Engine
+
+All integrations are connected through the **Workflow Engine** - a configurable automation system:
+
+- **Triggers:** Events that start workflows (payments, bookings, email captures)
+- **Actions:** Operations workflows can execute (add to group, update lead stage)
+- **Decoupled:** Add new integrations without modifying existing code
+- **Configurable:** Different actions per client without code changes
+
+See [Workflow Engine Documentation](./WORKFLOW-ENGINE.md) for details.
 
 ---
 

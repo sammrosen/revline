@@ -16,7 +16,7 @@ All core features implemented and tested. Ready for production deployment.
 
 **Status:** Complete  
 **Files:**
-- `prisma/schema.prisma` - 6 tables with proper relations
+- `prisma/schema.prisma` - 8 tables with proper relations
 - `app/_lib/db.ts` - Prisma client singleton
 
 **Tables:**
@@ -26,6 +26,8 @@ All core features implemented and tested. Ready for production deployment.
 - ✅ `events` - Append-only event ledger
 - ✅ `admins` - Single admin account with Argon2 hash
 - ✅ `admin_sessions` - Server-side session management
+- ✅ `workflows` - Configurable automation workflows
+- ✅ `workflow_executions` - Execution history and audit trail
 
 ---
 
@@ -168,6 +170,41 @@ All core features implemented and tested. Ready for production deployment.
 - ✅ Event logging (`calendly_booking_created`, `calendly_booking_canceled`)
 - ✅ Integration health tracking
 
+---
+
+### ✅ Part 11: Workflow Engine
+
+**Status:** Complete  
+**Files:**
+- `app/_lib/workflow/types.ts` - Type definitions
+- `app/_lib/workflow/registry.ts` - Adapter definitions
+- `app/_lib/workflow/engine.ts` - Execution engine
+- `app/_lib/workflow/executors/` - Action executors
+- `app/api/admin/workflows/` - Workflow CRUD APIs
+- `prisma/schema.prisma` - Workflow and WorkflowExecution models
+
+**Features:**
+- ✅ Decoupled adapter architecture (triggers + actions)
+- ✅ Per-client configurable workflows
+- ✅ Trigger filter conditions for conditional execution
+- ✅ Sequential action execution with stop-on-error
+- ✅ Execution history and audit trail
+- ✅ Admin API for CRUD operations
+- ✅ Registry API for building UI forms
+
+**Adapters Implemented:**
+- ✅ `calendly` - booking_created, booking_canceled triggers
+- ✅ `stripe` - payment_succeeded, subscription_created triggers
+- ✅ `mailerlite` - add_to_group, remove_from_group, add_tag actions
+- ✅ `revline` - create_lead, update_lead_stage, emit_event actions
+- ✅ `manychat` - stub for future DM automation
+
+**See:** [Workflow Engine Documentation](./WORKFLOW-ENGINE.md)
+
+---
+
+### Health Monitoring (continued)
+
 **Features:**
 - ✅ Hard-fail authentication with `Authorization: Bearer CRON_SECRET`
 - ✅ Integration silence detection (no events in 4+ hours)
@@ -206,12 +243,14 @@ All core features implemented and tested. Ready for production deployment.
 - ✅ `docs/README.md` - System overview
 - ✅ `docs/SETUP.md` - Complete setup guide (local + production)
 - ✅ `docs/ARCHITECTURE.md` - System design and technical details
+- ✅ `docs/WORKFLOW-ENGINE.md` - Workflow engine documentation
 - ✅ `docs/OPERATIONS.md` - Daily usage and troubleshooting
 - ✅ `docs/STATUS.md` - This file
 - ✅ `docs/workflows/PRE-PUSH.md` - Pre-push routine
 - ✅ `docs/workflows/CLIENT-ONBOARDING.md` - Client onboarding protocol
 - ✅ `docs/workflows/LANDING-PAGE-CREATION.md` - Landing page workflow
 - ✅ `docs/workflows/MANYCHAT-SETUP.md` - ManyChat setup guide
+- ✅ `docs/plans/WORKFLOW-FUTURE-CONSIDERATIONS.md` - Future enhancements
 - ✅ `env.example` - Environment variable template
 
 ### Configuration
@@ -240,6 +279,8 @@ All core features implemented and tested. Ready for production deployment.
 | Can pause a client instantly | ✅ Pause/unpause in admin UI |
 | Health check runs every 15min | ✅ Vercel cron configured |
 | Can onboard new client in <2 hours | ✅ Streamlined admin UI |
+| Decoupled automation workflows | ✅ Workflow engine with configurable actions |
+| Extensible integration framework | ✅ Adapter registry for triggers + actions |
 
 **Verdict: Ready for cold email outreach** ✅
 

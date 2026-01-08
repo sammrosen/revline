@@ -2,8 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
+import { validateCanDeleteIntegration } from '@/app/_lib/workflow';
 
-// DELETE /api/admin/integrations/[id] - Delete an integration
+/**
+ * DELETE /api/admin/integrations/[id] - Delete an integration
+ *
+ * VALIDATION:
+ * - Blocks deletion if any workflows depend on this integration
+ * - Returns list of dependent workflows if blocked
+ */
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -24,6 +31,23 @@ export async function DELETE(
 
     if (!integration) {
       return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
+    }
+
+    // Check for dependent workflows before deleting
+    const validation = await validateCanDeleteIntegration(
+      integration.clientId,
+      integration.integration
+    );
+
+    if (!validation.valid) {
+      return NextResponse.json(
+        {
+          error: validation.errors[0]?.message || 'Cannot delete integration',
+          code: 'HAS_DEPENDENTS',
+          errors: validation.errors,
+        },
+        { status: 400 }
+      );
     }
 
     await prisma.clientIntegration.delete({

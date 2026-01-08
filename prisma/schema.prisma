@@ -22,9 +22,11 @@ model Client {
   timezone  String       @default("America/New_York") // IANA timezone for health check business hours
   createdAt DateTime     @default(now()) @map("created_at")
 
-  integrations ClientIntegration[]
-  leads        Lead[]
-  events       Event[]
+  integrations       ClientIntegration[]
+  leads              Lead[]
+  events             Event[]
+  workflows          Workflow[]
+  workflowExecutions WorkflowExecution[]
 
   @@map("clients")
 }
@@ -126,6 +128,7 @@ enum EventSystem {
   CALENDLY
   MANYCHAT
   CRON
+  WORKFLOW
 }
 
 // =============================================================================
@@ -156,4 +159,68 @@ model AdminSession {
 
   @@index([expiresAt])
   @@map("admin_sessions")
+}
+
+// =============================================================================
+// WORKFLOW ENGINE
+// =============================================================================
+
+model Workflow {
+  id          String  @id @default(uuid())
+  clientId    String  @map("client_id")
+  name        String
+  description String?
+  enabled     Boolean @default(true)
+
+  // Trigger configuration
+  triggerAdapter   String @map("trigger_adapter") // 'calendly', 'stripe', 'revline', etc.
+  triggerOperation String @map("trigger_operation") // 'booking_created', 'payment_succeeded', etc.
+  triggerFilter    Json?  @map("trigger_filter") // Optional: { "payload.product": "fit1" }
+
+  // Actions to execute (ordered array of WorkflowAction)
+  actions Json // [{ adapter, operation, params }]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  client     Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  executions WorkflowExecution[]
+
+  @@index([clientId, enabled])
+  @@index([clientId, triggerAdapter, triggerOperation])
+  @@map("workflows")
+}
+
+model WorkflowExecution {
+  id         String   @id @default(uuid())
+  workflowId String   @map("workflow_id")
+  clientId   String   @map("client_id")
+
+  // Trigger info (denormalized for history)
+  triggerAdapter   String @map("trigger_adapter")
+  triggerOperation String @map("trigger_operation")
+  triggerPayload   Json   @map("trigger_payload")
+
+  // Execution result
+  status        WorkflowExecutionStatus @default(RUNNING)
+  actionResults Json?                   @map("action_results") // Array of { action, result }
+  error         String?
+
+  // Timing
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  client   Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, startedAt])
+  @@index([workflowId, startedAt])
+  @@index([status])
+  @@map("workflow_executions")
+}
+
+enum WorkflowExecutionStatus {
+  RUNNING
+  COMPLETED
+  FAILED
 }

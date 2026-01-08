@@ -1,19 +1,15 @@
 /**
  * Webhook Service
  * 
- * Orchestrates webhook processing for payment and booking events.
- * Handles lead updates, event emission, and dispatches to integrations.
+ * @deprecated This service is deprecated in favor of the workflow engine.
+ * Use emitTrigger() from '@/app/_lib/workflow' instead.
  * 
- * STANDARDS:
- * - Webhook verification is done in the adapter before calling this service
- * - Always emits events for debugging
- * - Uses action dispatcher for integration routing
- * - Returns 200 for partial failures (to prevent retries)
+ * This file is kept for backwards compatibility.
+ * New code should use emitTrigger() directly.
  */
 
 import { emitEvent, EventSystem, upsertLead, updateLeadStage } from '@/app/_lib/event-logger';
-import { dispatchAction } from '@/app/_lib/actions/dispatcher';
-import { RevLineAction } from '@/app/_lib/actions';
+import { emitTrigger } from '@/app/_lib/workflow';
 import { MailerLiteAdapter } from '@/app/_lib/integrations/mailerlite.adapter';
 import { CheckoutData } from '@/app/_lib/integrations/stripe.adapter';
 import { IntegrationResult, WebhookResult } from '@/app/_lib/types';
@@ -37,28 +33,21 @@ export interface ProcessBookingParams {
 }
 
 /**
- * Service for handling webhook processing
+ * @deprecated Use emitTrigger() from '@/app/_lib/workflow' instead.
  * 
- * @example
- * // In route handler after verifying webhook:
- * const result = await WebhookService.processStripeCheckout({
- *   clientId: client.id,
- *   checkoutData: {
- *     email: 'user@example.com',
- *     name: 'John',
- *     program: 'premium',
- *   },
- * });
+ * Service for handling webhook processing.
+ * This is a compatibility wrapper around the workflow engine.
  */
 export class WebhookService {
   /**
-   * Process a Stripe checkout.session.completed event
+   * @deprecated Use emitTrigger() instead:
    * 
-   * Flow:
-   * 1. Create/update lead record and mark as PAID
-   * 2. Emit payment_succeeded event
-   * 3. Dispatch 'lead.paid' action to all integrations
-   * 4. Return result
+   * ```typescript
+   * await emitTrigger(clientId, {
+   *   adapter: 'stripe',
+   *   operation: 'payment_succeeded',
+   * }, { email, name, amount, product });
+   * ```
    */
   static async processStripeCheckout(
     params: ProcessCheckoutParams
@@ -96,37 +85,33 @@ export class WebhookService {
       success: true,
     });
 
-    // Step 3: Dispatch 'lead.paid' action to all integrations
-    // Use program-specific action if program is specified
-    const action: RevLineAction = program ? `lead.paid:${program}` : 'lead.paid';
-    
-    const dispatchResult = await dispatchAction(clientId, action, {
-      email,
-      name,
-      program,
-      amount: amountTotal,
-    });
+    // Step 3: Emit trigger to workflow engine
+    const result = await emitTrigger(
+      clientId,
+      { adapter: 'stripe', operation: 'payment_succeeded' },
+      {
+        email,
+        name,
+        amount: amountTotal,
+        product: program,
+      }
+    );
 
-    // Check for warnings (integration failures)
-    const failedResults = dispatchResult.results.filter(r => !r.result.success);
+    // Check for warnings (workflow failures)
+    const failedResults = result.executions.filter(e => e.status === 'failed');
     let warning: string | undefined;
     
     if (failedResults.length > 0) {
-      warning = failedResults
-        .map(r => `${r.integration}: ${r.result.error}`)
-        .join('; ');
+      warning = failedResults.map(e => e.error).join('; ');
       
-      console.warn('Some integrations failed for lead.paid:', {
+      console.warn('Some workflows failed for stripe payment:', {
         clientId,
         leadId,
-        failures: failedResults.map(r => ({
-          integration: r.integration,
-          error: r.result.error,
-        })),
+        failures: failedResults,
       });
     }
 
-    // Step 4: Return success (payment processed, integrations may have warnings)
+    // Step 4: Return success (payment processed, workflows may have warnings)
     return {
       success: true,
       data: {
@@ -139,13 +124,7 @@ export class WebhookService {
   }
 
   /**
-   * Process a Calendly booking created event
-   * 
-   * Flow:
-   * 1. Create/update lead record and mark as BOOKED
-   * 2. Emit booking_created event
-   * 3. Dispatch 'lead.booked' action to all integrations
-   * 4. Return result
+   * @deprecated Use emitTrigger() instead
    */
   static async processCalendlyBooking(
     params: ProcessBookingParams
@@ -182,21 +161,19 @@ export class WebhookService {
       success: true,
     });
 
-    // Step 3: Dispatch 'lead.booked' action to all integrations
-    const dispatchResult = await dispatchAction(clientId, 'lead.booked', {
-      email,
-      name,
-      metadata: { eventType },
-    });
+    // Step 3: Emit trigger to workflow engine
+    const result = await emitTrigger(
+      clientId,
+      { adapter: 'calendly', operation: 'booking_created' },
+      { email, name, eventType }
+    );
 
     // Check for warnings
-    const failedResults = dispatchResult.results.filter(r => !r.result.success);
+    const failedResults = result.executions.filter(e => e.status === 'failed');
     let warning: string | undefined;
     
     if (failedResults.length > 0) {
-      warning = failedResults
-        .map(r => `${r.integration}: ${r.result.error}`)
-        .join('; ');
+      warning = failedResults.map(e => e.error).join('; ');
     }
 
     // Step 4: Return success
@@ -212,13 +189,7 @@ export class WebhookService {
   }
 
   /**
-   * Process a Calendly booking canceled event
-   * 
-   * Flow:
-   * 1. Update lead stage back to CAPTURED
-   * 2. Emit booking_canceled event
-   * 3. Dispatch 'lead.canceled' action to all integrations
-   * 4. Return result
+   * @deprecated Use emitTrigger() instead
    */
   static async processCalendlyCancellation(
     params: ProcessBookingParams
@@ -255,20 +226,19 @@ export class WebhookService {
       success: true,
     });
 
-    // Step 3: Dispatch 'lead.canceled' action to all integrations
-    const dispatchResult = await dispatchAction(clientId, 'lead.canceled', {
-      email,
-      name,
-    });
+    // Step 3: Emit trigger to workflow engine
+    const result = await emitTrigger(
+      clientId,
+      { adapter: 'calendly', operation: 'booking_canceled' },
+      { email, name }
+    );
 
     // Check for warnings
-    const failedResults = dispatchResult.results.filter(r => !r.result.success);
+    const failedResults = result.executions.filter(e => e.status === 'failed');
     let warning: string | undefined;
     
     if (failedResults.length > 0) {
-      warning = failedResults
-        .map(r => `${r.integration}: ${r.result.error}`)
-        .join('; ');
+      warning = failedResults.map(e => e.error).join('; ');
     }
 
     // Step 4: Return success
@@ -293,8 +263,8 @@ export class WebhookService {
     const mailerliteAdapter = await MailerLiteAdapter.forClient(clientId);
 
     return {
-      stripe: true, // If we get here, Stripe is configured (verified in route)
-      mailerlite: !!mailerliteAdapter && mailerliteAdapter.hasRoutingFor('lead.paid'),
+      stripe: true, // If we get here, Stripe is configured
+      mailerlite: !!mailerliteAdapter && mailerliteAdapter.hasGroups(),
     };
   }
 }

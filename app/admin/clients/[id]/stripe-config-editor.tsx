@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 
 /**
  * Stripe meta configuration
+ * Uses productMap to match the official StripeMeta type
  */
 interface StripeMeta {
-  products: Record<string, string>; // productId -> productName
+  productMap: Record<string, string>; // productId -> productName
 }
 
 interface StripeConfigEditorProps {
@@ -19,7 +20,7 @@ interface StripeConfigEditorProps {
  * Default empty configuration
  */
 const DEFAULT_CONFIG: StripeMeta = {
-  products: {},
+  productMap: {},
 };
 
 /**
@@ -31,8 +32,9 @@ function parseMeta(value: string): StripeMeta {
   }
   try {
     const parsed = JSON.parse(value);
+    // Support both old 'products' and new 'productMap' field for migration
     return {
-      products: parsed.products || {},
+      productMap: parsed.productMap || parsed.products || {},
     };
   } catch {
     return DEFAULT_CONFIG;
@@ -84,7 +86,7 @@ export function StripeConfigEditor({
     try {
       const parsed = JSON.parse(jsonText);
       setMeta({
-        products: parsed.products || {},
+        productMap: parsed.productMap || parsed.products || {},
       });
       setIsJsonMode(false);
       setJsonError(null);
@@ -112,8 +114,8 @@ export function StripeConfigEditor({
     
     setMeta(prev => ({
       ...prev,
-      products: {
-        ...prev.products,
+      productMap: {
+        ...prev.productMap,
         [newProductId.trim()]: newProductName.trim(),
       },
     }));
@@ -128,9 +130,9 @@ export function StripeConfigEditor({
     if (deleteProductConfirm !== expectedText) return;
     
     setMeta(prev => {
-      const newProducts = { ...prev.products };
-      delete newProducts[productId];
-      return { ...prev, products: newProducts };
+      const newProductMap = { ...prev.productMap };
+      delete newProductMap[productId];
+      return { ...prev, productMap: newProductMap };
     });
     
     setDeleteProductId(null);
@@ -141,14 +143,14 @@ export function StripeConfigEditor({
   function handleUpdateProduct(productId: string, newName: string) {
     setMeta(prev => ({
       ...prev,
-      products: {
-        ...prev.products,
+      productMap: {
+        ...prev.productMap,
         [productId]: newName,
       },
     }));
   }
 
-  const productEntries = Object.entries(meta.products);
+  const productEntries = Object.entries(meta.productMap);
   const displayError = externalError || jsonError;
 
   // JSON Mode
@@ -328,21 +330,5 @@ export function StripeConfigEditor({
       )}
     </div>
   );
-}
-
-/**
- * Extract product names from Stripe meta JSON string
- * Used by MailerLite editor to populate the program dropdown
- */
-export function getStripeProductNames(metaJson: string): string[] {
-  try {
-    const meta = JSON.parse(metaJson);
-    if (meta.products && typeof meta.products === 'object') {
-      return Object.values(meta.products) as string[];
-    }
-  } catch {
-    // Invalid JSON
-  }
-  return [];
 }
 

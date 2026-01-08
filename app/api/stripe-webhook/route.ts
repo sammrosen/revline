@@ -1,28 +1,25 @@
 /**
  * Stripe Webhook Endpoint
- * 
+ *
  * POST /api/stripe-webhook?source={clientSlug}
- * 
+ *
  * Processes Stripe webhooks for payment events.
- * Verifies signature, extracts data, and triggers MailerLite sync.
- * 
+ * Verifies signature and emits triggers to the workflow engine.
+ *
  * STANDARDS:
  * - Route only handles HTTP concerns
  * - Webhook verification via StripeAdapter
- * - Business logic delegated to WebhookService
+ * - Business logic delegated to workflow engine
  * - Always returns 200 for partial failures (prevents retries)
  */
 
 import { NextRequest } from 'next/server';
 import { getActiveClient } from '@/app/_lib/client-gate';
 import { StripeAdapter } from '@/app/_lib/integrations/stripe.adapter';
-import { WebhookService } from '@/app/_lib/services';
+import { emitTrigger } from '@/app/_lib/workflow';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
-import { 
-  rateLimitByClient,
-  getRateLimitHeaders,
-} from '@/app/_lib/middleware';
+import { rateLimitByClient, getRateLimitHeaders } from '@/app/_lib/middleware';
 
 export async function POST(request: NextRequest) {
   // 1. Get source from query params
@@ -43,8 +40,8 @@ export async function POST(request: NextRequest) {
   const rateLimit = rateLimitByClient(clientSlug);
   if (!rateLimit.allowed) {
     // For webhooks, still return 200 to prevent retries
-    return ApiResponse.webhookAck({ 
-      warning: 'Rate limited - retry later' 
+    return ApiResponse.webhookAck({
+      warning: 'Rate limited - retry later',
     });
   }
 
@@ -53,23 +50,23 @@ export async function POST(request: NextRequest) {
     const client = await getActiveClient(clientSlug);
     if (!client) {
       // Return 200 to prevent Stripe retries
-      return ApiResponse.webhookAck({ 
-        warning: 'Client unavailable' 
+      return ApiResponse.webhookAck({
+        warning: 'Client unavailable',
       });
     }
 
     // 4. Load Stripe adapter
     const stripeAdapter = await StripeAdapter.forClient(client.id);
     if (!stripeAdapter) {
-      return ApiResponse.webhookAck({ 
-        warning: 'Stripe not configured' 
+      return ApiResponse.webhookAck({
+        warning: 'Stripe not configured',
       });
     }
 
     // Check if Stripe API key is available
     if (!stripeAdapter.hasApiKey()) {
-      return ApiResponse.webhookAck({ 
-        warning: 'Stripe API key not configured' 
+      return ApiResponse.webhookAck({
+        warning: 'Stripe API key not configured',
       });
     }
 
@@ -85,7 +82,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 6. Verify webhook and process checkout
+    // 6. Verify webhook and extract checkout data
     const result = await stripeAdapter.processCheckoutWebhook(body, signature);
 
     if (!result.success) {
@@ -110,17 +107,41 @@ export async function POST(request: NextRequest) {
       return ApiResponse.webhookAck({ processed: false });
     }
 
-    // 8. Process checkout via service
-    const checkoutResult = await WebhookService.processStripeCheckout({
-      clientId: client.id,
-      checkoutData: result.data,
-    });
+    // 8. Emit trigger to workflow engine
+    const checkoutData = result.data;
+    const triggerResult = await emitTrigger(
+      client.id,
+      { adapter: 'stripe', operation: 'payment_succeeded' },
+      {
+        email: checkoutData.email,
+        name: checkoutData.name,
+        amount: checkoutData.amountTotal,
+        currency: checkoutData.currency || 'usd',
+        product: checkoutData.program,
+      }
+    );
+
+    // Check for workflow failures
+    const hasFailure = triggerResult.executions.some((e) => e.status === 'failed');
+    let warning: string | undefined;
+
+    if (hasFailure) {
+      warning = triggerResult.executions
+        .filter((e) => e.status === 'failed')
+        .map((e) => e.error)
+        .join('; ');
+
+      console.warn('Some workflows failed for Stripe payment:', {
+        clientId: client.id,
+        email: checkoutData.email,
+        failures: warning,
+      });
+    }
 
     // 9. Return response with rate limit headers
     const response = ApiResponse.webhookAck({
       processed: true,
-      leadId: checkoutResult.data?.leadId,
-      warning: checkoutResult.data?.warning,
+      warning,
     });
 
     const headers = getRateLimitHeaders(rateLimit);
@@ -129,7 +150,6 @@ export async function POST(request: NextRequest) {
     }
 
     return response;
-
   } catch (error) {
     console.error('Stripe webhook error:', {
       clientSlug,

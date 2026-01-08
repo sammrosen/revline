@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { testPrisma, createTestClient, createTestIntegration, getEventsForClient } from '../setup';
+import { testPrisma, createTestClient, createTestIntegration, createTestWorkflow, getEventsForClient } from '../setup';
 
 // Mock the MailerLite API calls (we don't want to hit real API in tests)
 vi.mock('@/app/_lib/integrations/mailerlite.adapter', async () => {
@@ -32,7 +32,7 @@ vi.mock('@/app/_lib/integrations/mailerlite.adapter', async () => {
         }
         
         // Parse meta to check configuration
-        const meta = integration.meta as { groups?: Record<string, unknown>; routing?: Record<string, string> };
+        const meta = integration.meta as { groups?: Record<string, unknown> };
         
         // Return mock adapter
         return {
@@ -43,7 +43,6 @@ vi.mock('@/app/_lib/integrations/mailerlite.adapter', async () => {
             data: { subscriberId: 'mock-subscriber-123', message: 'Subscribed' },
           }),
           hasGroups: () => !!(meta?.groups && Object.keys(meta.groups).length > 0),
-          hasRoutingFor: (action: string) => !!(meta?.routing && action in meta.routing),
           getGroup: (key: string) => meta?.groups?.[key] || null,
         };
       }),
@@ -125,9 +124,21 @@ describe('Capture Service Integration', () => {
         groups: {
           welcome: { id: 'test-group', name: 'Welcome' },
         },
-        routing: {
-          'lead.captured': 'welcome',
-        },
+      });
+      
+      // Create a workflow that adds to MailerLite group when email is captured
+      await createTestWorkflow(client.id, {
+        name: 'Test MailerLite Workflow',
+        enabled: true,
+        triggerAdapter: 'revline',
+        triggerOperation: 'email_captured',
+        actions: [
+          {
+            adapter: 'mailerlite',
+            operation: 'add_to_group',
+            params: { group: 'welcome' },
+          },
+        ],
       });
       
       await CaptureService.captureEmail({

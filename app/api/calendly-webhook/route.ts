@@ -1,24 +1,38 @@
+/**
+ * Calendly Webhook Endpoint
+ *
+ * POST /api/calendly-webhook
+ *
+ * Processes Calendly webhooks for booking events.
+ * Verifies signature and emits triggers to the workflow engine.
+ *
+ * STANDARDS:
+ * - Route only handles HTTP concerns and signature verification
+ * - Business logic delegated to workflow engine
+ * - Always returns 200 after signature verification to prevent retries
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac } from 'crypto';
 import { getClientBySlug } from '@/app/_lib/client-gate';
 import { getClientIntegration, touchIntegration } from '@/app/_lib/integrations';
-import { emitEvent, upsertLead, updateLeadStage } from '@/app/_lib/event-logger';
-import { IntegrationType, EventSystem } from '@prisma/client';
+import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
+import { emitTrigger } from '@/app/_lib/workflow';
+import { IntegrationType } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text();
     const signature = request.headers.get('calendly-webhook-signature');
-    
+
     if (!signature) {
       console.error('[CALENDLY] No signature header');
       return NextResponse.json({ error: 'No signature' }, { status: 401 });
     }
 
     const payload = JSON.parse(body);
-    
+
     // Extract client identifier from UTM source
-    // Calendly includes UTM params in the tracking object
     const utmSource = payload.payload?.tracking?.utm_source;
     if (!utmSource) {
       console.error('[CALENDLY] No utm_source in webhook payload');
@@ -41,25 +55,36 @@ export async function POST(request: NextRequest) {
         system: EventSystem.CALENDLY,
         eventType: 'execution_blocked',
         success: false,
-        errorMessage: `Client ${utmSource} is paused`
+        errorMessage: `Client ${utmSource} is paused`,
       });
       return NextResponse.json({ error: 'Client paused' }, { status: 403 });
     }
 
     // Get Calendly integration config
-    const calendlyIntegration = await getClientIntegration(client.id, IntegrationType.CALENDLY);
+    const calendlyIntegration = await getClientIntegration(
+      client.id,
+      IntegrationType.CALENDLY
+    );
     if (!calendlyIntegration) {
-      console.error(`[CALENDLY] Calendly integration not configured for client: ${utmSource}`);
+      console.error(
+        `[CALENDLY] Calendly integration not configured for client: ${utmSource}`
+      );
       return NextResponse.json({ error: 'Calendly not configured' }, { status: 404 });
     }
 
-    // Get signing key from encrypted secret (not meta - security!)
+    // Get signing key from encrypted secret
     const signingKey = calendlyIntegration.secret;
     if (!signingKey) {
-      console.error(`[CALENDLY] No webhook signing key in secret for client: ${utmSource}`);
-      return NextResponse.json({ error: 'Webhook signing key not configured' }, { status: 500 });
+      console.error(
+        `[CALENDLY] No webhook signing key in secret for client: ${utmSource}`
+      );
+      return NextResponse.json(
+        { error: 'Webhook signing key not configured' },
+        { status: 500 }
+      );
     }
 
+    // Verify signature
     if (!verifyCalendlySignature(body, signature, signingKey)) {
       console.error(`[CALENDLY] Invalid webhook signature for client: ${utmSource}`);
       await emitEvent({
@@ -67,7 +92,7 @@ export async function POST(request: NextRequest) {
         system: EventSystem.CALENDLY,
         eventType: 'calendly_signature_invalid',
         success: false,
-        errorMessage: 'Invalid webhook signature'
+        errorMessage: 'Invalid webhook signature',
       });
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
@@ -77,10 +102,11 @@ export async function POST(request: NextRequest) {
     // Touch integration health
     await touchIntegration(client.id, IntegrationType.CALENDLY);
 
-    // Handle event types
+    // Extract event data
     const eventType = payload.event;
     const email = payload.payload?.email;
-    
+    const name = payload.payload?.name;
+
     if (!email) {
       console.error('[CALENDLY] No email in payload');
       return NextResponse.json({ error: 'No email in payload' }, { status: 400 });
@@ -88,58 +114,41 @@ export async function POST(request: NextRequest) {
 
     console.log(`[CALENDLY] Processing ${eventType} for ${email}`);
 
-    // Find or create lead
-    const leadId = await upsertLead({
-      clientId: client.id,
-      email,
-      source: 'calendly'
-    });
-
+    // Emit trigger to workflow engine
     if (eventType === 'invitee.created') {
-      // Update lead stage to BOOKED
-      await updateLeadStage(leadId, 'BOOKED');
-      
-      console.log(`[CALENDLY] Booking created for ${email} - stage updated to BOOKED`);
-      
-      await emitEvent({
-        clientId: client.id,
-        leadId,
-        system: EventSystem.CALENDLY,
-        eventType: 'calendly_booking_created',
-        success: true
-      });
-
-      // Optional: Add to "Booked Calls" MailerLite segment
-      const addToSegment = (calendlyIntegration.meta as { addToBookedSegment?: boolean } | null)?.addToBookedSegment;
-      if (addToSegment) {
-        console.log(`[CALENDLY] addToBookedSegment is enabled but not yet implemented for ${email}`);
-        // TODO: Add MailerLite call here if desired
-        // This would add the lead to a special "Booked Calls" group in MailerLite
-      }
-
+      await emitTrigger(
+        client.id,
+        { adapter: 'calendly', operation: 'booking_created' },
+        {
+          email,
+          name,
+          eventType: payload.payload?.event_type?.name,
+          eventUri: payload.payload?.event,
+          scheduledAt: payload.payload?.scheduled_event?.start_time,
+        }
+      );
     } else if (eventType === 'invitee.canceled') {
-      // Revert stage back to CAPTURED
-      await updateLeadStage(leadId, 'CAPTURED');
-      
-      console.log(`[CALENDLY] Booking canceled for ${email} - stage reverted to CAPTURED`);
-      
-      await emitEvent({
-        clientId: client.id,
-        leadId,
-        system: EventSystem.CALENDLY,
-        eventType: 'calendly_booking_canceled',
-        success: true
-      });
+      await emitTrigger(
+        client.id,
+        { adapter: 'calendly', operation: 'booking_canceled' },
+        {
+          email,
+          name,
+          reason: payload.payload?.cancellation?.reason,
+        }
+      );
     } else {
       console.log(`[CALENDLY] Unhandled event type: ${eventType}`);
     }
 
     return NextResponse.json({ received: true });
-
   } catch (error) {
     console.error('[CALENDLY] Webhook error:', error);
     return NextResponse.json(
-      { error: 'Internal error', details: error instanceof Error ? error.message : 'Unknown error' },
+      {
+        error: 'Internal error',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     );
   }
@@ -147,9 +156,9 @@ export async function POST(request: NextRequest) {
 
 /**
  * Verify Calendly webhook signature
- * 
+ *
  * Calendly sends signature in header: "Calendly-Webhook-Signature: t=1492774577,v1=5257a869..."
- * 
+ *
  * Steps:
  * 1. Extract timestamp (t) and signature (v1) from header
  * 2. Create signed payload: timestamp + '.' + request_body
@@ -172,7 +181,7 @@ function verifyCalendlySignature(
     const [tPart, v1Part] = parts;
     const timestamp = tPart.split('=')[1];
     const providedSignature = v1Part.split('=')[1];
-    
+
     if (!timestamp || !providedSignature) {
       console.error('[CALENDLY] Missing timestamp or signature');
       return false;
@@ -180,32 +189,31 @@ function verifyCalendlySignature(
 
     // Create signed payload
     const signedPayload = `${timestamp}.${body}`;
-    
+
     // Compute expected signature
     const hmac = createHmac('sha256', signingKey);
     hmac.update(signedPayload);
     const expectedSignature = hmac.digest('hex');
-    
+
     // Verify signatures match
     if (expectedSignature !== providedSignature) {
       console.error('[CALENDLY] Signature mismatch');
       return false;
     }
-    
+
     // Prevent replay attacks (3 minute tolerance)
     const eventTime = parseInt(timestamp, 10);
     const currentTime = Math.floor(Date.now() / 1000);
     const timeDiff = currentTime - eventTime;
-    
+
     if (timeDiff > 180) {
       console.error(`[CALENDLY] Timestamp too old: ${timeDiff}s > 180s`);
       return false;
     }
-    
+
     return true;
   } catch (error) {
     console.error('[CALENDLY] Error verifying signature:', error);
     return false;
   }
 }
-

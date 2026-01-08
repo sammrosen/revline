@@ -28,12 +28,18 @@ interface Integration {
   secrets?: SecretSummary[];
 }
 
-interface IntegrationActionsProps {
-  integration: Integration;
-  stripeProducts?: string[]; // Product names from Stripe integration (for MailerLite routing)
+interface WorkflowDependency {
+  id: string;
+  name: string;
 }
 
-export function IntegrationActions({ integration, stripeProducts = [] }: IntegrationActionsProps) {
+interface IntegrationActionsProps {
+  integration: Integration;
+  /** Workflows that depend on this integration */
+  dependentWorkflows?: WorkflowDependency[];
+}
+
+export function IntegrationActions({ integration, dependentWorkflows = [] }: IntegrationActionsProps) {
   const [showEditMeta, setShowEditMeta] = useState(false);
   const [showManageSecrets, setShowManageSecrets] = useState(false);
   const [metaText, setMetaText] = useState(JSON.stringify(integration.meta || {}, null, 2));
@@ -52,6 +58,9 @@ export function IntegrationActions({ integration, stripeProducts = [] }: Integra
   const integrationType = integration.integration as IntegrationType;
   const isMailerLite = integrationType === 'MAILERLITE';
   const isStripe = integrationType === 'STRIPE';
+  
+  // Check if this integration has dependent workflows
+  const hasDependents = dependentWorkflows.length > 0;
 
   // Get available secret names (not already used)
   const usedSecretNames = secrets.map(s => s.name);
@@ -252,7 +261,7 @@ export function IntegrationActions({ integration, stripeProducts = [] }: Integra
         ? 'Stripe Configuration' 
         : 'Meta Config';
     const modalDescription = isMailerLite 
-      ? 'Configure groups and action routing for MailerLite.'
+      ? 'Configure MailerLite groups. Use the Workflows tab to set up automations.'
       : isStripe
         ? 'Configure product mappings for payment routing.'
         : 'Update non-sensitive configuration (group IDs, product maps, etc.)';
@@ -277,7 +286,6 @@ export function IntegrationActions({ integration, stripeProducts = [] }: Integra
               value={metaText}
               onChange={setMetaText}
               error={error}
-              stripeProducts={stripeProducts}
             />
           ) : isStripe ? (
             <StripeConfigEditor
@@ -471,26 +479,49 @@ export function IntegrationActions({ integration, stripeProducts = [] }: Integra
                 <span className="text-red-400/80 text-lg">⚠️</span>
                 <h4 className="text-sm font-semibold text-red-400/90">Danger Zone</h4>
               </div>
-              <p className="text-xs text-zinc-400 mb-3">
-                Delete this integration. This action cannot be undone. Webhooks and API calls will stop working immediately.
-              </p>
-              <p className="text-xs text-zinc-300 mb-2">
-                Type <span className="font-mono font-bold">delete {integration.integration.toLowerCase()}</span> to confirm:
-              </p>
-              <input
-                type="text"
-                value={dangerZoneDeleteText}
-                onChange={(e) => setDangerZoneDeleteText(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded text-white text-sm mb-3"
-                placeholder={`delete ${integration.integration.toLowerCase()}`}
-              />
-              <button
-                onClick={handleDelete}
-                disabled={dangerZoneDeleteText !== `delete ${integration.integration.toLowerCase()}` || loading}
-                className="w-full px-4 py-2 bg-red-600/80 text-white rounded hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
-              >
-                {loading ? 'Deleting...' : 'Delete Integration'}
-              </button>
+              
+              {hasDependents ? (
+                <>
+                  <p className="text-xs text-zinc-400 mb-3">
+                    This integration cannot be deleted because it&apos;s used by active workflows.
+                    Remove or update these workflows first:
+                  </p>
+                  <ul className="text-xs text-yellow-400 mb-3 ml-4 list-disc">
+                    {dependentWorkflows.map((w) => (
+                      <li key={w.id}>{w.name}</li>
+                    ))}
+                  </ul>
+                  <button
+                    disabled
+                    className="w-full px-4 py-2 bg-zinc-700 text-zinc-400 rounded cursor-not-allowed text-sm font-medium"
+                  >
+                    Cannot Delete (Used by {dependentWorkflows.length} workflow{dependentWorkflows.length !== 1 ? 's' : ''})
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-zinc-400 mb-3">
+                    Delete this integration. This action cannot be undone. Webhooks and API calls will stop working immediately.
+                  </p>
+                  <p className="text-xs text-zinc-300 mb-2">
+                    Type <span className="font-mono font-bold">delete {integration.integration.toLowerCase()}</span> to confirm:
+                  </p>
+                  <input
+                    type="text"
+                    value={dangerZoneDeleteText}
+                    onChange={(e) => setDangerZoneDeleteText(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded text-white text-sm mb-3"
+                    placeholder={`delete ${integration.integration.toLowerCase()}`}
+                  />
+                  <button
+                    onClick={handleDelete}
+                    disabled={dangerZoneDeleteText !== `delete ${integration.integration.toLowerCase()}` || loading}
+                    className="w-full px-4 py-2 bg-red-600/80 text-white rounded hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+                  >
+                    {loading ? 'Deleting...' : 'Delete Integration'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
