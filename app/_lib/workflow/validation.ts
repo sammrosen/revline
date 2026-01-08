@@ -19,7 +19,7 @@ import {
   WorkflowConfig,
   WorkflowAction,
 } from './types';
-import { getAdapter, getAction, ADAPTER_REGISTRY } from './registry';
+import { getAdapter, getAction } from './registry';
 import { getValidator } from './validators';
 import { IntegrationSecret } from '@/app/_lib/types';
 
@@ -190,7 +190,8 @@ export async function validateCanDeleteIntegration(
 async function validateAdapterRequirements(
   clientId: string,
   adapterId: string,
-  context: 'trigger' | 'action'
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _context: 'trigger' | 'action' // Reserved for future trigger vs action differentiation
 ): Promise<ValidationResult> {
   const adapter = getAdapter(adapterId);
 

@@ -287,7 +287,7 @@ export async function GET(
     }
 
     // Add warnings for unhealthy integrations that are in use
-    for (const [key, node] of Object.entries(integrationNodes)) {
+    for (const [, node] of Object.entries(integrationNodes)) {
       if (node.configured && !node.healthy && node.usedBy.length > 0) {
         const workflowNames = node.usedBy.map((u) => u.workflowName).join(', ');
         warnings.push(

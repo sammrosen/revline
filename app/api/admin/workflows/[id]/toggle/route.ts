@@ -44,11 +44,7 @@ export async function PATCH(
         return ApiResponse.error(
           validation.errors[0]?.message || 'Validation failed',
           400,
-          ErrorCodes.VALIDATION_FAILED,
-          {
-            errors: validation.errors,
-            warnings: validation.warnings,
-          }
+          ErrorCodes.VALIDATION_FAILED
         );
       }
 

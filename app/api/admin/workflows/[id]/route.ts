@@ -16,7 +16,7 @@ import { getAuthenticatedAdmin } from '@/app/_lib/auth';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
-import { validateCanEdit, WorkflowAction } from '@/app/_lib/workflow';
+import { validateCanEdit } from '@/app/_lib/workflow';
 
 // =============================================================================
 // VALIDATION SCHEMAS
@@ -167,8 +167,7 @@ export async function PUT(
         return ApiResponse.error(
           editValidation.errors[0]?.message || 'Cannot edit active workflow',
           400,
-          ErrorCodes.VALIDATION_FAILED,
-          { errors: editValidation.errors }
+          ErrorCodes.VALIDATION_FAILED
         );
       }
     }

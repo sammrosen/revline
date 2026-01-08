@@ -136,7 +136,11 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
 
   useEffect(() => {
     if (activeTab === 'integrations') {
-      fetchDependencies();
+      // Use setTimeout to avoid synchronous setState warning
+      const timer = setTimeout(() => {
+        fetchDependencies();
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [activeTab, fetchDependencies]);
 

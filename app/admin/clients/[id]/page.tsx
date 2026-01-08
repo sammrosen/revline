@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { ClientActionsDropdown } from './client-actions-dropdown';
 import { ClientTabs } from './client-tabs';
 import { IntegrationType } from '@prisma/client';
-import { MailerLiteMeta, isMailerLiteMeta, StripeMeta, isStripeMeta } from '@/app/_lib/types';
+import { MailerLiteMeta, isMailerLiteMeta, StripeMeta } from '@/app/_lib/types';
 
 export const dynamic = 'force-dynamic';
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
 
@@ -80,7 +80,7 @@ export function DependencyTree({ clientId }: DependencyTreeProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchGraph = async () => {
+  const fetchGraph = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -98,11 +98,11 @@ export function DependencyTree({ clientId }: DependencyTreeProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [clientId]);
 
   useEffect(() => {
     fetchGraph();
-  }, [clientId]);
+  }, [fetchGraph]);
 
   if (loading) {
     return (
@@ -144,8 +144,7 @@ export function DependencyTree({ clientId }: DependencyTreeProps) {
     }
   }
 
-  // Find trigger adapters (integrations that have triggers being used)
-  const triggerAdapters = Object.keys(workflowsByTrigger);
+  // Note: triggerAdapters could be used for future filtering/display logic
 
   return (
     <div className="space-y-4">
