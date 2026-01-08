@@ -27,6 +27,8 @@ model Client {
   events             Event[]
   workflows          Workflow[]
   workflowExecutions WorkflowExecution[]
+  webhookEvents      WebhookEvent[]
+  idempotencyKeys    IdempotencyKey[]
 
   @@map("clients")
 }
@@ -196,6 +198,9 @@ model WorkflowExecution {
   workflowId String   @map("workflow_id")
   clientId   String   @map("client_id")
 
+  // Correlation for tracing
+  correlationId String? @map("correlation_id") @db.Uuid
+
   // Trigger info (denormalized for history)
   triggerAdapter   String @map("trigger_adapter")
   triggerOperation String @map("trigger_operation")
@@ -205,6 +210,11 @@ model WorkflowExecution {
   status        WorkflowExecutionStatus @default(RUNNING)
   actionResults Json?                   @map("action_results") // Array of { action, result }
   error         String?
+
+  // Retry tracking
+  retryCount       Int       @default(0) @map("retry_count")
+  lastRetryAt      DateTime? @map("last_retry_at")
+  retryRequestedBy String?   @map("retry_requested_by") // Admin ID for audit
 
   // Timing
   startedAt   DateTime  @default(now()) @map("started_at")
@@ -216,11 +226,71 @@ model WorkflowExecution {
   @@index([clientId, startedAt])
   @@index([workflowId, startedAt])
   @@index([status])
+  @@index([correlationId])
   @@map("workflow_executions")
 }
 
 enum WorkflowExecutionStatus {
   RUNNING
+  COMPLETED
+  FAILED
+}
+
+// =============================================================================
+// RELIABILITY INFRASTRUCTURE
+// =============================================================================
+
+// Webhook event deduplication and raw payload storage
+model WebhookEvent {
+  id              String             @id @default(uuid())
+  clientId        String             @map("client_id")
+  correlationId   String             @map("correlation_id") @db.Uuid
+  provider        String             // 'stripe', 'calendly', 'revline'
+  providerEventId String             @map("provider_event_id") // Stripe event ID, Calendly URI, etc.
+  rawBody         String             @map("raw_body") @db.Text // Exact bytes for signature verification
+  rawHeaders      Json?              @map("raw_headers") // Headers needed for verification
+  parsedPayload   Json?              @map("parsed_payload") // Convenience parsed form
+  status          WebhookEventStatus @default(PENDING)
+  error           String?
+  receivedAt      DateTime           @default(now()) @map("received_at")
+  processingStartedAt DateTime?      @map("processing_started_at")
+  processedAt     DateTime?          @map("processed_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, provider, providerEventId])
+  @@index([status, receivedAt])
+  @@map("webhook_events")
+}
+
+enum WebhookEventStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+// Idempotency keys for action deduplication
+model IdempotencyKey {
+  id          String                @id @default(uuid())
+  clientId    String                @map("client_id")
+  key         String                // Hash of (action + params)
+  status      IdempotencyKeyStatus  @default(PENDING)
+  result      Json?
+  error       String?
+  createdAt   DateTime              @default(now()) @map("created_at")
+  completedAt DateTime?             @map("completed_at")
+  expiresAt   DateTime?             @map("expires_at") // Auto-cleanup
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+enum IdempotencyKeyStatus {
+  PENDING
   COMPLETED
   FAILED
 }

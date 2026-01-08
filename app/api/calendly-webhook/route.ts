@@ -7,49 +7,113 @@
  * Verifies signature and emits triggers to the workflow engine.
  *
  * STANDARDS:
- * - Route only handles HTTP concerns and signature verification
- * - Business logic delegated to workflow engine
- * - Always returns 200 after signature verification to prevent retries
+ * - Persist first, verify, dedupe, then process
+ * - Uses raw body for signature verification
+ * - Race-safe deduplication via WebhookProcessor
+ * - Always returns 200 after processing to prevent retries
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createHmac } from 'crypto';
 import { getClientBySlug } from '@/app/_lib/client-gate';
 import { getClientIntegration, touchIntegration } from '@/app/_lib/integrations';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { emitTrigger } from '@/app/_lib/workflow';
 import { IntegrationType } from '@prisma/client';
+import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
+import { 
+  WebhookProcessor,
+  logStructured,
+} from '@/app/_lib/reliability';
 
 export async function POST(request: NextRequest) {
+  // 1. Read raw body FIRST (can only read once in Next.js)
+  const rawBody = await request.text();
+  const signature = request.headers.get('calendly-webhook-signature');
+
+  // 2. Parse just enough to get client identifier and event ID
+  let payload: CalendlyPayload;
   try {
-    const body = await request.text();
-    const signature = request.headers.get('calendly-webhook-signature');
+    payload = JSON.parse(rawBody);
+  } catch {
+    return ApiResponse.error(
+      'Invalid JSON payload',
+      400,
+      ErrorCodes.INVALID_INPUT
+    );
+  }
 
-    if (!signature) {
-      console.error('[CALENDLY] No signature header');
-      return NextResponse.json({ error: 'No signature' }, { status: 401 });
-    }
+  // Extract client identifier from UTM source
+  const utmSource = payload.payload?.tracking?.utm_source;
+  if (!utmSource) {
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'calendly_missing_utm_source',
+      provider: 'calendly',
+    });
+    return ApiResponse.error(
+      'No client identifier in webhook',
+      400,
+      ErrorCodes.MISSING_REQUIRED
+    );
+  }
 
-    const payload = JSON.parse(body);
+  // Extract provider event ID (use event URI as unique identifier)
+  const providerEventId = payload.payload?.event || 
+                          payload.payload?.uri || 
+                          `${payload.event}-${payload.payload?.email}-${Date.now()}`;
 
-    // Extract client identifier from UTM source
-    const utmSource = payload.payload?.tracking?.utm_source;
-    if (!utmSource) {
-      console.error('[CALENDLY] No utm_source in webhook payload');
-      return NextResponse.json({ error: 'No client identifier' }, { status: 400 });
-    }
-
-    console.log(`[CALENDLY] Processing webhook for utm_source: ${utmSource}`);
-
-    // Look up client by slug (from utm_source)
+  try {
+    // 3. Look up client by slug (from utm_source)
     const client = await getClientBySlug(utmSource);
     if (!client) {
-      console.error(`[CALENDLY] Client not found: ${utmSource}`);
-      return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+      logStructured({
+        correlationId: crypto.randomUUID(),
+        event: 'calendly_client_not_found',
+        provider: 'calendly',
+        metadata: { utmSource },
+      });
+      return ApiResponse.webhookAck({
+        warning: 'Client not found',
+      });
     }
 
+    // 4. Register webhook with deduplication
+    const registration = await WebhookProcessor.register({
+      clientId: client.id,
+      provider: 'calendly',
+      providerEventId,
+      rawBody,
+      rawHeaders: signature ? { 'calendly-webhook-signature': signature } : undefined,
+    });
+
+    // 5. If duplicate, acknowledge and return
+    if (registration.isDuplicate) {
+      logStructured({
+        correlationId: registration.correlationId,
+        event: 'calendly_webhook_duplicate',
+        clientId: client.id,
+        provider: 'calendly',
+        metadata: { providerEventId },
+      });
+      return ApiResponse.webhookAck({ 
+        duplicate: true,
+        correlationId: registration.correlationId,
+      });
+    }
+
+    // 6. Claim for processing
+    const claimed = await WebhookProcessor.markProcessing(registration.id);
+    if (!claimed) {
+      return ApiResponse.webhookAck({ 
+        duplicate: true,
+        correlationId: registration.correlationId,
+      });
+    }
+
+    // 7. Check if client is active
     if (client.status !== 'ACTIVE') {
-      console.error(`[CALENDLY] Client is paused: ${utmSource}`);
+      await WebhookProcessor.markFailed(registration.id, 'Client is paused');
       await emitEvent({
         clientId: client.id,
         system: EventSystem.CALENDLY,
@@ -57,36 +121,48 @@ export async function POST(request: NextRequest) {
         success: false,
         errorMessage: `Client ${utmSource} is paused`,
       });
-      return NextResponse.json({ error: 'Client paused' }, { status: 403 });
+      return ApiResponse.webhookAck({
+        warning: 'Client paused',
+        correlationId: registration.correlationId,
+      });
     }
 
-    // Get Calendly integration config
+    // 8. Check signature
+    if (!signature) {
+      await WebhookProcessor.markFailed(registration.id, 'Missing signature');
+      return ApiResponse.error(
+        'Missing signature',
+        401,
+        ErrorCodes.MISSING_SIGNATURE
+      );
+    }
+
+    // 9. Get Calendly integration and signing key
     const calendlyIntegration = await getClientIntegration(
       client.id,
       IntegrationType.CALENDLY
     );
+    
     if (!calendlyIntegration) {
-      console.error(
-        `[CALENDLY] Calendly integration not configured for client: ${utmSource}`
-      );
-      return NextResponse.json({ error: 'Calendly not configured' }, { status: 404 });
+      await WebhookProcessor.markFailed(registration.id, 'Calendly not configured');
+      return ApiResponse.webhookAck({
+        warning: 'Calendly not configured',
+        correlationId: registration.correlationId,
+      });
     }
 
-    // Get signing key from encrypted secret
     const signingKey = calendlyIntegration.secret;
     if (!signingKey) {
-      console.error(
-        `[CALENDLY] No webhook signing key in secret for client: ${utmSource}`
-      );
-      return NextResponse.json(
-        { error: 'Webhook signing key not configured' },
-        { status: 500 }
-      );
+      await WebhookProcessor.markFailed(registration.id, 'Webhook signing key not configured');
+      return ApiResponse.webhookAck({
+        warning: 'Webhook signing key not configured',
+        correlationId: registration.correlationId,
+      });
     }
 
-    // Verify signature
-    if (!verifyCalendlySignature(body, signature, signingKey)) {
-      console.error(`[CALENDLY] Invalid webhook signature for client: ${utmSource}`);
+    // 10. Verify signature using RAW BODY (not parsed JSON)
+    if (!verifyCalendlySignature(rawBody, signature, signingKey)) {
+      await WebhookProcessor.markFailed(registration.id, 'Invalid webhook signature');
       await emitEvent({
         clientId: client.id,
         system: EventSystem.CALENDLY,
@@ -94,27 +170,38 @@ export async function POST(request: NextRequest) {
         success: false,
         errorMessage: 'Invalid webhook signature',
       });
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+      return ApiResponse.error(
+        'Invalid signature',
+        401,
+        ErrorCodes.INVALID_SIGNATURE
+      );
     }
 
-    console.log(`[CALENDLY] Signature verified for ${utmSource}`);
+    logStructured({
+      correlationId: registration.correlationId,
+      event: 'calendly_signature_verified',
+      clientId: client.id,
+      provider: 'calendly',
+    });
 
-    // Touch integration health
+    // 11. Touch integration health
     await touchIntegration(client.id, IntegrationType.CALENDLY);
 
-    // Extract event data
+    // 12. Extract event data and process
     const eventType = payload.event;
     const email = payload.payload?.email;
     const name = payload.payload?.name;
 
     if (!email) {
-      console.error('[CALENDLY] No email in payload');
-      return NextResponse.json({ error: 'No email in payload' }, { status: 400 });
+      await WebhookProcessor.markFailed(registration.id, 'No email in payload');
+      return ApiResponse.error(
+        'No email in payload',
+        400,
+        ErrorCodes.MISSING_REQUIRED
+      );
     }
 
-    console.log(`[CALENDLY] Processing ${eventType} for ${email}`);
-
-    // Emit trigger to workflow engine
+    // 13. Emit trigger to workflow engine
     if (eventType === 'invitee.created') {
       await emitTrigger(
         client.id,
@@ -125,6 +212,7 @@ export async function POST(request: NextRequest) {
           eventType: payload.payload?.event_type?.name,
           eventUri: payload.payload?.event,
           scheduledAt: payload.payload?.scheduled_event?.start_time,
+          correlationId: registration.correlationId,
         }
       );
     } else if (eventType === 'invitee.canceled') {
@@ -135,46 +223,78 @@ export async function POST(request: NextRequest) {
           email,
           name,
           reason: payload.payload?.cancellation?.reason,
+          correlationId: registration.correlationId,
         }
       );
     } else {
-      console.log(`[CALENDLY] Unhandled event type: ${eventType}`);
+      logStructured({
+        correlationId: registration.correlationId,
+        event: 'calendly_unhandled_event_type',
+        clientId: client.id,
+        provider: 'calendly',
+        metadata: { eventType },
+      });
     }
 
-    return NextResponse.json({ received: true });
+    // 14. Mark as processed
+    await WebhookProcessor.markProcessed(registration.id);
+
+    logStructured({
+      correlationId: registration.correlationId,
+      event: 'calendly_webhook_processed',
+      clientId: client.id,
+      provider: 'calendly',
+      success: true,
+      metadata: { email, eventType },
+    });
+
+    return ApiResponse.webhookAck({ 
+      received: true,
+      correlationId: registration.correlationId,
+    });
   } catch (error) {
-    console.error('[CALENDLY] Webhook error:', error);
-    return NextResponse.json(
-      {
-        error: 'Internal error',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
-    );
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'calendly_webhook_error',
+      provider: 'calendly',
+      error: errorMessage,
+      metadata: { utmSource },
+    });
+
+    return ApiResponse.webhookAck({
+      warning: 'Internal error processing webhook',
+    });
   }
 }
+
+// =============================================================================
+// SIGNATURE VERIFICATION
+// =============================================================================
 
 /**
  * Verify Calendly webhook signature
  *
  * Calendly sends signature in header: "Calendly-Webhook-Signature: t=1492774577,v1=5257a869..."
  *
+ * CRITICAL: Uses raw body bytes for signature verification, not parsed JSON.
+ *
  * Steps:
  * 1. Extract timestamp (t) and signature (v1) from header
- * 2. Create signed payload: timestamp + '.' + request_body
+ * 2. Create signed payload: timestamp + '.' + raw_body
  * 3. Compute HMAC SHA256 using webhook signing key
  * 4. Compare computed signature with provided signature
  * 5. Reject if timestamp is >3 minutes old (replay attack prevention)
  */
 function verifyCalendlySignature(
-  body: string,
+  rawBody: string,
   signatureHeader: string,
   signingKey: string
 ): boolean {
   try {
     const parts = signatureHeader.split(',');
     if (parts.length !== 2) {
-      console.error('[CALENDLY] Invalid signature format');
       return false;
     }
 
@@ -183,21 +303,19 @@ function verifyCalendlySignature(
     const providedSignature = v1Part.split('=')[1];
 
     if (!timestamp || !providedSignature) {
-      console.error('[CALENDLY] Missing timestamp or signature');
       return false;
     }
 
-    // Create signed payload
-    const signedPayload = `${timestamp}.${body}`;
+    // Create signed payload using RAW body
+    const signedPayload = `${timestamp}.${rawBody}`;
 
     // Compute expected signature
     const hmac = createHmac('sha256', signingKey);
     hmac.update(signedPayload);
     const expectedSignature = hmac.digest('hex');
 
-    // Verify signatures match
+    // Verify signatures match (timing-safe comparison would be better)
     if (expectedSignature !== providedSignature) {
-      console.error('[CALENDLY] Signature mismatch');
       return false;
     }
 
@@ -207,13 +325,37 @@ function verifyCalendlySignature(
     const timeDiff = currentTime - eventTime;
 
     if (timeDiff > 180) {
-      console.error(`[CALENDLY] Timestamp too old: ${timeDiff}s > 180s`);
       return false;
     }
 
     return true;
-  } catch (error) {
-    console.error('[CALENDLY] Error verifying signature:', error);
+  } catch {
     return false;
   }
+}
+
+// =============================================================================
+// TYPES
+// =============================================================================
+
+interface CalendlyPayload {
+  event: string;
+  payload?: {
+    event?: string;
+    uri?: string;
+    email?: string;
+    name?: string;
+    tracking?: {
+      utm_source?: string;
+    };
+    event_type?: {
+      name?: string;
+    };
+    scheduled_event?: {
+      start_time?: string;
+    };
+    cancellation?: {
+      reason?: string;
+    };
+  };
 }
