@@ -62,13 +62,18 @@ export class ApiResponse {
     processed?: boolean;
     warning?: string;
     leadId?: string;
+    duplicate?: boolean;
+    correlationId?: string;
+    received?: boolean;
   }): NextResponse {
     return NextResponse.json(
       {
-        received: true,
+        received: options?.received ?? true,
         processed: options?.processed ?? false,
         ...(options?.warning && { warning: options.warning }),
         ...(options?.leadId && { leadId: options.leadId }),
+        ...(options?.duplicate && { duplicate: options.duplicate }),
+        ...(options?.correlationId && { correlationId: options.correlationId }),
       },
       { status: 200, headers: SECURITY_HEADERS }
     );
@@ -138,8 +143,12 @@ export const ErrorCodes = {
   // Validation
   INVALID_EMAIL: 'INVALID_EMAIL',
   INVALID_SOURCE: 'INVALID_SOURCE',
+  INVALID_INPUT: 'INVALID_INPUT',
   MISSING_REQUIRED: 'MISSING_REQUIRED',
   VALIDATION_FAILED: 'VALIDATION_FAILED',
+  
+  // State
+  INVALID_STATE: 'INVALID_STATE',
   
   // Client
   CLIENT_NOT_FOUND: 'CLIENT_NOT_FOUND',

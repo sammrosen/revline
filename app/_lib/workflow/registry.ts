@@ -250,6 +250,73 @@ export const MANYCHAT_ADAPTER: AdapterDefinition = {
   },
 };
 
+/**
+ * ABC Ignite Adapter
+ * Handles calendar/appointment booking for gym members
+ */
+export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
+  id: 'abc_ignite',
+  name: 'ABC Ignite',
+  requiresIntegration: true,
+  requirements: {
+    secrets: ['App ID', 'App Key'],
+    metaKeys: ['clubNumber'],
+  },
+  triggers: {}, // No triggers for now - will add if ABC Ignite supports webhooks
+  actions: {
+    enroll_member: {
+      name: 'enroll_member',
+      label: 'Enroll Member',
+      description: 'Book a member into a calendar event/appointment',
+      payloadSchema: z.object({
+        email: z.string().email().optional(),
+        memberId: z.string(),
+      }),
+      paramsSchema: z.object({
+        eventId: z.string().describe('ABC Ignite event ID'),
+        validateServiceRestriction: z.boolean().optional().describe('Validate service restrictions'),
+        allowUnfunded: z.boolean().optional().describe('Allow booking even if member has no funding'),
+      }),
+    },
+    unenroll_member: {
+      name: 'unenroll_member',
+      label: 'Unenroll Member',
+      description: 'Cancel a member booking from a calendar event',
+      payloadSchema: z.object({
+        email: z.string().email().optional(),
+        memberId: z.string(),
+      }),
+      paramsSchema: z.object({
+        eventId: z.string().describe('ABC Ignite event ID'),
+      }),
+    },
+    add_to_waitlist: {
+      name: 'add_to_waitlist',
+      label: 'Add to Waitlist',
+      description: 'Add a member to event waitlist',
+      payloadSchema: z.object({
+        email: z.string().email().optional(),
+        memberId: z.string(),
+      }),
+      paramsSchema: z.object({
+        eventId: z.string().describe('ABC Ignite event ID'),
+      }),
+    },
+    remove_from_waitlist: {
+      name: 'remove_from_waitlist',
+      label: 'Remove from Waitlist',
+      description: 'Remove a member from event waitlist',
+      payloadSchema: z.object({
+        email: z.string().email().optional(),
+        memberId: z.string(),
+      }),
+      paramsSchema: z.object({
+        eventId: z.string().describe('ABC Ignite event ID'),
+      }),
+    },
+  },
+};
+
 // =============================================================================
 // REGISTRY
 // =============================================================================
@@ -263,6 +330,7 @@ export const ADAPTER_REGISTRY: Record<string, AdapterDefinition> = {
   mailerlite: MAILERLITE_ADAPTER,
   revline: REVLINE_ADAPTER,
   manychat: MANYCHAT_ADAPTER,
+  abc_ignite: ABC_IGNITE_ADAPTER,
 };
 
 // =============================================================================

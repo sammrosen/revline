@@ -1,0 +1,5 @@
+-- Rename ABC_FITNESS to ABC_IGNITE in IntegrationType enum
+ALTER TYPE "IntegrationType" RENAME VALUE 'ABC_FITNESS' TO 'ABC_IGNITE';
+
+-- Rename ABC_FITNESS to ABC_IGNITE in EventSystem enum
+ALTER TYPE "EventSystem" RENAME VALUE 'ABC_FITNESS' TO 'ABC_IGNITE';

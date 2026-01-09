@@ -136,6 +136,8 @@ afterAll(async () => {
 afterEach(async () => {
   // Clean up test data after each test
   // Order matters due to foreign key constraints
+  await testPrisma.idempotencyKey.deleteMany();
+  await testPrisma.webhookEvent.deleteMany();
   await testPrisma.workflowExecution.deleteMany();
   await testPrisma.workflow.deleteMany();
   await testPrisma.event.deleteMany();
@@ -250,6 +252,63 @@ export async function createTestWorkflow(
       triggerAdapter: overrides.triggerAdapter ?? 'revline',
       triggerOperation: overrides.triggerOperation ?? 'email_captured',
       actions: (overrides.actions ?? []) as Parameters<typeof testPrisma.workflow.create>[0]['data']['actions'],
+    },
+  });
+}
+
+/**
+ * Test helper: Create a test webhook event
+ */
+export async function createTestWebhookEvent(
+  clientId: string,
+  overrides: Partial<{
+    provider: 'stripe' | 'calendly' | 'revline';
+    providerEventId: string;
+    rawBody: string;
+    rawHeaders: Record<string, string>;
+    parsedPayload: Record<string, unknown>;
+    status: 'PENDING' | 'PROCESSING' | 'PROCESSED' | 'FAILED';
+    error: string;
+  }> = {}
+) {
+  const { randomUUID } = await import('crypto');
+  
+  return testPrisma.webhookEvent.create({
+    data: {
+      clientId,
+      correlationId: randomUUID(),
+      provider: overrides.provider ?? 'stripe',
+      providerEventId: overrides.providerEventId ?? `evt_test_${Date.now()}`,
+      rawBody: overrides.rawBody ?? '{"test": true}',
+      rawHeaders: overrides.rawHeaders as Parameters<typeof testPrisma.webhookEvent.create>[0]['data']['rawHeaders'],
+      parsedPayload: overrides.parsedPayload as Parameters<typeof testPrisma.webhookEvent.create>[0]['data']['parsedPayload'],
+      status: overrides.status ?? 'PENDING',
+      error: overrides.error,
+    },
+  });
+}
+
+/**
+ * Test helper: Create a test idempotency key
+ */
+export async function createTestIdempotencyKey(
+  clientId: string,
+  overrides: Partial<{
+    key: string;
+    status: 'PENDING' | 'COMPLETED' | 'FAILED';
+    result: Record<string, unknown>;
+    error: string;
+    expiresAt: Date;
+  }> = {}
+) {
+  return testPrisma.idempotencyKey.create({
+    data: {
+      clientId,
+      key: overrides.key ?? `test-key-${Date.now()}`,
+      status: overrides.status ?? 'PENDING',
+      result: overrides.result as Parameters<typeof testPrisma.idempotencyKey.create>[0]['data']['result'],
+      error: overrides.error,
+      expiresAt: overrides.expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
   });
 }

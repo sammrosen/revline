@@ -1,13 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { IntegrationHelp, IntegrationTemplateButton } from './integration-help';
 import { MailerLiteConfigEditor } from './mailerlite-config-editor';
 import { StripeConfigEditor } from './stripe-config-editor';
-
-const INTEGRATION_TYPES = ['MAILERLITE', 'STRIPE', 'CALENDLY', 'MANYCHAT'] as const;
-type IntegrationType = typeof INTEGRATION_TYPES[number];
+import { AbcIgniteConfigEditor } from './abc-ignite-config-editor';
+import { lockScroll, unlockScroll } from '@/app/_lib/utils/scroll-lock';
+import { 
+  INTEGRATION_TYPES, 
+  INTEGRATIONS, 
+  getSecretNames, 
+  getDefaultMeta,
+  type IntegrationTypeId 
+} from '@/app/_lib/integrations/config';
 
 interface SecretInput {
   name: string;
@@ -18,32 +24,24 @@ interface AddIntegrationFormProps {
   clientId: string;
 }
 
-// Available secret names by integration type
-const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
-  MAILERLITE: ['API Key'],
-  STRIPE: ['Webhook Secret', 'API Key'],
-  CALENDLY: ['Webhook Secret'],
-  MANYCHAT: ['API Key'],
-};
-
-// Default MailerLite meta template
-const DEFAULT_MAILERLITE_META = JSON.stringify({
-  groups: {},
-}, null, 2);
-
-// Default Stripe meta template
-const DEFAULT_STRIPE_META = JSON.stringify({
-  products: {},
-}, null, 2);
-
 export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [integration, setIntegration] = useState<IntegrationType>('MAILERLITE');
+  const [integration, setIntegration] = useState<IntegrationTypeId>('MAILERLITE');
   const [secrets, setSecrets] = useState<SecretInput[]>([{ name: 'API Key', value: '' }]);
-  const [meta, setMeta] = useState(DEFAULT_MAILERLITE_META);
+  const [meta, setMeta] = useState(getDefaultMeta('MAILERLITE'));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+
+  // Lock body scroll when modal is open (mobile UX)
+  useEffect(() => {
+    if (isOpen) {
+      lockScroll();
+    } else {
+      unlockScroll();
+    }
+    return () => unlockScroll();
+  }, [isOpen]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -109,22 +107,16 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
   }
 
   function resetForm() {
-    setSecrets([{ name: AVAILABLE_SECRET_NAMES[integration][0] || 'API Key', value: '' }]);
-    setMeta(integration === 'MAILERLITE' ? DEFAULT_MAILERLITE_META : '');
+    const secretNames = getSecretNames(integration);
+    setSecrets([{ name: secretNames[0] || 'API Key', value: '' }]);
+    setMeta(getDefaultMeta(integration));
   }
 
-  function handleIntegrationChange(newType: IntegrationType) {
+  function handleIntegrationChange(newType: IntegrationTypeId) {
     setIntegration(newType);
-    // Set appropriate defaults for each type
-    const defaultName = AVAILABLE_SECRET_NAMES[newType][0] || 'API Key';
-    setSecrets([{ name: defaultName, value: '' }]);
-    if (newType === 'MAILERLITE') {
-      setMeta(DEFAULT_MAILERLITE_META);
-    } else if (newType === 'STRIPE') {
-      setMeta(DEFAULT_STRIPE_META);
-    } else {
-      setMeta('');
-    }
+    const secretNames = getSecretNames(newType);
+    setSecrets([{ name: secretNames[0] || 'API Key', value: '' }]);
+    setMeta(getDefaultMeta(newType));
   }
 
   function updateSecret(index: number, field: 'name' | 'value', value: string) {
@@ -134,23 +126,22 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
   }
 
   function addSecret() {
-    // Find the next available secret name that isn't already used
+    const availableNames = getSecretNames(integration);
     const usedNames = secrets.map(s => s.name);
-    const availableNames = AVAILABLE_SECRET_NAMES[integration].filter(n => !usedNames.includes(n));
-    if (availableNames.length > 0) {
-      setSecrets([...secrets, { name: availableNames[0], value: '' }]);
+    const unusedNames = availableNames.filter(n => !usedNames.includes(n));
+    if (unusedNames.length > 0) {
+      setSecrets([...secrets, { name: unusedNames[0], value: '' }]);
     }
   }
 
-  // Get unused secret names for dropdown
   function getAvailableNamesForIndex(index: number): string[] {
+    const allNames = getSecretNames(integration);
     const currentName = secrets[index]?.name;
     const usedNames = secrets.map((s, i) => i !== index ? s.name : null).filter(Boolean);
-    return AVAILABLE_SECRET_NAMES[integration].filter(n => n === currentName || !usedNames.includes(n));
+    return allNames.filter(n => n === currentName || !usedNames.includes(n));
   }
 
-  // Check if more secrets can be added
-  const canAddMoreSecrets = secrets.length < AVAILABLE_SECRET_NAMES[integration].length;
+  const canAddMoreSecrets = secrets.length < getSecretNames(integration).length;
 
   function removeSecret(index: number) {
     if (secrets.length > 1) {
@@ -169,8 +160,13 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
     );
   }
 
+  const config = INTEGRATIONS[integration];
   const isMailerLite = integration === 'MAILERLITE';
   const isStripe = integration === 'STRIPE';
+  const isAbcIgnite = integration === 'ABC_IGNITE';
+
+  // Get the first secret's description as hint
+  const secretHint = config?.secrets[0]?.description;
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={() => setIsOpen(false)}>
@@ -196,12 +192,11 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* ... existing form content ... */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <label className="text-sm font-semibold text-zinc-300">Integration Type</label>
-                {!isMailerLite && (
+                {!isMailerLite && !isStripe && !isAbcIgnite && (
                   <IntegrationHelp 
                     integration={integration} 
                     context="create"
@@ -211,12 +206,12 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
               </div>
               <select
                 value={integration}
-                onChange={(e) => handleIntegrationChange(e.target.value as IntegrationType)}
+                onChange={(e) => handleIntegrationChange(e.target.value as IntegrationTypeId)}
                 className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
               >
                 {INTEGRATION_TYPES.map((type) => (
                   <option key={type} value={type}>
-                    {type}
+                    {INTEGRATIONS[type]?.displayName || type}
                   </option>
                 ))}
               </select>
@@ -273,28 +268,23 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
               </button>
             )}
             
-            {/* Integration-specific hints */}
-            <div className="mt-3 pt-3 border-t border-zinc-800/50">
-              {isMailerLite && (
+            {/* Dynamic integration hint from config */}
+            {secretHint && (
+              <div className="mt-3 pt-3 border-t border-zinc-800/50">
                 <p className="text-xs text-zinc-500">
-                  💡 Get API Key from MailerLite → Settings → API
+                  💡 {secretHint}
                 </p>
-              )}
-              {isStripe && (
-                <p className="text-xs text-zinc-500">
-                  💡 Get Webhook Secret from Stripe → Developers → Webhooks → Your endpoint
-                </p>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Configuration Editor */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <label className="text-sm font-semibold text-zinc-300">
-                {isMailerLite ? 'MailerLite Routing' : isStripe ? 'Stripe Product Map' : 'Meta (JSON, optional)'}
+                {config?.metaDescription ? `${config.displayName} Config` : 'Meta (JSON, optional)'}
               </label>
-              {!isMailerLite && !isStripe && (
+              {!isMailerLite && !isStripe && !isAbcIgnite && (
                 <IntegrationTemplateButton 
                   integration={integration}
                   onCopyTemplate={(template) => setMeta(template)}
@@ -309,6 +299,11 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
               />
             ) : isStripe ? (
               <StripeConfigEditor
+                value={meta}
+                onChange={setMeta}
+              />
+            ) : isAbcIgnite ? (
+              <AbcIgniteConfigEditor
                 value={meta}
                 onChange={setMeta}
               />

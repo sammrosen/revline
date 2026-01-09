@@ -7,10 +7,10 @@
  * Verifies signature and emits triggers to the workflow engine.
  *
  * STANDARDS:
- * - Route only handles HTTP concerns
- * - Webhook verification via StripeAdapter
- * - Business logic delegated to workflow engine
- * - Always returns 200 for partial failures (prevents retries)
+ * - Persist first, verify, dedupe, then process
+ * - Uses raw body for signature verification
+ * - Race-safe deduplication via WebhookProcessor
+ * - Always returns 200 for processed/duplicate events (prevents retries)
  */
 
 import { NextRequest } from 'next/server';
@@ -20,9 +20,18 @@ import { emitTrigger } from '@/app/_lib/workflow';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { rateLimitByClient, getRateLimitHeaders } from '@/app/_lib/middleware';
+import { 
+  WebhookProcessor, 
+  extractProviderEventId,
+  logStructured,
+} from '@/app/_lib/reliability';
 
 export async function POST(request: NextRequest) {
-  // 1. Get source from query params
+  // 1. Read raw body FIRST (can only read once in Next.js)
+  const rawBody = await request.text();
+  const signature = request.headers.get('stripe-signature');
+
+  // 2. Get source from query params
   const { searchParams } = new URL(request.url);
   const source = searchParams.get('source');
 
@@ -36,45 +45,70 @@ export async function POST(request: NextRequest) {
 
   const clientSlug = source.toLowerCase();
 
-  // 2. Rate limit check by client
+  // 3. Rate limit check by client
   const rateLimit = rateLimitByClient(clientSlug);
   if (!rateLimit.allowed) {
-    // For webhooks, still return 200 to prevent retries
     return ApiResponse.webhookAck({
       warning: 'Rate limited - retry later',
     });
   }
 
   try {
-    // 3. Get active client
+    // 4. Get active client
     const client = await getActiveClient(clientSlug);
     if (!client) {
-      // Return 200 to prevent Stripe retries
       return ApiResponse.webhookAck({
         warning: 'Client unavailable',
       });
     }
 
-    // 4. Load Stripe adapter
-    const stripeAdapter = await StripeAdapter.forClient(client.id);
-    if (!stripeAdapter) {
-      return ApiResponse.webhookAck({
-        warning: 'Stripe not configured',
+    // 5. Extract provider event ID from raw body
+    const providerEventId = extractProviderEventId('stripe', rawBody);
+    if (!providerEventId) {
+      return ApiResponse.error(
+        'Could not extract event ID from webhook',
+        400,
+        ErrorCodes.INVALID_INPUT
+      );
+    }
+
+    // 6. Register webhook with deduplication
+    const registration = await WebhookProcessor.register({
+      clientId: client.id,
+      provider: 'stripe',
+      providerEventId,
+      rawBody,
+      rawHeaders: signature ? { 'stripe-signature': signature } : undefined,
+    });
+
+    // 7. If duplicate, acknowledge and return
+    if (registration.isDuplicate) {
+      logStructured({
+        correlationId: registration.correlationId,
+        event: 'stripe_webhook_duplicate',
+        clientId: client.id,
+        provider: 'stripe',
+        metadata: { providerEventId },
+      });
+      return ApiResponse.webhookAck({ 
+        duplicate: true,
+        correlationId: registration.correlationId,
       });
     }
 
-    // Check if Stripe API key is available
-    if (!stripeAdapter.hasApiKey()) {
-      return ApiResponse.webhookAck({
-        warning: 'Stripe API key not configured',
+    // 8. Claim for processing
+    const claimed = await WebhookProcessor.markProcessing(registration.id);
+    if (!claimed) {
+      // Another worker claimed it
+      return ApiResponse.webhookAck({ 
+        duplicate: true,
+        correlationId: registration.correlationId,
       });
     }
 
-    // 5. Get raw body and signature
-    const body = await request.text();
-    const signature = request.headers.get('stripe-signature');
-
+    // 9. Check signature
     if (!signature) {
+      await WebhookProcessor.markFailed(registration.id, 'Missing signature');
       return ApiResponse.error(
         'Missing signature',
         400,
@@ -82,11 +116,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 6. Verify webhook and extract checkout data
-    const result = await stripeAdapter.processCheckoutWebhook(body, signature);
+    // 10. Load Stripe adapter
+    const stripeAdapter = await StripeAdapter.forClient(client.id);
+    if (!stripeAdapter) {
+      await WebhookProcessor.markFailed(registration.id, 'Stripe not configured');
+      return ApiResponse.webhookAck({
+        warning: 'Stripe not configured',
+      });
+    }
+
+    if (!stripeAdapter.hasApiKey()) {
+      await WebhookProcessor.markFailed(registration.id, 'Stripe API key not configured');
+      return ApiResponse.webhookAck({
+        warning: 'Stripe API key not configured',
+      });
+    }
+
+    // 11. Verify webhook signature using raw body
+    const result = await stripeAdapter.processCheckoutWebhook(rawBody, signature);
 
     if (!result.success) {
-      // Emit failure event for signature verification failures
+      await WebhookProcessor.markFailed(registration.id, result.error || 'Signature verification failed');
       await emitEvent({
         clientId: client.id,
         system: EventSystem.STRIPE,
@@ -102,12 +152,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 7. If not a checkout event, acknowledge and return
+    // 12. If not a checkout event, mark processed and return
     if (!result.data) {
-      return ApiResponse.webhookAck({ processed: false });
+      await WebhookProcessor.markProcessed(registration.id);
+      return ApiResponse.webhookAck({ 
+        processed: false,
+        correlationId: registration.correlationId,
+      });
     }
 
-    // 8. Emit trigger to workflow engine
+    // 13. Emit trigger to workflow engine
     const checkoutData = result.data;
     const triggerResult = await emitTrigger(
       client.id,
@@ -118,10 +172,11 @@ export async function POST(request: NextRequest) {
         amount: checkoutData.amountTotal,
         currency: checkoutData.currency || 'usd',
         product: checkoutData.program,
+        correlationId: registration.correlationId,
       }
     );
 
-    // Check for workflow failures
+    // 14. Check for workflow failures
     const hasFailure = triggerResult.executions.some((e) => e.status === 'failed');
     let warning: string | undefined;
 
@@ -131,16 +186,35 @@ export async function POST(request: NextRequest) {
         .map((e) => e.error)
         .join('; ');
 
-      console.warn('Some workflows failed for Stripe payment:', {
+      logStructured({
+        correlationId: registration.correlationId,
+        event: 'stripe_workflow_partial_failure',
         clientId: client.id,
-        email: checkoutData.email,
-        failures: warning,
+        provider: 'stripe',
+        error: warning,
+        metadata: { email: checkoutData.email },
       });
     }
 
-    // 9. Return response with rate limit headers
+    // 15. Mark as processed
+    await WebhookProcessor.markProcessed(registration.id);
+
+    logStructured({
+      correlationId: registration.correlationId,
+      event: 'stripe_webhook_processed',
+      clientId: client.id,
+      provider: 'stripe',
+      success: true,
+      metadata: { 
+        email: checkoutData.email,
+        workflowsExecuted: triggerResult.workflowsExecuted,
+      },
+    });
+
+    // 16. Return response with rate limit headers
     const response = ApiResponse.webhookAck({
       processed: true,
+      correlationId: registration.correlationId,
       warning,
     });
 
@@ -151,9 +225,14 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('Stripe webhook error:', {
-      clientSlug,
-      error: error instanceof Error ? error.message : 'Unknown',
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'stripe_webhook_error',
+      clientId: clientSlug,
+      provider: 'stripe',
+      error: errorMessage,
     });
 
     // Return 200 to prevent retries

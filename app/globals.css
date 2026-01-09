@@ -30,3 +30,24 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* =============================================================================
+   MOBILE UX FIXES
+   ============================================================================= */
+
+/* Prevent iOS Safari zoom on input focus (requires 16px minimum) */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Body scroll lock state (applied via JS when modals open) */
+body.scroll-locked {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  touch-action: none;
+}

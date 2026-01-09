@@ -3,6 +3,11 @@
  *
  * Core engine for executing workflows.
  * Handles trigger emission, workflow matching, and action execution.
+ * 
+ * STANDARDS:
+ * - All actions are wrapped with idempotent execution
+ * - Correlation IDs are propagated through the execution chain
+ * - Failed actions are logged and stop workflow execution
  */
 
 import { prisma } from '@/app/_lib/db';
@@ -17,6 +22,12 @@ import {
   WorkflowTrigger,
 } from './types';
 import { getActionExecutor } from './executors';
+import { 
+  executeIdempotent, 
+  generateWorkflowIdempotencyKey,
+  logStructured,
+} from '@/app/_lib/reliability';
+import { AlertService } from '@/app/_lib/alerts';
 
 // =============================================================================
 // MAIN ENTRY POINT
@@ -113,22 +124,42 @@ interface WorkflowData {
 
 /**
  * Execute a single workflow
+ * 
+ * All actions are wrapped with idempotent execution to prevent
+ * duplicate side effects on retries.
  */
 async function executeWorkflow(
   workflow: WorkflowData,
   baseContext: WorkflowContext
 ): Promise<WorkflowExecutionResult> {
   const results: ActionExecutionResult[] = [];
+  
+  // Extract correlation ID from payload if present
+  const correlationId = typeof baseContext.trigger.payload.correlationId === 'string'
+    ? baseContext.trigger.payload.correlationId
+    : crypto.randomUUID();
 
-  // Create execution record
+  // Create execution record with correlation ID
   const execution = await prisma.workflowExecution.create({
     data: {
       workflowId: workflow.id,
       clientId: baseContext.clientId,
+      correlationId,
       triggerAdapter: baseContext.trigger.adapter,
       triggerOperation: baseContext.trigger.operation,
       triggerPayload: baseContext.trigger.payload as Prisma.InputJsonValue,
       status: 'RUNNING',
+    },
+  });
+
+  logStructured({
+    correlationId,
+    event: 'workflow_execution_started',
+    clientId: baseContext.clientId,
+    metadata: { 
+      workflowId: workflow.id, 
+      workflowName: workflow.name,
+      executionId: execution.id,
     },
   });
 
@@ -138,13 +169,41 @@ async function executeWorkflow(
   let failed = false;
   let errorMessage: string | undefined;
 
-  for (const action of workflow.actions) {
+  for (let actionIndex = 0; actionIndex < workflow.actions.length; actionIndex++) {
+    const action = workflow.actions[actionIndex];
     // Future: Check action conditions here
     // if (action.conditions && !evaluateConditions(action.conditions, ctx)) continue;
 
     try {
       const executor = getActionExecutor(action.adapter, action.operation);
-      const result = await executor.execute(ctx, action.params);
+      
+      // Generate idempotency key for this specific action in this workflow execution
+      const idempotencyKey = generateWorkflowIdempotencyKey(
+        execution.id,
+        actionIndex,
+        `${action.adapter}.${action.operation}`,
+        action.params
+      );
+
+      // Execute with idempotency - prevents duplicate actions on retry
+      const { result, executed } = await executeIdempotent(
+        baseContext.clientId,
+        idempotencyKey,
+        async () => executor.execute(ctx, action.params),
+        { ttlMs: 24 * 60 * 60 * 1000 } // 24 hour TTL
+      );
+
+      if (!executed) {
+        logStructured({
+          correlationId,
+          event: 'workflow_action_idempotent_skip',
+          clientId: baseContext.clientId,
+          metadata: { 
+            action: `${action.adapter}.${action.operation}`,
+            actionIndex,
+          },
+        });
+      }
 
       results.push({ action, result });
 
@@ -218,6 +277,34 @@ async function executeWorkflow(
     errorMessage: failed
       ? `Workflow '${workflow.name}' failed: ${errorMessage}`
       : undefined,
+  });
+
+  // Send critical alert for workflow failure
+  if (failed) {
+    await AlertService.critical(
+      'Workflow Failed',
+      `${workflow.name}: ${errorMessage}`,
+      {
+        workflowId: workflow.id,
+        workflowName: workflow.name,
+        clientId: baseContext.clientId,
+        correlationId,
+      }
+    );
+  }
+
+  logStructured({
+    correlationId,
+    event: failed ? 'workflow_execution_failed' : 'workflow_execution_completed',
+    clientId: baseContext.clientId,
+    success: !failed,
+    error: errorMessage,
+    metadata: { 
+      workflowId: workflow.id, 
+      workflowName: workflow.name,
+      executionId: execution.id,
+      actionsExecuted: results.length,
+    },
   });
 
   return {

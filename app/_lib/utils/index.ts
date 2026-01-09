@@ -5,4 +5,5 @@
 
 export * from './api-response';
 export * from './validation';
+export * from './scroll-lock';
 

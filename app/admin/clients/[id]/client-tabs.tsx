@@ -8,6 +8,7 @@ import { LeadsView } from './leads-view';
 import MailerLiteInsights from './mailerlite-insights';
 import { WorkflowList } from './workflows/workflow-list';
 import { Workflow as WorkflowIcon } from 'lucide-react';
+import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
 
 type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'insights';
 
@@ -213,6 +214,9 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
                 const dependentWorkflows = getDependentWorkflows(integration.integration);
                 const usedByCount = dependentWorkflows.length;
                 
+                const integrationStyle = getIntegrationStyle(integration.integration.toLowerCase());
+                const IntegrationIcon = integrationStyle.icon;
+                
                 return (
                   <div
                     key={integration.id}
@@ -221,7 +225,8 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
                     {/* Header: Title and Actions */}
                     <div className="flex flex-row justify-between items-center gap-4 relative">
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-bold tracking-tight text-white">{integration.integration}</span>
+                        <IntegrationIcon className={`w-4 h-4 ${integrationStyle.textClass}`} />
+                        <span className={`font-bold tracking-tight ${integrationStyle.textClass}`}>{integration.integration}</span>
                         <HealthBadge status={integration.healthStatus} />
                         {usedByCount > 0 && (
                           <span className="flex items-center gap-1 px-2 py-0.5 bg-zinc-800 text-zinc-400 text-xs rounded" title={dependentWorkflows.map(w => w.name).join(', ')}>

@@ -1,10 +1,28 @@
 /**
  * MailerLite API Helper Functions
- * Reusable functions for interacting with the MailerLite API
+ * 
+ * Reusable functions for interacting with the MailerLite API.
+ * Uses resilient HTTP client for timeouts, retries, and backoff.
+ * 
+ * STANDARDS:
+ * - All API calls use resilientFetch with smart retry logic
+ * - Rate limits are respected via Retry-After header
+ * - Duplicate subscribers are handled gracefully (not an error)
  */
+
+import { resilientFetch, logStructured } from '@/app/_lib/reliability';
 
 const MAILERLITE_API_URL = 'https://connect.mailerlite.com/api';
 const API_VERSION = '2024-11-20';
+
+// Default resilience options for MailerLite
+const MAILERLITE_FETCH_OPTIONS = {
+  timeout: 10000,   // 10 second per-request timeout
+  deadline: 30000,  // 30 second total deadline
+  retries: 3,       // 3 retry attempts
+  backoffMs: 1000,  // 1 second initial backoff
+  jitter: true,
+};
 
 interface AddSubscriberParams {
   email: string;
@@ -30,31 +48,46 @@ export async function addSubscriberToGroup({
   groupId,
   apiKey,
 }: AddSubscriberParams): Promise<MailerLiteResponse> {
+  const correlationId = crypto.randomUUID();
+  
   try {
-    const response = await fetch(`${MAILERLITE_API_URL}/subscribers`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'X-Version': API_VERSION,
-      },
-      body: JSON.stringify({
-        email,
-        fields: {
-          name: name || '',
+    const { response, attempts, totalTimeMs } = await resilientFetch(
+      `${MAILERLITE_API_URL}/subscribers`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'X-Version': API_VERSION,
         },
-        groups: [groupId],
-        status: 'active',
-      }),
-    });
+        body: JSON.stringify({
+          email,
+          fields: {
+            name: name || '',
+          },
+          groups: [groupId],
+          status: 'active',
+        }),
+      },
+      MAILERLITE_FETCH_OPTIONS
+    );
 
     // Log rate limit info
     const rateRemaining = response.headers.get('X-RateLimit-Remaining');
     const rateLimit = response.headers.get('X-RateLimit-Limit');
     
     if (rateRemaining && parseInt(rateRemaining) < 10) {
-      console.warn(`MailerLite rate limit warning: ${rateRemaining}/${rateLimit} requests remaining`);
+      logStructured({
+        correlationId,
+        event: 'mailerlite_rate_limit_warning',
+        metadata: { 
+          remaining: rateRemaining, 
+          limit: rateLimit,
+          attempts,
+          totalTimeMs,
+        },
+      });
     }
 
     const data = await response.json();
@@ -62,6 +95,12 @@ export async function addSubscriberToGroup({
     if (!response.ok) {
       // Handle duplicate subscriber (422 validation error)
       if (response.status === 422 && data.message?.toLowerCase().includes('already')) {
+        logStructured({
+          correlationId,
+          event: 'mailerlite_subscriber_exists',
+          success: true,
+          metadata: { email, groupId, attempts, totalTimeMs },
+        });
         return {
           success: true,
           message: 'Subscriber already exists',
@@ -69,18 +108,28 @@ export async function addSubscriberToGroup({
         };
       }
 
-      // Handle rate limiting
+      // Handle rate limiting (shouldn't happen with resilientFetch, but just in case)
       if (response.status === 429) {
         const retryAfter = response.headers.get('Retry-After');
+        logStructured({
+          correlationId,
+          event: 'mailerlite_rate_limited',
+          success: false,
+          error: `Rate limit exceeded`,
+          metadata: { retryAfter, attempts, totalTimeMs },
+        });
         return {
           success: false,
           error: `Rate limit exceeded. Retry after ${retryAfter || 60} seconds.`,
         };
       }
 
-      console.error('MailerLite API error:', {
-        status: response.status,
-        data,
+      logStructured({
+        correlationId,
+        event: 'mailerlite_api_error',
+        success: false,
+        error: data.message || 'API error',
+        metadata: { status: response.status, attempts, totalTimeMs },
       });
 
       return {
@@ -89,16 +138,31 @@ export async function addSubscriberToGroup({
       };
     }
 
+    logStructured({
+      correlationId,
+      event: 'mailerlite_subscriber_added',
+      success: true,
+      metadata: { email, groupId, subscriberId: data.data?.id, attempts, totalTimeMs },
+    });
+
     return {
       success: true,
       message: 'Successfully added subscriber',
       subscriberId: data.data?.id,
     };
   } catch (error) {
-    console.error('MailerLite API request failed:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    logStructured({
+      correlationId,
+      event: 'mailerlite_api_failure',
+      success: false,
+      error: errorMessage,
+    });
+    
     return {
       success: false,
-      error: 'Network error or API unavailable',
+      error: `MailerLite API error: ${errorMessage}`,
     };
   }
 }
@@ -193,14 +257,18 @@ export interface Automation {
  */
 export async function getMailerLiteGroups(apiKey: string): Promise<MailerLiteGroup[]> {
   try {
-    const response = await fetch(`${MAILERLITE_API_URL}/groups`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'X-Version': API_VERSION,
+    const { response } = await resilientFetch(
+      `${MAILERLITE_API_URL}/groups`,
+      {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'X-Version': API_VERSION,
+        },
       },
-    });
+      MAILERLITE_FETCH_OPTIONS
+    );
 
     if (!response.ok) {
       console.error('MailerLite groups API error:', response.status);
@@ -220,14 +288,18 @@ export async function getMailerLiteGroups(apiKey: string): Promise<MailerLiteGro
  */
 export async function getAllAutomations(apiKey: string): Promise<Automation[]> {
   try {
-    const response = await fetch(`${MAILERLITE_API_URL}/automations?limit=100`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'X-Version': API_VERSION,
+    const { response } = await resilientFetch(
+      `${MAILERLITE_API_URL}/automations?limit=100`,
+      {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'X-Version': API_VERSION,
+        },
       },
-    });
+      MAILERLITE_FETCH_OPTIONS
+    );
 
     if (!response.ok) {
       console.error('MailerLite automations API error:', response.status);
@@ -250,7 +322,7 @@ export async function getAutomationsByGroup(
   groupId: string
 ): Promise<Automation[]> {
   try {
-    const response = await fetch(
+    const { response } = await resilientFetch(
       `${MAILERLITE_API_URL}/automations?filter[group]=${groupId}&limit=100`,
       {
         method: 'GET',
@@ -259,7 +331,8 @@ export async function getAutomationsByGroup(
           'Authorization': `Bearer ${apiKey}`,
           'X-Version': API_VERSION,
         },
-      }
+      },
+      MAILERLITE_FETCH_OPTIONS
     );
 
     if (!response.ok) {
@@ -274,4 +347,3 @@ export async function getAutomationsByGroup(
     return [];
   }
 }
-

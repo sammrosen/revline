@@ -6,31 +6,23 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./__tests__/setup.ts'],
-    include: ['__tests__/**/*.test.ts'],
-    exclude: ['node_modules', '.next', 'proxy.ts', 'middleware.ts'],
-    testTimeout: 30000, // 30s for integration tests with real DB
-    hookTimeout: 30000,
-    // Run tests sequentially to avoid database connection issues
+    // Run tests sequentially to avoid database isolation issues
     pool: 'forks',
     poolOptions: {
       forks: {
         singleFork: true,
       },
     },
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      include: ['app/_lib/**/*.ts'],
-      exclude: [
-        'app/_lib/types/**',
-        '**/*.d.ts',
-      ],
+    // Consistent test ordering
+    sequence: {
+      shuffle: false,
     },
+    // Increase timeout for database operations
+    testTimeout: 30000,
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, '.'),
+      '@': path.resolve(__dirname, './'),
     },
   },
 });
-
