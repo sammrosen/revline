@@ -295,6 +295,13 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
     return this.meta?.defaultEventTypeId;
   }
 
+  /**
+   * Get the default employee/trainer ID from meta (optional)
+   */
+  getDefaultEmployeeId(): string | undefined {
+    return this.meta?.defaultEmployeeId;
+  }
+
   // ===========================================================================
   // API REQUEST HELPERS
   // ===========================================================================
@@ -435,7 +442,8 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
     const result = await this.getMembers({ barcode });
     
     if (!result.success) {
-      return result as IntegrationResult<AbcIgniteMember | null>;
+      // Propagate error without the data field
+      return { success: false, error: result.error, retryable: result.retryable };
     }
 
     const members = result.data || [];

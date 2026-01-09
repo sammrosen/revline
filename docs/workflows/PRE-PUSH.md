@@ -100,31 +100,110 @@ Common build issues:
 ### Secrets & Encryption
 
 - [ ] **No secrets in code** - All secrets use environment variables
-- [ ] **No secrets in logs** - grep for `console.log` near sensitive operations
+- [ ] **No secrets in logs** - Verify console.log/error never includes credentials
+- [ ] **No secrets in error messages** - API errors should be generic
 - [ ] **Encryption keys not committed** - Check `.env` is in `.gitignore`
+- [ ] **No secrets in URLs** - Credentials should be in headers only
 
 ```bash
-# Search for potential secret leaks
-grep -r "sk_live\|whsec_\|mlsk_\|re_" --include="*.ts" --include="*.tsx" .
+# Search for potential secret leaks in code
+grep -r "sk_live\|whsec_\|mlsk_\|re_\|app_key\|api_key" --include="*.ts" --include="*.tsx" .
+
+# Search for secrets potentially in console output
+grep -rn "console\.\(log\|error\)" --include="*.ts" -A 2 app/_lib/integrations/
+
+# Verify error responses are generic (search for error returns)
+grep -rn "return.*error\|ApiResponse.error" --include="*.ts" app/api/
 ```
+
+### API Response Security
+
+- [ ] **Error messages are generic** - No stack traces, internal paths, or DB errors exposed
+- [ ] **No sensitive data in responses** - Secrets never returned, even partially
+- [ ] **Rate limiting in place** - Public endpoints have rate limits
 
 ### Authentication
 
 - [ ] **Admin routes protected** - All `/admin/*` and `/api/admin/*` routes require authentication
 - [ ] **Session handling correct** - HTTP-only cookies, secure in production
 - [ ] **No auth bypass paths** - Review new routes for authentication
+- [ ] **Use `getAdminIdFromHeaders()`** - All admin API routes must validate session
 
 ### Input Validation
 
 - [ ] **All user input validated** - Email format, required fields
 - [ ] **XSS prevention** - User input sanitized before display
 - [ ] **SQL injection prevention** - Using Prisma parameterized queries (automatic)
+- [ ] **JSON payload validation** - Use Zod schemas for request bodies
 
 ### Webhook Security
 
 - [ ] **Stripe webhooks verify signatures** - Using Stripe SDK verification
 - [ ] **Calendly webhooks verify signatures** - HMAC SHA256 verification
 - [ ] **Invalid signatures return 401** - Not 200
+- [ ] **Webhook secrets encrypted** - Stored via `encryptSecret()`
+
+---
+
+## Architecture Compliance
+
+### Integration Pattern (for new integrations)
+
+- [ ] **Adapter extends `BaseIntegrationAdapter`** - Never call external APIs directly from routes
+- [ ] **Static `forClient()` factory method** - Loads config from database
+- [ ] **Uses `getSecret()` for credentials** - Never access secrets directly
+- [ ] **Calls `touch()` on success** - Updates health status
+- [ ] **Returns `IntegrationResult<T>`** - Consistent return type
+- [ ] **Has `isConfigured()` validation** - Check for required secrets/meta
+
+### Workflow Engine (if adding workflow actions)
+
+- [ ] **Adapter added to `registry.ts`** - Triggers and actions defined
+- [ ] **Type mapping in `validation.ts`** - `adapterIdToIntegrationType()` includes new type
+- [ ] **Executor implemented** - `app/_lib/workflow/executors/{name}.ts`
+- [ ] **Executor registered** - Added to `executors/index.ts`
+- [ ] **Events emitted** - Success/failure events for all operations
+
+### Frontend Wire-Up (if adding admin UI)
+
+- [ ] **Config added to `integrations/config.ts`** - Secrets, meta template, tips
+- [ ] **Add form supports type** - `add-integration-form.tsx`
+- [ ] **Edit/Configure works** - `integration-actions.tsx`
+- [ ] **Custom editor (if needed)** - `{name}-config-editor.tsx`
+
+### Database Schema (if adding new types)
+
+- [ ] **Enums updated** - `IntegrationType`, `EventSystem` in `schema.prisma`
+- [ ] **Migration created** - `npx prisma migrate dev`
+- [ ] **Types defined** - `app/_lib/types/index.ts` meta interface
+
+---
+
+## Integration Checklist (New Integration)
+
+Use this checklist when adding a new external integration:
+
+```
+Backend:
+- [ ] app/_lib/integrations/{name}.adapter.ts - Main adapter class
+- [ ] app/_lib/integrations/config.ts - Integration config
+- [ ] app/_lib/integrations/index.ts - Export adapter
+- [ ] app/_lib/types/index.ts - Meta type definition
+- [ ] app/_lib/workflow/registry.ts - Workflow adapter definition
+- [ ] app/_lib/workflow/validation.ts - Type mapping
+- [ ] app/_lib/workflow/executors/{name}.ts - Action executors
+- [ ] app/_lib/workflow/executors/index.ts - Register executors
+- [ ] prisma/schema.prisma - Add to enums
+
+Frontend:
+- [ ] app/admin/clients/[id]/add-integration-form.tsx - Add support
+- [ ] app/admin/clients/[id]/integration-actions.tsx - Edit support
+- [ ] app/admin/clients/[id]/{name}-config-editor.tsx - Custom editor (optional)
+
+Tests:
+- [ ] __tests__/unit/{name}.test.ts - Unit tests
+- [ ] __tests__/setup.ts - Test helper function (if needed)
+```
 
 ---
 
@@ -314,7 +393,38 @@ npm run ci  # Same as pre-push
 
 ---
 
-*Last updated: January 2025*
+## Summary: What Could Break Production
+
+Before pushing, ask yourself:
+
+1. **Could secrets leak?**
+   - No secrets in logs, URLs, or error messages
+   - Secrets only in encrypted storage and HTTP headers
+
+2. **Could authentication be bypassed?**
+   - All admin routes use `getAdminIdFromHeaders()`
+   - No new public endpoints without rate limiting
+
+3. **Could data be corrupted?**
+   - Database transactions for multi-step operations
+   - Unique constraints prevent duplicates
+   - Input validation on all user data
+
+4. **Could integrations break?**
+   - Adapter pattern followed (BaseIntegrationAdapter)
+   - Type mapping updated in validation.ts
+   - Tests cover success and error cases
+
+5. **Is extensibility maintained?**
+   - No hardcoded integration logic in routes
+   - Configuration-driven behavior (database meta)
+   - Clear separation: Route → Service → Adapter → API
+
+**When in doubt, run `npm run pre-push` and review the changes with a colleague.**
+
+---
+
+*Last updated: January 2026*
 
 
 

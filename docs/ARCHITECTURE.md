@@ -85,7 +85,7 @@ flowchart TB
 **`client_integrations`** - Per-client encrypted secrets
 - `id` (uuid, primary key)
 - `client_id` (foreign key)
-- `integration` (MAILERLITE | STRIPE | CALENDLY | MANYCHAT)
+- `integration` (MAILERLITE | STRIPE | CALENDLY | MANYCHAT | ABC_IGNITE)
 - `encrypted_secret` (text) - AES-256-GCM encrypted
 - `meta` (jsonb) - Non-sensitive config (group IDs, product maps)
 - `health_status` (GREEN | YELLOW | RED)
@@ -261,9 +261,10 @@ The workflow engine is the central automation layer that connects triggers to ac
 | Adapter | Triggers | Actions |
 |---------|----------|---------|
 | `calendly` | booking_created, booking_canceled | — |
-| `stripe` | payment_succeeded, subscription_created | — |
+| `stripe` | payment_succeeded, subscription_created, subscription_canceled | — |
 | `mailerlite` | — | add_to_group, remove_from_group, add_tag |
 | `revline` | email_captured | create_lead, update_lead_stage, emit_event |
+| `abc_ignite` | — | lookup_member, check_availability, check_session_balance, enroll_member, unenroll_member, add_to_waitlist, remove_from_waitlist |
 
 **Example workflow:**
 ```json
@@ -326,6 +327,30 @@ Calendly (optional):
 ```
 
 Note: Webhook signing key is stored in encrypted_secret field, not in meta.
+
+ABC Ignite:
+```json
+{
+  "clubNumber": "7715",
+  "defaultEventTypeId": "pt_session",
+  "eventTypes": {
+    "pt_session": {
+      "id": "0611116d-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+      "name": "Personal Training",
+      "category": "Appointment",
+      "duration": 30
+    },
+    "group_class": {
+      "id": "1234abcd-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+      "name": "Group Fitness Class",
+      "category": "Event",
+      "duration": 45
+    }
+  }
+}
+```
+
+Note: App ID and App Key are stored in the encrypted secrets field. Use the "Sync from ABC Ignite" button in admin UI to populate event types automatically.
 
 ---
 

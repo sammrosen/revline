@@ -112,7 +112,7 @@ const checkAvailability: ActionExecutor = {
     }
 
     // Get employee ID from params or use default from config
-    const employeeId = (params.employeeId as string) || adapter.meta?.defaultEmployeeId;
+    const employeeId = (params.employeeId as string) || adapter.getDefaultEmployeeId();
     if (!employeeId) {
       return { success: false, error: 'Missing employeeId - provide in params or set defaultEmployeeId in config' };
     }

@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { IntegrationHelp, IntegrationTemplateButton } from './integration-help';
 import { MailerLiteConfigEditor } from './mailerlite-config-editor';
 import { StripeConfigEditor } from './stripe-config-editor';
+import { AbcIgniteConfigEditor } from './abc-ignite-config-editor';
 
-type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT';
+type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE';
 
 // Available secret names by integration type
 const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
@@ -14,6 +15,7 @@ const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
   STRIPE: ['Webhook Secret', 'API Key'],
   CALENDLY: ['Webhook Secret'],
   MANYCHAT: ['API Key'],
+  ABC_IGNITE: ['App ID', 'App Key'],
 };
 
 interface SecretSummary {
@@ -58,6 +60,7 @@ export function IntegrationActions({ integration, dependentWorkflows = [] }: Int
   const integrationType = integration.integration as IntegrationType;
   const isMailerLite = integrationType === 'MAILERLITE';
   const isStripe = integrationType === 'STRIPE';
+  const isAbcIgnite = integrationType === 'ABC_IGNITE';
   
   // Check if this integration has dependent workflows
   const hasDependents = dependentWorkflows.length > 0;
@@ -254,17 +257,21 @@ export function IntegrationActions({ integration, dependentWorkflows = [] }: Int
 
   // Edit Meta Modal
   if (showEditMeta) {
-    const hasStructuredEditor = isMailerLite || isStripe;
+    const hasStructuredEditor = isMailerLite || isStripe || isAbcIgnite;
     const modalTitle = isMailerLite 
       ? 'MailerLite Configuration' 
       : isStripe 
         ? 'Stripe Configuration' 
-        : 'Meta Config';
+        : isAbcIgnite
+          ? 'ABC Ignite Configuration'
+          : 'Meta Config';
     const modalDescription = isMailerLite 
       ? 'Configure MailerLite groups. Use the Workflows tab to set up automations.'
       : isStripe
         ? 'Configure product mappings for payment routing.'
-        : 'Update non-sensitive configuration (group IDs, product maps, etc.)';
+        : isAbcIgnite
+          ? 'Configure club settings and sync event types from ABC Ignite.'
+          : 'Update non-sensitive configuration (group IDs, product maps, etc.)';
 
     return (
       <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
@@ -292,6 +299,13 @@ export function IntegrationActions({ integration, dependentWorkflows = [] }: Int
               value={metaText}
               onChange={setMetaText}
               error={error}
+            />
+          ) : isAbcIgnite ? (
+            <AbcIgniteConfigEditor
+              value={metaText}
+              onChange={setMetaText}
+              error={error}
+              integrationId={integration.id}
             />
           ) : (
             <>

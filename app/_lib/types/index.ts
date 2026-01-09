@@ -100,20 +100,29 @@ export interface ManyChatMeta {
  * 
  * @example
  * {
- *   "clubNumber": "9001",
+ *   "clubNumber": "7715",
  *   "defaultEventCategory": "appointment",
- *   "defaultEventTypeId": "abc123",
- *   "defaultEmployeeId": "emp456"
+ *   "defaultEventTypeId": "pt_session",
+ *   "eventTypes": {
+ *     "pt_session": { "id": "0611116d...", "name": "Personal Training", "duration": 30 }
+ *   }
  * }
  */
 export interface AbcIgniteMeta {
   /** ABC Ignite club/location number (required) */
   clubNumber: string;
-  /** Default event category: 'appointment' (1:1) or 'event' (classes) */
-  defaultEventCategory?: 'appointment' | 'event';
-  /** Default event type ID for bookings */
+  /** Default event type key (references eventTypes) */
   defaultEventTypeId?: string;
-  /** Default employee/trainer ID for single-trainer scenarios */
+  /** Default event category filter for getEventTypes (Appointment | Event) */
+  defaultEventCategory?: 'Appointment' | 'Event';
+  /** Synced event types from ABC Ignite (key → { id, name, category, duration }) */
+  eventTypes?: Record<string, { 
+    id: string; 
+    name: string; 
+    category: 'Appointment' | 'Event';  // Comes from ABC Ignite sync
+    duration?: number;
+  }>;
+  /** Default employee/trainer ID for single-trainer scenarios (advanced) */
   defaultEmployeeId?: string;
 }
 
