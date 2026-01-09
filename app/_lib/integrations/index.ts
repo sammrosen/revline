@@ -22,6 +22,26 @@ export type { AddSubscriberResult } from './mailerlite.adapter';
 export { StripeAdapter } from './stripe.adapter';
 export type { CheckoutData, VerifiedWebhookEvent } from './stripe.adapter';
 
+export { AbcIgniteAdapter } from './abc-ignite.adapter';
+export type { 
+  AbcIgniteEvent, 
+  AbcIgniteEventType, 
+  EnrollmentResult, 
+  WaitlistResult,
+} from './abc-ignite.adapter';
+
+// Integration config - single source of truth
+export {
+  INTEGRATION_TYPES,
+  INTEGRATIONS,
+  getIntegrationConfig,
+  getIntegrationIds,
+  getSecretNames,
+  getDefaultMeta,
+  isValidIntegrationType,
+} from './config';
+export type { IntegrationTypeId, IntegrationConfig, SecretConfig, MetaFieldConfig } from './config';
+
 // Legacy exports for backward compatibility
 // These are deprecated - use adapters instead
 export {

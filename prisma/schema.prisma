@@ -63,6 +63,7 @@ enum IntegrationType {
   STRIPE
   CALENDLY
   MANYCHAT
+  ABC_IGNITE
 }
 
 enum HealthStatus {
@@ -129,6 +130,7 @@ enum EventSystem {
   STRIPE
   CALENDLY
   MANYCHAT
+  ABC_IGNITE
   CRON
   WORKFLOW
 }

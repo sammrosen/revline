@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { lockScroll, unlockScroll } from '@/app/_lib/utils/scroll-lock';
 
 interface DeleteClientButtonProps {
   clientId: string;
@@ -18,6 +19,16 @@ export function DeleteClientButton({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+
+  // Lock body scroll when modal is open (mobile UX)
+  useEffect(() => {
+    if (showConfirm) {
+      lockScroll();
+    } else {
+      unlockScroll();
+    }
+    return () => unlockScroll();
+  }, [showConfirm]);
 
   async function handleDelete() {
     if (confirmText !== clientName) return;

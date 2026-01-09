@@ -95,6 +95,15 @@ export interface ManyChatMeta {
 }
 
 /**
+ * ABC Ignite integration metadata
+ * Club configuration for calendar/appointment booking
+ */
+export interface AbcIgniteMeta {
+  clubNumber: string;
+  defaultEventTypeId?: string;
+}
+
+/**
  * Union of all integration meta types
  */
 export type IntegrationMeta = 
@@ -102,6 +111,7 @@ export type IntegrationMeta =
   | StripeMeta 
   | CalendlyMeta 
   | ManyChatMeta 
+  | AbcIgniteMeta
   | Record<string, unknown>;
 
 /**

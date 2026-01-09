@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { lockScroll, unlockScroll } from '@/app/_lib/utils/scroll-lock';
 
 /**
  * Available workflow triggers for testing
@@ -335,6 +336,16 @@ export function TestSuiteButton({
   isDropdownItem?: boolean;
 }) {
   const [showModal, setShowModal] = useState(false);
+
+  // Lock body scroll when modal is open (mobile UX)
+  useEffect(() => {
+    if (showModal) {
+      lockScroll();
+    } else {
+      unlockScroll();
+    }
+    return () => unlockScroll();
+  }, [showModal]);
 
   if (isDropdownItem) {
     return (
