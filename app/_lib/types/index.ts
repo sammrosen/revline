@@ -97,10 +97,24 @@ export interface ManyChatMeta {
 /**
  * ABC Ignite integration metadata
  * Club configuration for calendar/appointment booking
+ * 
+ * @example
+ * {
+ *   "clubNumber": "9001",
+ *   "defaultEventCategory": "appointment",
+ *   "defaultEventTypeId": "abc123",
+ *   "defaultEmployeeId": "emp456"
+ * }
  */
 export interface AbcIgniteMeta {
+  /** ABC Ignite club/location number (required) */
   clubNumber: string;
+  /** Default event category: 'appointment' (1:1) or 'event' (classes) */
+  defaultEventCategory?: 'appointment' | 'event';
+  /** Default event type ID for bookings */
   defaultEventTypeId?: string;
+  /** Default employee/trainer ID for single-trainer scenarios */
+  defaultEmployeeId?: string;
 }
 
 /**

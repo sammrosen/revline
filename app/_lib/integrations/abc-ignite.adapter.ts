@@ -196,6 +196,43 @@ export interface AbcIgniteListResponse<T> {
   };
 }
 
+/**
+ * Availability slot for employee/event booking
+ */
+export interface AbcIgniteAvailabilitySlot {
+  startTime: string;
+  endTime: string;
+  employeeId?: string;
+  employeeName?: string;
+  eventTypeId?: string;
+  available: boolean;
+}
+
+/**
+ * Session balance information for a member
+ */
+export interface AbcIgniteSessionBalance {
+  memberId: string;
+  eventTypeId: string;
+  totalSessions: number;
+  usedSessions: number;
+  remainingSessions: number;
+  unlimited: boolean;
+}
+
+/**
+ * Date range filter for queries
+ */
+export interface DateRange {
+  startDate: string;  // ISO format YYYY-MM-DD
+  endDate: string;    // ISO format YYYY-MM-DD
+}
+
+/**
+ * Event category for filtering
+ */
+export type EventCategory = 'appointment' | 'event';
+
 // =============================================================================
 // ADAPTER CLASS
 // =============================================================================
@@ -338,6 +375,95 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   }
 
   // ===========================================================================
+  // MEMBER OPERATIONS
+  // ===========================================================================
+
+  /**
+   * Get members with optional filters
+   * GET /{clubNumber}/members
+   * 
+   * @param options - Filter options (barcode, activeStatus, etc.)
+   */
+  async getMembers(options?: {
+    barcode?: string;
+    activeStatus?: 'active' | 'inactive' | 'all';
+    memberStatus?: string;
+    joinStatus?: 'member' | 'prospect' | 'all';
+    memberId?: string;
+  }): Promise<IntegrationResult<AbcIgniteMember[]>> {
+    const params = new URLSearchParams();
+    
+    if (options?.barcode) {
+      params.append('barcode', options.barcode);
+    }
+    if (options?.activeStatus) {
+      params.append('activeStatus', options.activeStatus);
+    }
+    if (options?.memberStatus) {
+      params.append('memberStatus', options.memberStatus);
+    }
+    if (options?.joinStatus) {
+      params.append('joinStatus', options.joinStatus);
+    }
+    if (options?.memberId) {
+      params.append('memberId', options.memberId);
+    }
+
+    const queryString = params.toString();
+    const endpoint = `/members${queryString ? `?${queryString}` : ''}`;
+    
+    const result = await this.apiRequest<AbcIgniteListResponse<AbcIgniteMember>>(
+      'GET',
+      endpoint
+    );
+
+    if (!result.success) {
+      return result as IntegrationResult<AbcIgniteMember[]>;
+    }
+
+    return this.success(result.data?.results || []);
+  }
+
+  /**
+   * Get a single member by barcode
+   * GET /{clubNumber}/members?barcode={barcode}
+   * 
+   * Convenience method for member lookup flow.
+   * Returns null if member not found.
+   */
+  async getMemberByBarcode(barcode: string): Promise<IntegrationResult<AbcIgniteMember | null>> {
+    const result = await this.getMembers({ barcode });
+    
+    if (!result.success) {
+      return result as IntegrationResult<AbcIgniteMember | null>;
+    }
+
+    const members = result.data || [];
+    if (members.length === 0) {
+      return this.success(null);
+    }
+
+    return this.success(members[0]);
+  }
+
+  /**
+   * Get a member's upcoming events/appointments
+   * GET /{clubNumber}/members/{memberId}/appointments
+   */
+  async getMemberEvents(memberId: string): Promise<IntegrationResult<AbcIgniteEvent[]>> {
+    const result = await this.apiRequest<AbcIgniteListResponse<AbcIgniteEvent>>(
+      'GET',
+      `/members/${memberId}/appointments`
+    );
+
+    if (!result.success) {
+      return result as IntegrationResult<AbcIgniteEvent[]>;
+    }
+
+    return this.success(result.data?.results || []);
+  }
+
+  // ===========================================================================
   // CALENDAR OPERATIONS
   // ===========================================================================
 
@@ -345,13 +471,14 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
    * Get available calendar events
    * GET /{clubNumber}/calendars/events
    * 
-   * @param options - Filter options
+   * @param options - Filter options including category for appointments vs classes
    */
   async getEvents(options?: {
     eventTypeId?: string;
     startDate?: string;
     endDate?: string;
     isAvailableOnline?: boolean;
+    eventCategory?: EventCategory;
   }): Promise<IntegrationResult<AbcIgniteEvent[]>> {
     const params = new URLSearchParams();
     
@@ -366,6 +493,9 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
     }
     if (options?.isAvailableOnline !== undefined) {
       params.append('isAvailableOnline', String(options.isAvailableOnline));
+    }
+    if (options?.eventCategory) {
+      params.append('eventCategory', options.eventCategory);
     }
 
     const queryString = params.toString();
@@ -392,13 +522,32 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   }
 
   /**
-   * Get event types (appointment categories)
+   * Get event types (appointment categories or class types)
    * GET /{clubNumber}/calendars/eventtypes
+   * 
+   * @param options - Filter options (category, isAvailableOnline)
    */
-  async getEventTypes(): Promise<IntegrationResult<AbcIgniteEventType[]>> {
+  async getEventTypes(options?: {
+    eventCategory?: EventCategory;
+    isAvailableOnline?: boolean;
+  }): Promise<IntegrationResult<AbcIgniteEventType[]>> {
+    const params = new URLSearchParams();
+    
+    // Use category from options or fall back to config default
+    const category = options?.eventCategory || this.meta?.defaultEventCategory;
+    if (category) {
+      params.append('eventCategory', category);
+    }
+    if (options?.isAvailableOnline !== undefined) {
+      params.append('isAvailableOnline', String(options.isAvailableOnline));
+    }
+
+    const queryString = params.toString();
+    const endpoint = `/calendars/eventtypes${queryString ? `?${queryString}` : ''}`;
+    
     const result = await this.apiRequest<AbcIgniteListResponse<AbcIgniteEventType>>(
       'GET',
-      '/calendars/eventtypes'
+      endpoint
     );
 
     if (!result.success) {
@@ -417,22 +566,183 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   }
 
   // ===========================================================================
+  // AVAILABILITY & SESSION BALANCE
+  // ===========================================================================
+
+  /**
+   * Get employee availability for a specific event type
+   * GET /{clubNumber}/employees/{employeeId}/availability
+   * 
+   * @param employeeId - The employee/trainer ID
+   * @param eventTypeId - The event type to check availability for
+   * @param dateRange - Optional date range filter
+   */
+  async getEmployeeAvailability(
+    employeeId: string,
+    eventTypeId: string,
+    dateRange?: DateRange
+  ): Promise<IntegrationResult<AbcIgniteAvailabilitySlot[]>> {
+    const params = new URLSearchParams();
+    params.append('eventTypeId', eventTypeId);
+    
+    if (dateRange?.startDate) {
+      params.append('startDate', dateRange.startDate);
+    }
+    if (dateRange?.endDate) {
+      params.append('endDate', dateRange.endDate);
+    }
+
+    const queryString = params.toString();
+    const endpoint = `/employees/${employeeId}/availability?${queryString}`;
+    
+    const result = await this.apiRequest<AbcIgniteListResponse<AbcIgniteAvailabilitySlot>>(
+      'GET',
+      endpoint
+    );
+
+    if (!result.success) {
+      return result as IntegrationResult<AbcIgniteAvailabilitySlot[]>;
+    }
+
+    return this.success(result.data?.results || []);
+  }
+
+  /**
+   * Get available employees for a specific event
+   * GET /{clubNumber}/calendars/events/{eventId}/availableemployees
+   */
+  async getAvailableEmployees(eventId: string): Promise<IntegrationResult<AbcIgniteMember[]>> {
+    const result = await this.apiRequest<AbcIgniteListResponse<AbcIgniteMember>>(
+      'GET',
+      `/calendars/events/${eventId}/availableemployees`
+    );
+
+    if (!result.success) {
+      return result as IntegrationResult<AbcIgniteMember[]>;
+    }
+
+    return this.success(result.data?.results || []);
+  }
+
+  /**
+   * Get session balance for a member and event type
+   * GET /{clubNumber}/session-balance
+   * 
+   * @param memberId - The member ID
+   * @param eventTypeId - The event type to check balance for
+   */
+  async getSessionBalance(
+    memberId: string,
+    eventTypeId: string
+  ): Promise<IntegrationResult<AbcIgniteSessionBalance>> {
+    const params = new URLSearchParams();
+    params.append('memberId', memberId);
+    params.append('eventTypeId', eventTypeId);
+
+    const endpoint = `/session-balance?${params.toString()}`;
+    
+    const result = await this.apiRequest<AbcIgniteSessionBalance>('GET', endpoint);
+    
+    if (!result.success) {
+      return result;
+    }
+
+    // Ensure the response includes member and event type info
+    return this.success({
+      ...result.data!,
+      memberId,
+      eventTypeId,
+    });
+  }
+
+  /**
+   * Check if a member can enroll in an event (has sessions/funding)
+   * Convenience method combining session balance check with validation
+   */
+  async canEnroll(
+    memberId: string,
+    eventTypeId: string
+  ): Promise<IntegrationResult<{ canEnroll: boolean; reason?: string; balance?: AbcIgniteSessionBalance }>> {
+    const balanceResult = await this.getSessionBalance(memberId, eventTypeId);
+    
+    if (!balanceResult.success) {
+      return {
+        success: false,
+        error: balanceResult.error,
+        data: { canEnroll: false, reason: balanceResult.error },
+      };
+    }
+
+    const balance = balanceResult.data!;
+    
+    // Check if member has sessions available
+    if (!balance.unlimited && balance.remainingSessions <= 0) {
+      return this.success({
+        canEnroll: false,
+        reason: 'No session credits remaining',
+        balance,
+      });
+    }
+
+    return this.success({
+      canEnroll: true,
+      balance,
+    });
+  }
+
+  // ===========================================================================
   // ENROLLMENT OPERATIONS
   // ===========================================================================
 
   /**
-   * Enroll a member in an event (book appointment)
+   * Enroll a member in an event (book appointment or class)
    * POST /{clubNumber}/calendars/secured/events/{eventId}/members/{memberId}
    * 
+   * Supports both direct memberId or barcode lookup.
+   * 
    * @param eventId - The event to enroll in
-   * @param memberId - The member to enroll
+   * @param memberIdentifier - Either memberId directly or barcode for lookup
    * @param options - Optional enrollment parameters
    */
   async enrollMember(
     eventId: string,
-    memberId: string,
+    memberIdentifier: string | { barcode: string },
     options?: EnrollmentOptions
   ): Promise<IntegrationResult<EnrollmentResult>> {
+    // Resolve memberId if barcode was provided
+    let memberId: string;
+    
+    if (typeof memberIdentifier === 'object' && 'barcode' in memberIdentifier) {
+      const memberResult = await this.getMemberByBarcode(memberIdentifier.barcode);
+      if (!memberResult.success) {
+        return {
+          success: false,
+          error: `Failed to lookup member by barcode: ${memberResult.error}`,
+          data: {
+            success: false,
+            eventId,
+            memberId: '',
+            message: memberResult.error,
+          },
+        };
+      }
+      if (!memberResult.data) {
+        return {
+          success: false,
+          error: `Member not found with barcode: ${memberIdentifier.barcode}`,
+          data: {
+            success: false,
+            eventId,
+            memberId: '',
+            message: 'Member not found',
+          },
+        };
+      }
+      memberId = memberResult.data.memberId;
+    } else {
+      memberId = memberIdentifier;
+    }
+
     const body: Record<string, unknown> = {
       clubNumber: this.getClubNumber(),
       eventId,
@@ -474,13 +784,37 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   }
 
   /**
-   * Unenroll a member from an event (cancel appointment)
+   * Unenroll a member from an event (cancel appointment or class booking)
    * DELETE /{clubNumber}/calendars/secured/events/{eventId}/members/{memberId}
+   * 
+   * Supports both direct memberId or barcode lookup.
    */
   async unenrollMember(
     eventId: string,
-    memberId: string
+    memberIdentifier: string | { barcode: string }
   ): Promise<IntegrationResult<EnrollmentResult>> {
+    // Resolve memberId if barcode was provided
+    let memberId: string;
+    
+    if (typeof memberIdentifier === 'object' && 'barcode' in memberIdentifier) {
+      const memberResult = await this.getMemberByBarcode(memberIdentifier.barcode);
+      if (!memberResult.success || !memberResult.data) {
+        return {
+          success: false,
+          error: `Failed to lookup member: ${memberResult.error || 'Not found'}`,
+          data: {
+            success: false,
+            eventId,
+            memberId: '',
+            message: memberResult.error || 'Member not found',
+          },
+        };
+      }
+      memberId = memberResult.data.memberId;
+    } else {
+      memberId = memberIdentifier;
+    }
+
     const result = await this.apiRequest<unknown>(
       'DELETE',
       `/calendars/secured/events/${eventId}/members/${memberId}`
@@ -514,11 +848,30 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   /**
    * Add a member to event waitlist
    * POST /{clubNumber}/calendars/secured/events/{eventId}/waitlist/members/{memberId}
+   * 
+   * Supports both direct memberId or barcode lookup.
    */
   async addToWaitlist(
     eventId: string,
-    memberId: string
+    memberIdentifier: string | { barcode: string }
   ): Promise<IntegrationResult<WaitlistResult>> {
+    // Resolve memberId if barcode was provided
+    let memberId: string;
+    
+    if (typeof memberIdentifier === 'object' && 'barcode' in memberIdentifier) {
+      const memberResult = await this.getMemberByBarcode(memberIdentifier.barcode);
+      if (!memberResult.success || !memberResult.data) {
+        return {
+          success: false,
+          error: `Failed to lookup member: ${memberResult.error || 'Not found'}`,
+          data: { success: false, eventId, memberId: '' },
+        };
+      }
+      memberId = memberResult.data.memberId;
+    } else {
+      memberId = memberIdentifier;
+    }
+
     const result = await this.apiRequest<unknown>(
       'POST',
       `/calendars/secured/events/${eventId}/waitlist/members/${memberId}`
@@ -546,11 +899,30 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   /**
    * Remove a member from event waitlist
    * DELETE /{clubNumber}/calendars/secured/events/{eventId}/waitlist/members/{memberId}
+   * 
+   * Supports both direct memberId or barcode lookup.
    */
   async removeFromWaitlist(
     eventId: string,
-    memberId: string
+    memberIdentifier: string | { barcode: string }
   ): Promise<IntegrationResult<WaitlistResult>> {
+    // Resolve memberId if barcode was provided
+    let memberId: string;
+    
+    if (typeof memberIdentifier === 'object' && 'barcode' in memberIdentifier) {
+      const memberResult = await this.getMemberByBarcode(memberIdentifier.barcode);
+      if (!memberResult.success || !memberResult.data) {
+        return {
+          success: false,
+          error: `Failed to lookup member: ${memberResult.error || 'Not found'}`,
+          data: { success: false, eventId, memberId: '' },
+        };
+      }
+      memberId = memberResult.data.memberId;
+    } else {
+      memberId = memberIdentifier;
+    }
+
     const result = await this.apiRequest<unknown>(
       'DELETE',
       `/calendars/secured/events/${eventId}/waitlist/members/${memberId}`

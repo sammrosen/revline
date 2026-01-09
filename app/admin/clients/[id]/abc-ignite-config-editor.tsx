@@ -3,11 +3,18 @@
 import { useState, useEffect } from 'react';
 
 /**
+ * Event category type - matches ABC Ignite API
+ */
+type EventCategory = 'appointment' | 'event';
+
+/**
  * ABC Ignite meta configuration
  */
 interface AbcIgniteMeta {
   clubNumber: string;
+  defaultEventCategory?: EventCategory;
   defaultEventTypeId?: string;
+  defaultEmployeeId?: string;
   eventTypes?: Record<string, { id: string; name: string }>;
 }
 
@@ -22,7 +29,9 @@ interface AbcIgniteConfigEditorProps {
  */
 const DEFAULT_CONFIG: AbcIgniteMeta = {
   clubNumber: '',
+  defaultEventCategory: 'appointment',
   defaultEventTypeId: '',
+  defaultEmployeeId: '',
   eventTypes: {},
 };
 
@@ -37,7 +46,9 @@ function parseMeta(value: string): AbcIgniteMeta {
     const parsed = JSON.parse(value);
     return {
       clubNumber: parsed.clubNumber || '',
+      defaultEventCategory: parsed.defaultEventCategory || 'appointment',
       defaultEventTypeId: parsed.defaultEventTypeId || '',
+      defaultEmployeeId: parsed.defaultEmployeeId || '',
       eventTypes: parsed.eventTypes || {},
     };
   } catch {
@@ -72,10 +83,12 @@ export function AbcIgniteConfigEditor({
   // Sync structured editor to parent
   useEffect(() => {
     if (!isJsonMode) {
-      // Only include eventTypes if there are entries
+      // Build output with all fields
       const output: AbcIgniteMeta = {
         clubNumber: meta.clubNumber,
+        defaultEventCategory: meta.defaultEventCategory || 'appointment',
         defaultEventTypeId: meta.defaultEventTypeId || '',
+        defaultEmployeeId: meta.defaultEmployeeId || '',
       };
       if (meta.eventTypes && Object.keys(meta.eventTypes).length > 0) {
         output.eventTypes = meta.eventTypes;
@@ -89,7 +102,9 @@ export function AbcIgniteConfigEditor({
   function handleSwitchToJson() {
     const output: AbcIgniteMeta = {
       clubNumber: meta.clubNumber,
+      defaultEventCategory: meta.defaultEventCategory || 'appointment',
       defaultEventTypeId: meta.defaultEventTypeId || '',
+      defaultEmployeeId: meta.defaultEmployeeId || '',
     };
     if (meta.eventTypes && Object.keys(meta.eventTypes).length > 0) {
       output.eventTypes = meta.eventTypes;
@@ -105,7 +120,9 @@ export function AbcIgniteConfigEditor({
       const parsed = JSON.parse(jsonText);
       setMeta({
         clubNumber: parsed.clubNumber || '',
+        defaultEventCategory: parsed.defaultEventCategory || 'appointment',
         defaultEventTypeId: parsed.defaultEventTypeId || '',
+        defaultEmployeeId: parsed.defaultEmployeeId || '',
         eventTypes: parsed.eventTypes || {},
       });
       setIsJsonMode(false);
@@ -230,6 +247,27 @@ export function AbcIgniteConfigEditor({
             </p>
           </div>
 
+          {/* Event Category - Dropdown */}
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1.5">
+              Default Event Category
+            </label>
+            <select
+              value={meta.defaultEventCategory || 'appointment'}
+              onChange={(e) => setMeta(prev => ({ 
+                ...prev, 
+                defaultEventCategory: e.target.value as EventCategory 
+              }))}
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-orange-500/50 outline-none transition-colors"
+            >
+              <option value="appointment">Appointment (1:1 sessions)</option>
+              <option value="event">Event (classes, group sessions)</option>
+            </select>
+            <p className="text-xs text-zinc-600 mt-1">
+              Same endpoints work for both - this sets the default category filter
+            </p>
+          </div>
+
           {/* Default Event Type - Optional */}
           <div>
             <label className="text-xs text-zinc-400 block mb-1.5">
@@ -244,6 +282,23 @@ export function AbcIgniteConfigEditor({
             />
             <p className="text-xs text-zinc-600 mt-1">
               Default event type used when no specific type is selected
+            </p>
+          </div>
+
+          {/* Default Employee - Optional */}
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1.5">
+              Default Employee/Trainer ID <span className="text-zinc-600">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={meta.defaultEmployeeId || ''}
+              onChange={(e) => setMeta(prev => ({ ...prev, defaultEmployeeId: e.target.value }))}
+              placeholder="e.g., EMP_123"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm font-mono text-white focus:border-orange-500/50 outline-none transition-colors"
+            />
+            <p className="text-xs text-zinc-600 mt-1">
+              For single-trainer scenarios - skips availability check
             </p>
           </div>
         </div>
@@ -346,9 +401,10 @@ export function AbcIgniteConfigEditor({
       <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded text-xs text-orange-200/80">
         <span className="text-orange-400 font-medium">💡 Tips:</span>
         <ul className="mt-1 space-y-0.5 list-disc list-inside text-orange-200/60">
-          <li>Event types can be fetched from the API once App ID/Key are configured</li>
-          <li>Use event type keys in workflow actions for easier configuration</li>
+          <li>Appointments (1:1) and Events (classes) use the same API endpoints</li>
+          <li>Event category just sets the default filter - you can override per-action</li>
           <li>app_id and app_key are sent as headers on every API request</li>
+          <li>Workflows support both memberId and barcode for member lookup</li>
         </ul>
       </div>
 
