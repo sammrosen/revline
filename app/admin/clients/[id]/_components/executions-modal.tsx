@@ -73,11 +73,11 @@ export function ExecutionsModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
+      className="fixed inset-0 bg-black/80 flex items-center justify-center p-0 sm:p-4 z-50"
       onClick={onClose}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-lg w-full max-w-4xl max-h-[85vh] flex flex-col"
+        className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg w-full h-full sm:h-auto sm:max-w-4xl sm:max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -131,22 +131,24 @@ export function ExecutionsModal({
           )}
 
           {!loading && !error && executions.length > 0 && (
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-zinc-900">
-                <tr className="border-b border-zinc-800 text-left text-zinc-400">
-                  <th className="px-4 py-3 font-medium">Time</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Trigger</th>
-                  <th className="px-4 py-3 font-medium">Duration</th>
-                  <th className="px-4 py-3 font-medium">Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {executions.map((execution) => (
-                  <ExecutionRow key={execution.id} execution={execution} />
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto scrollbar-hide">
+              <table className="w-full text-sm min-w-[600px]">
+                <thead className="sticky top-0 bg-zinc-900">
+                  <tr className="border-b border-zinc-800 text-left text-zinc-400">
+                    <th className="px-4 py-3 font-medium">Time</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium">Trigger</th>
+                    <th className="px-4 py-3 font-medium">Duration</th>
+                    <th className="px-4 py-3 font-medium">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {executions.map((execution) => (
+                    <ExecutionRow key={execution.id} execution={execution} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

@@ -319,8 +319,8 @@ export function MailerLiteConfigEditor({
 
       {/* Delete Group Confirmation Modal */}
       {deleteGroupKey && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-zinc-900 border border-red-500/30 rounded-lg p-6 max-w-md w-full">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-0 sm:p-4">
+          <div className="bg-zinc-900 border-0 sm:border sm:border-red-500/30 rounded-none sm:rounded-lg p-4 sm:p-6 max-w-md w-full h-full sm:h-auto flex flex-col justify-center sm:block">
             <h4 className="text-lg font-semibold text-red-400/90 mb-2">Delete Group</h4>
             <p className="text-sm text-zinc-400 mb-3">
               This will remove the <span className="font-mono text-white">{deleteGroupKey}</span> group.

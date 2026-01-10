@@ -274,8 +274,8 @@ export function IntegrationActions({ integration, dependentWorkflows = [] }: Int
           : 'Update non-sensitive configuration (group IDs, product maps, etc.)';
 
     return (
-      <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-0 sm:p-4 z-50">
+        <div className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg p-4 sm:p-6 max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
           <div className="flex items-center gap-2 mb-2">
             <h3 className="text-lg font-semibold">Edit {modalTitle}</h3>
             {!hasStructuredEditor && (
@@ -353,8 +353,8 @@ export function IntegrationActions({ integration, dependentWorkflows = [] }: Int
   // Manage Secrets Modal
   if (showManageSecrets) {
     return (
-      <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-lg w-full">
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-0 sm:p-4 z-50">
+        <div className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg p-4 sm:p-6 max-w-lg w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
           <h3 className="text-lg font-semibold mb-2">Manage Secrets</h3>
           <p className="text-sm text-zinc-400 mb-4">
             Add, update, or remove secrets for this integration. Secrets are encrypted at rest.

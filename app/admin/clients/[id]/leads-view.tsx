@@ -100,52 +100,54 @@ export function LeadsView({ leads }: LeadsViewProps) {
             No leads in {selectedStage === 'ALL' ? 'any stage' : selectedStage.toLowerCase()} yet
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-zinc-800 text-left text-zinc-400">
-                <th className="px-4 py-2 font-medium">Email</th>
-                <th className="px-4 py-2 font-medium">Stage</th>
-                <th className="px-4 py-2 font-medium">Source</th>
-                <th className="px-4 py-2 font-medium">Last Activity</th>
-                <th className="px-4 py-2 font-medium">Captured</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLeads.map((lead) => {
-                const lastEventTime = lead.lastEventAt ? new Date(lead.lastEventAt).getTime() : now;
-                const daysSinceActivity = Math.floor(
-                  (now - lastEventTime) / (1000 * 60 * 60 * 24)
-                );
-                const isStale = daysSinceActivity > 1;
+          <div className="overflow-x-auto scrollbar-hide">
+            <table className="w-full text-sm min-w-[640px]">
+              <thead>
+                <tr className="border-b border-zinc-800 text-left text-zinc-400">
+                  <th className="px-4 py-2 font-medium">Email</th>
+                  <th className="px-4 py-2 font-medium">Stage</th>
+                  <th className="px-4 py-2 font-medium">Source</th>
+                  <th className="px-4 py-2 font-medium">Last Activity</th>
+                  <th className="px-4 py-2 font-medium">Captured</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLeads.map((lead) => {
+                  const lastEventTime = lead.lastEventAt ? new Date(lead.lastEventAt).getTime() : now;
+                  const daysSinceActivity = Math.floor(
+                    (now - lastEventTime) / (1000 * 60 * 60 * 24)
+                  );
+                  const isStale = daysSinceActivity > 1;
 
-                return (
-                  <tr 
-                    key={lead.id} 
-                    className={`border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 ${
-                      isStale ? 'bg-yellow-500/5' : ''
-                    }`}
-                  >
-                    <td className="px-4 py-2 font-mono text-xs">{lead.email}</td>
-                    <td className="px-4 py-2">
-                      <StageBadge stage={lead.stage} />
-                    </td>
-                    <td className="px-4 py-2 text-zinc-400">{lead.source || '—'}</td>
-                    <td className="px-4 py-2 text-zinc-400">
-                      {lead.lastEventAt ? formatDate(lead.lastEventAt) : '—'}
-                      {isStale && lead.lastEventAt && (
-                        <span className="ml-2 text-yellow-400 text-xs">
-                          ({daysSinceActivity}d ago)
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-zinc-500">
-                      {formatDate(lead.createdAt)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                  return (
+                    <tr 
+                      key={lead.id} 
+                      className={`border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 ${
+                        isStale ? 'bg-yellow-500/5' : ''
+                      }`}
+                    >
+                      <td className="px-4 py-2 font-mono text-xs whitespace-nowrap">{lead.email}</td>
+                      <td className="px-4 py-2 whitespace-nowrap">
+                        <StageBadge stage={lead.stage} />
+                      </td>
+                      <td className="px-4 py-2 text-zinc-400 whitespace-nowrap">{lead.source || '—'}</td>
+                      <td className="px-4 py-2 text-zinc-400 whitespace-nowrap">
+                        {lead.lastEventAt ? formatDate(lead.lastEventAt) : '—'}
+                        {isStale && lead.lastEventAt && (
+                          <span className="ml-2 text-yellow-400 text-xs">
+                            ({daysSinceActivity}d ago)
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-zinc-500 whitespace-nowrap">
+                        {formatDate(lead.createdAt)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

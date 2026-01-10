@@ -163,14 +163,29 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
 
   return (
     <div>
-      {/* Tab Navigation */}
-      <div className="border-b border-zinc-800 mb-4">
-        <div className="flex gap-1">
+      {/* Mobile: Dropdown Tab Selector */}
+      <div className="sm:hidden mb-4">
+        <select
+          value={activeTab}
+          onChange={(e) => setActiveTab(e.target.value as TabType)}
+          className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-white text-sm font-medium focus:outline-none focus:border-zinc-700"
+        >
+          {tabs.map((tab) => (
+            <option key={tab.id} value={tab.id}>
+              {tab.label} {tab.count !== undefined ? `(${tab.count})` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Desktop: Horizontal Tab Navigation */}
+      <div className="hidden sm:block border-b border-zinc-800 mb-4">
+        <div className="flex gap-1 overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 text-sm font-medium transition-colors relative flex items-center gap-1.5 ${
+              className={`px-4 py-2 text-sm font-medium transition-colors relative flex items-center gap-1.5 whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'text-white'
                   : 'text-zinc-400 hover:text-zinc-300'
@@ -223,8 +238,8 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
                     className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex flex-col gap-4 relative"
                   >
                     {/* Header: Title and Actions */}
-                    <div className="flex flex-row justify-between items-center gap-4 relative">
-                      <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center relative">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <IntegrationIcon className={`w-4 h-4 ${integrationStyle.textClass}`} />
                         <span className={`font-bold tracking-tight ${integrationStyle.textClass}`}>{integration.integration}</span>
                         <HealthBadge status={integration.healthStatus} />
@@ -235,7 +250,7 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
                           </span>
                         )}
                       </div>
-                      <div className="flex justify-end">
+                      <div className="flex">
                         <IntegrationActions
                           integration={{
                             id: integration.id,
@@ -298,49 +313,51 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
           <div>
             <h2 className="text-lg font-semibold mb-4">Recent Events (Last 50)</h2>
             <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-zinc-800 text-left text-zinc-400">
-                    <th className="px-4 py-2 font-medium">Time</th>
-                    <th className="px-4 py-2 font-medium">System</th>
-                    <th className="px-4 py-2 font-medium">Event</th>
-                    <th className="px-4 py-2 font-medium">Status</th>
-                    <th className="px-4 py-2 font-medium">Error</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {events.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
-                        No events yet
-                      </td>
+              <div className="overflow-x-auto scrollbar-hide">
+                <table className="w-full text-sm min-w-[600px]">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-left text-zinc-400">
+                      <th className="px-4 py-2 font-medium">Time</th>
+                      <th className="px-4 py-2 font-medium">System</th>
+                      <th className="px-4 py-2 font-medium">Event</th>
+                      <th className="px-4 py-2 font-medium">Status</th>
+                      <th className="px-4 py-2 font-medium">Error</th>
                     </tr>
-                  ) : (
-                    events.map((event) => (
-                      <tr
-                        key={event.id}
-                        className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50"
-                      >
-                        <td className="px-4 py-2 text-zinc-400 whitespace-nowrap">
-                          {formatDate(event.createdAt)}
-                        </td>
-                        <td className="px-4 py-2 font-mono text-xs">{event.system}</td>
-                        <td className="px-4 py-2">{event.eventType}</td>
-                        <td className="px-4 py-2">
-                          {event.success ? (
-                            <span className="text-green-400">✓</span>
-                          ) : (
-                            <span className="text-red-400">✗</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-red-400 text-xs truncate max-w-xs">
-                          {event.errorMessage || '—'}
+                  </thead>
+                  <tbody>
+                    {events.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
+                          No events yet
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      events.map((event) => (
+                        <tr
+                          key={event.id}
+                          className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50"
+                        >
+                          <td className="px-4 py-2 text-zinc-400 whitespace-nowrap">
+                            {formatDate(event.createdAt)}
+                          </td>
+                          <td className="px-4 py-2 font-mono text-xs whitespace-nowrap">{event.system}</td>
+                          <td className="px-4 py-2 whitespace-nowrap">{event.eventType}</td>
+                          <td className="px-4 py-2">
+                            {event.success ? (
+                              <span className="text-green-400">✓</span>
+                            ) : (
+                              <span className="text-red-400">✗</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-red-400 text-xs truncate max-w-xs">
+                            {event.errorMessage || '—'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
