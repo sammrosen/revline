@@ -274,6 +274,16 @@ export const integrations = {
 
 4. **Create webhook route** following the standard pattern.
 
+5. **Wire frontend components** - See `docs/workflows/INTEGRATION-ONBOARDING.md` for full checklist.
+
+**Critical:** The frontend requires updates in **multiple files**:
+- `app/_lib/integrations/config.ts` - Integration metadata
+- `app/admin/clients/[id]/add-integration-form.tsx` - Add form
+- `app/admin/clients/[id]/integration-actions.tsx` - Edit/Configure modal
+- Custom config editor components
+
+Missing any wire-up causes **runtime errors** (e.g., `ReferenceError: isYourIntegration is not defined`).
+
 ---
 
 ## Testing Requirements

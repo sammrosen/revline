@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { IntegrationHelp, IntegrationTemplateButton } from './integration-help';
 import { MailerLiteConfigEditor } from './mailerlite-config-editor';
 import { StripeConfigEditor } from './stripe-config-editor';
-import { AbcIgniteConfigEditor } from './abc-ignite-config-editor';
+import { AbcIgniteAddConfig } from './abc-ignite-add-config';
 import { lockScroll, unlockScroll } from '@/app/_lib/utils/scroll-lock';
 import { 
   INTEGRATION_TYPES, 
@@ -303,7 +303,7 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
                 onChange={setMeta}
               />
             ) : isAbcIgnite ? (
-              <AbcIgniteConfigEditor
+              <AbcIgniteAddConfig
                 value={meta}
                 onChange={setMeta}
               />

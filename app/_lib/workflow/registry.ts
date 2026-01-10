@@ -251,8 +251,22 @@ export const MANYCHAT_ADAPTER: AdapterDefinition = {
 };
 
 /**
+ * ABC Ignite member identifier schema
+ * Supports either direct memberId or barcode lookup
+ */
+const AbcIgniteMemberSchema = z.object({
+  email: z.string().email().optional(),
+  memberId: z.string().optional(),
+  barcode: z.string().optional(),
+}).refine(
+  data => data.memberId || data.barcode,
+  { message: 'Either memberId or barcode is required' }
+);
+
+/**
  * ABC Ignite Adapter
- * Handles calendar/appointment booking for gym members
+ * Handles calendar/appointment booking for gym members.
+ * Works for both appointments (1:1) and events (classes) - same endpoints.
  */
 export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
   id: 'abc_ignite',
@@ -264,40 +278,80 @@ export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
   },
   triggers: {}, // No triggers for now - will add if ABC Ignite supports webhooks
   actions: {
+    // =========================================================================
+    // MEMBER LOOKUP
+    // =========================================================================
+    lookup_member: {
+      name: 'lookup_member',
+      label: 'Lookup Member',
+      description: 'Find a member by barcode and return their memberId',
+      payloadSchema: z.object({
+        barcode: z.string(),
+      }),
+      paramsSchema: z.object({}),
+    },
+
+    // =========================================================================
+    // AVAILABILITY & BALANCE CHECKS
+    // =========================================================================
+    check_availability: {
+      name: 'check_availability',
+      label: 'Check Availability',
+      description: 'Check employee availability for an event type',
+      payloadSchema: z.object({
+        employeeId: z.string().optional(),
+        eventTypeId: z.string().optional(),
+      }),
+      paramsSchema: z.object({
+        employeeId: z.string().optional().describe('Employee ID (uses default if not provided)'),
+        eventTypeId: z.string().optional().describe('Event type ID (uses default if not provided)'),
+        startDate: z.string().optional().describe('Start date (YYYY-MM-DD)'),
+        endDate: z.string().optional().describe('End date (YYYY-MM-DD)'),
+      }),
+    },
+    check_session_balance: {
+      name: 'check_session_balance',
+      label: 'Check Session Balance',
+      description: 'Check if member has session credits for an event type',
+      payloadSchema: AbcIgniteMemberSchema,
+      paramsSchema: z.object({
+        eventTypeId: z.string().optional().describe('Event type ID (uses default if not provided)'),
+      }),
+    },
+
+    // =========================================================================
+    // ENROLLMENT ACTIONS
+    // =========================================================================
     enroll_member: {
       name: 'enroll_member',
       label: 'Enroll Member',
-      description: 'Book a member into a calendar event/appointment',
-      payloadSchema: z.object({
-        email: z.string().email().optional(),
-        memberId: z.string(),
-      }),
+      description: 'Book a member into a calendar event (appointment or class)',
+      payloadSchema: AbcIgniteMemberSchema,
       paramsSchema: z.object({
         eventId: z.string().describe('ABC Ignite event ID'),
         validateServiceRestriction: z.boolean().optional().describe('Validate service restrictions'),
         allowUnfunded: z.boolean().optional().describe('Allow booking even if member has no funding'),
+        checkBalance: z.boolean().optional().describe('Check session balance before enrolling'),
       }),
     },
     unenroll_member: {
       name: 'unenroll_member',
       label: 'Unenroll Member',
       description: 'Cancel a member booking from a calendar event',
-      payloadSchema: z.object({
-        email: z.string().email().optional(),
-        memberId: z.string(),
-      }),
+      payloadSchema: AbcIgniteMemberSchema,
       paramsSchema: z.object({
         eventId: z.string().describe('ABC Ignite event ID'),
       }),
     },
+
+    // =========================================================================
+    // WAITLIST ACTIONS
+    // =========================================================================
     add_to_waitlist: {
       name: 'add_to_waitlist',
       label: 'Add to Waitlist',
       description: 'Add a member to event waitlist',
-      payloadSchema: z.object({
-        email: z.string().email().optional(),
-        memberId: z.string(),
-      }),
+      payloadSchema: AbcIgniteMemberSchema,
       paramsSchema: z.object({
         eventId: z.string().describe('ABC Ignite event ID'),
       }),
@@ -306,10 +360,7 @@ export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
       name: 'remove_from_waitlist',
       label: 'Remove from Waitlist',
       description: 'Remove a member from event waitlist',
-      payloadSchema: z.object({
-        email: z.string().email().optional(),
-        memberId: z.string(),
-      }),
+      payloadSchema: AbcIgniteMemberSchema,
       paramsSchema: z.object({
         eventId: z.string().describe('ABC Ignite event ID'),
       }),

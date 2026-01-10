@@ -68,6 +68,18 @@ vi.mock('@/app/_lib/db', () => ({
   prisma: testPrisma,
 }));
 
+// Mock Pushover to prevent real notifications during tests
+// This is important - without this mock, tests will send real push notifications
+// to your phone if PUSHOVER_USER_KEY and PUSHOVER_APP_TOKEN are set!
+vi.mock('@/app/_lib/pushover', () => ({
+  isPushoverConfigured: () => true, // Pretend it's configured so alert code paths run
+  sendPushoverNotification: async (options: { title?: string; message: string }) => {
+    // Log to console so you can see alerts fired during tests
+    console.log(`[TEST] Pushover notification suppressed: ${options.title || 'Alert'}`);
+    return { success: true, requestId: 'test-mock-request-id' };
+  },
+}));
+
 // Mock Next.js headers for middleware tests
 vi.mock('next/headers', () => ({
   headers: vi.fn(async () => ({
@@ -173,7 +185,7 @@ export async function createTestClient(overrides: Partial<{
  */
 export async function createTestIntegration(
   clientId: string,
-  integration: 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT',
+  integration: 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE',
   secret: string,
   meta?: Record<string, unknown>
 ) {
@@ -194,6 +206,52 @@ export async function createTestIntegration(
     data: {
       clientId,
       integration,
+      secrets: secrets as Parameters<typeof testPrisma.clientIntegration.create>[0]['data']['secrets'],
+      meta: meta as Parameters<typeof testPrisma.clientIntegration.create>[0]['data']['meta'],
+    },
+  });
+}
+
+/**
+ * Test helper: Create ABC Ignite integration with multi-secret support
+ * ABC Ignite requires both App ID and App Key secrets
+ */
+export async function createAbcIgniteIntegration(
+  clientId: string,
+  appId: string,
+  appKey: string,
+  meta?: {
+    clubNumber: string;
+    defaultEventTypeId?: string;
+    eventTypes?: Record<string, { id: string; name: string; category: string; duration?: number }>;
+  }
+) {
+  const { encryptSecret } = await import('@/app/_lib/crypto');
+  const { randomUUID } = await import('crypto');
+  
+  // Create both required secrets
+  const appIdEncrypted = encryptSecret(appId);
+  const appKeyEncrypted = encryptSecret(appKey);
+  
+  const secrets = [
+    {
+      id: randomUUID(),
+      name: 'App ID',
+      encryptedValue: appIdEncrypted.encryptedSecret,
+      keyVersion: appIdEncrypted.keyVersion,
+    },
+    {
+      id: randomUUID(),
+      name: 'App Key',
+      encryptedValue: appKeyEncrypted.encryptedSecret,
+      keyVersion: appKeyEncrypted.keyVersion,
+    },
+  ];
+  
+  return testPrisma.clientIntegration.create({
+    data: {
+      clientId,
+      integration: 'ABC_IGNITE',
       secrets: secrets as Parameters<typeof testPrisma.clientIntegration.create>[0]['data']['secrets'],
       meta: meta as Parameters<typeof testPrisma.clientIntegration.create>[0]['data']['meta'],
     },

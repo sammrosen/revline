@@ -336,9 +336,104 @@ const EXECUTORS: Record<string, Record<string, ActionExecutor>> = {
 
 ---
 
-## Step 7: Structured Config Editor (REQUIRED)
+## Step 7: Config Editors (Add vs Configure)
 
-**Every integration MUST have a structured config editor.** Raw JSON editing should only be a fallback option.
+**Key Architecture:** RevLine uses **two separate UI components** for integration configuration:
+
+| Component | File Pattern | Context | Purpose |
+|-----------|--------------|---------|---------|
+| **Add Config** | `*-add-config.tsx` | "+ Add Integration" form | Collect credentials + minimal required config |
+| **Edit Config** | `*-config-editor.tsx` | "Configure" button on existing integration | Full configuration with API sync, lookups, etc. |
+
+### Why Two Components?
+
+1. **Add Integration** - User doesn't have saved credentials yet, so can't make API calls
+2. **Configure (Edit)** - Integration is saved, has `integrationId`, can call sync APIs
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  ADD INTEGRATION (add-integration-form.tsx)                      │
+│  ─────────────────────────────────────────                       │
+│  • Credentials (App ID, API Key, etc.)                          │
+│  • Basic required config (e.g., Club Number)                    │
+│  • Info box: "After saving, you can sync/configure..."          │
+│                                                                  │
+│  Uses: YourIntegrationAddConfig component                        │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+                         [Save]
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  CONFIGURE / EDIT (integration-actions.tsx)                      │
+│  ──────────────────────────────────────────                      │
+│  • Has integrationId (can make API calls)                       │
+│  • Sync data from external API (e.g., event types)              │
+│  • Full lookup tables, defaults, advanced options               │
+│  • JSON mode fallback for power users                           │
+│                                                                  │
+│  Uses: YourIntegrationConfigEditor component                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Step 7a: Add Config Component (Simple)
+
+**File:** `app/admin/clients/[id]/your-integration-add-config.tsx`
+
+```typescript
+'use client';
+
+import { useState, useEffect } from 'react';
+
+interface YourIntegrationMeta {
+  requiredField: string;
+}
+
+interface Props {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+export function YourIntegrationAddConfig({ value, onChange }: Props) {
+  const [meta, setMeta] = useState(() => {
+    try { return JSON.parse(value); } catch { return { requiredField: '' }; }
+  });
+
+  useEffect(() => {
+    onChange(JSON.stringify(meta, null, 2));
+  }, [meta, onChange]);
+
+  return (
+    <div className="space-y-4">
+      {/* Required field only */}
+      <div>
+        <label className="text-xs text-zinc-400 block mb-1.5">
+          Required Field <span className="text-red-400">*</span>
+        </label>
+        <input
+          type="text"
+          value={meta.requiredField}
+          onChange={(e) => setMeta({ ...meta, requiredField: e.target.value })}
+          className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white"
+        />
+      </div>
+
+      {/* Info box about what's available after saving */}
+      <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+        <h4 className="text-sm font-medium text-blue-400 mb-2">
+          After saving, you'll be able to:
+        </h4>
+        <ul className="text-xs text-blue-200/70 space-y-1">
+          <li>• Sync data from Your Integration API</li>
+          <li>• Configure lookup tables and defaults</li>
+          <li>• Set up advanced options</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+```
+
+### Step 7b: Edit Config Component (Full Featured)
 
 **File:** `app/admin/clients/[id]/your-integration-config-editor.tsx`
 
@@ -349,102 +444,43 @@ import { useState, useEffect } from 'react';
 
 interface YourIntegrationMeta {
   requiredField: string;
-  optionalField?: string;
   lookupTable?: Record<string, { id: string; name: string }>;
 }
 
-interface YourIntegrationConfigEditorProps {
-  value: string; // JSON string
+interface Props {
+  value: string;
   onChange: (value: string) => void;
   error?: string;
-}
-
-const DEFAULT_CONFIG: YourIntegrationMeta = {
-  requiredField: '',
-  optionalField: '',
-  lookupTable: {},
-};
-
-function parseMeta(value: string): YourIntegrationMeta {
-  if (!value.trim()) return DEFAULT_CONFIG;
-  try {
-    const parsed = JSON.parse(value);
-    return {
-      requiredField: parsed.requiredField || '',
-      optionalField: parsed.optionalField || '',
-      lookupTable: parsed.lookupTable || {},
-    };
-  } catch {
-    return DEFAULT_CONFIG;
-  }
+  integrationId?: string; // For API calls
 }
 
 export function YourIntegrationConfigEditor({ 
-  value, 
-  onChange,
-  error: externalError,
-}: YourIntegrationConfigEditorProps) {
+  value, onChange, error, integrationId 
+}: Props) {
   const [isJsonMode, setIsJsonMode] = useState(false);
-  const [jsonText, setJsonText] = useState(value);
   const [meta, setMeta] = useState<YourIntegrationMeta>(() => parseMeta(value));
-  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  // Sync structured editor to parent
-  useEffect(() => {
-    if (!isJsonMode) {
-      const newJson = JSON.stringify(meta, null, 2);
-      onChange(newJson);
-    }
-  }, [meta, isJsonMode, onChange]);
+  // Sync function - can call API because we have integrationId
+  async function handleSync() {
+    if (!integrationId) return;
+    setIsSyncing(true);
+    const res = await fetch(`/api/admin/integrations/${integrationId}/sync-data`);
+    // ... handle response, show selection dialog, etc.
+    setIsSyncing(false);
+  }
 
-  // ... implement mode switching (see existing editors for pattern)
-
-  // Structured Mode UI
   return (
     <div className="space-y-6">
-      {/* Mode Toggle */}
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={handleSwitchToJson}
-          className="text-xs text-zinc-400 hover:text-white px-2 py-1 border border-zinc-700 rounded"
-        >
-          Switch to JSON
-        </button>
-      </div>
-
-      {/* Required Field */}
-      <div>
-        <h4 className="text-sm font-medium text-zinc-300 mb-2">Configuration</h4>
-        <div className="space-y-4 p-4 bg-zinc-950 rounded border border-zinc-800">
-          <div>
-            <label className="text-xs text-zinc-400 block mb-1.5">
-              Required Field <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
-              value={meta.requiredField}
-              onChange={(e) => setMeta(prev => ({ ...prev, requiredField: e.target.value }))}
-              placeholder="Enter value"
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Lookup Table Section */}
-      <div>
-        <h4 className="text-sm font-medium text-zinc-300 mb-2">Lookup Table</h4>
-        {/* Implement add/edit/delete for lookup entries */}
-        {/* See MailerLite or ABC Ignite editors for pattern */}
-      </div>
-
-      {/* Validation Warning */}
-      {!meta.requiredField.trim() && (
-        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded text-xs text-amber-200/90">
-          <span className="text-amber-400 font-medium">⚠️ Required:</span> Required Field must be set.
-        </div>
-      )}
+      {/* JSON mode toggle */}
+      {/* Required fields */}
+      
+      {/* Sync button - only works with integrationId */}
+      <button onClick={handleSync} disabled={!integrationId || isSyncing}>
+        {isSyncing ? 'Syncing...' : 'Sync from API'}
+      </button>
+      
+      {/* Lookup tables, defaults, etc. */}
     </div>
   );
 }
@@ -452,52 +488,96 @@ export function YourIntegrationConfigEditor({
 
 ### Editor UI Patterns
 
-Reference existing editors for these patterns:
-
 | Pattern | Reference File |
 |---------|----------------|
+| Add config (simple) | `abc-ignite-add-config.tsx` |
+| Edit config with sync | `abc-ignite-config-editor.tsx` |
 | Lookup table (add/edit/delete) | `mailerlite-config-editor.tsx` |
-| Simple key-value config | `abc-ignite-config-editor.tsx` |
 | Product mapping | `stripe-config-editor.tsx` |
-| JSON mode toggle | All editors |
-| Delete confirmation modal | `mailerlite-config-editor.tsx` |
+| JSON mode toggle | All `*-config-editor.tsx` files |
 
 ---
 
-## Step 8: Wire Config Editor
+## Step 8: Wire Config Editors
 
-Connect your editor to the add integration form.
+You need to wire **both** components into their respective forms.
+
+### 8a: Wire Add Config
 
 **File:** `app/admin/clients/[id]/add-integration-form.tsx`
 
 ```typescript
-// 1. Add import
-import { YourIntegrationConfigEditor } from './your-integration-config-editor';
+// 1. Import the ADD config (simple version)
+import { YourIntegrationAddConfig } from './your-integration-add-config';
 
 // 2. Add type check
 const isYourIntegration = integration === 'YOUR_NEW_INTEGRATION';
 
-// 3. Update help/template button condition (hide for structured editors)
+// 3. Hide help for structured editors
 {!isMailerLite && !isStripe && !isAbcIgnite && !isYourIntegration && (
   <IntegrationHelp ... />
 )}
 
-// 4. Add to editor rendering
-{isMailerLite ? (
-  <MailerLiteConfigEditor ... />
-) : isStripe ? (
-  <StripeConfigEditor ... />
-) : isAbcIgnite ? (
-  <AbcIgniteConfigEditor ... />
-) : isYourIntegration ? (
-  <YourIntegrationConfigEditor
-    value={meta}
-    onChange={setMeta}
-  />
-) : (
-  <textarea ... />
-)}
+// 4. Render the ADD config
+{isYourIntegration ? (
+  <YourIntegrationAddConfig value={meta} onChange={setMeta} />
+) : ...}
 ```
+
+### 8b: Wire Edit Config
+
+**File:** `app/admin/clients/[id]/integration-actions.tsx`
+
+```typescript
+// 1. Import the EDIT config (full version)
+import { YourIntegrationConfigEditor } from './your-integration-config-editor';
+
+// 2. Add to IntegrationType union
+type IntegrationType = '...' | 'YOUR_NEW_INTEGRATION';
+
+// 3. Add to AVAILABLE_SECRET_NAMES
+YOUR_NEW_INTEGRATION: ['API Key'],
+
+// 4. Add type check
+const isYourIntegration = integrationType === 'YOUR_NEW_INTEGRATION';
+
+// 5. Update hasStructuredEditor
+const hasStructuredEditor = isMailerLite || isStripe || isAbcIgnite || isYourIntegration;
+
+// 6. Render the EDIT config with integrationId
+{isYourIntegration ? (
+  <YourIntegrationConfigEditor
+    value={metaText}
+    onChange={setMetaText}
+    error={error}
+    integrationId={integration.id}  // Enables API calls!
+  />
+) : ...}
+```
+
+### 8c: Critical Checklist (MUST DO)
+
+Missing any of these causes **runtime errors** that crash the page:
+
+**In `integration-actions.tsx`:**
+- [ ] Import the config editor component
+- [ ] Add integration to `IntegrationType` union type
+- [ ] Add secrets to `AVAILABLE_SECRET_NAMES` map
+- [ ] Add `isYourIntegration` boolean check
+- [ ] Add to `hasStructuredEditor` condition
+- [ ] Add conditional render in the edit modal
+
+**In `add-integration-form.tsx`:**
+- [ ] Import the add config component
+- [ ] Add `isYourIntegration` boolean check
+- [ ] Add to help button visibility conditions
+- [ ] Add conditional render in the form
+
+**Common Runtime Error:**
+```
+ReferenceError: isYourIntegration is not defined
+```
+This means you added the integration to conditional checks but forgot to define the boolean variable.
 
 ---
 

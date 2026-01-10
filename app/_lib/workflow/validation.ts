@@ -488,6 +488,7 @@ function adapterIdToIntegrationType(adapterId: string): IntegrationType | null {
     stripe: IntegrationType.STRIPE,
     calendly: IntegrationType.CALENDLY,
     manychat: IntegrationType.MANYCHAT,
+    abc_ignite: IntegrationType.ABC_IGNITE,
   };
   return mapping[adapterId.toLowerCase()] ?? null;
 }

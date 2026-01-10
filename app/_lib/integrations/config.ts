@@ -212,18 +212,17 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
     ],
     metaTemplate: {
       clubNumber: '',
-      defaultEventTypeId: '',
     },
-    metaDescription: 'Configure club number and default event settings',
+    metaDescription: 'Configure club number, then sync event types from ABC Ignite',
     metaFields: [
       { key: 'clubNumber', description: 'ABC Ignite club/location number', required: true },
-      { key: 'defaultEventTypeId', description: 'Default event type for bookings (optional)' },
-      { key: 'eventTypes.*', description: 'Named event types for workflow actions' },
+      { key: 'eventTypes.*', description: 'Synced event types with category (use Sync button after saving)' },
+      { key: 'defaultEventTypeId', description: 'Default event type key for workflows' },
     ],
     tips: [
-      'Get clubNumber from your ABC Ignite admin dashboard',
-      'app_id and app_key are sent as headers on every request',
-      'Event types can be fetched via the API once configured',
+      'Add your App ID and App Key, then use "Sync from ABC Ignite" to fetch event types',
+      'Event types include their category (appointment vs event) from the sync',
+      'Set a default event type for workflows that don\'t specify one',
     ],
     warnings: [
       'Club number is required for all API calls',
