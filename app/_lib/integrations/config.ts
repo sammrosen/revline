@@ -21,6 +21,7 @@ export const INTEGRATION_TYPES = [
   'CALENDLY',
   'MANYCHAT',
   'ABC_IGNITE',
+  'REVLINE',
 ] as const;
 
 export type IntegrationTypeId = typeof INTEGRATION_TYPES[number];
@@ -226,6 +227,30 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
     ],
     warnings: [
       'Club number is required for all API calls',
+    ],
+  },
+
+  REVLINE: {
+    id: 'REVLINE',
+    name: 'revline',
+    displayName: 'RevLine',
+    color: 'text-amber-400',
+    hasStructuredEditor: true,
+    secrets: [], // No external secrets - internal system
+    metaTemplate: {
+      forms: {},
+      settings: {
+        defaultSource: '',
+      },
+    },
+    metaDescription: 'Configure forms and RevLine settings for this client',
+    metaFields: [
+      { key: 'forms.*', description: 'Enabled forms with their trigger operations' },
+      { key: 'settings.defaultSource', description: 'Default source identifier' },
+    ],
+    tips: [
+      'Enable forms by adding them to the forms object',
+      'Each form can specify its own trigger operation for workflow routing',
     ],
   },
 };

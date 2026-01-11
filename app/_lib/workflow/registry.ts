@@ -149,7 +149,7 @@ export const MAILERLITE_ADAPTER: AdapterDefinition = {
 
 /**
  * RevLine Adapter (Internal)
- * Handles lead management and event logging
+ * Handles lead management, event logging, and form submissions
  */
 export const REVLINE_ADAPTER: AdapterDefinition = {
   id: 'revline',
@@ -161,6 +161,16 @@ export const REVLINE_ADAPTER: AdapterDefinition = {
       label: 'Email Captured',
       description: 'Fires when a lead submits email on a landing page',
       payloadSchema: CapturePayloadSchema,
+    },
+    form_submitted: {
+      name: 'form_submitted',
+      label: 'Form Submitted',
+      description: 'Fires when any form is submitted',
+      payloadSchema: z.object({
+        formId: z.string(),
+        email: z.string().email().optional(),
+        source: z.string(),
+      }).passthrough(), // Allow any additional form fields
     },
   },
   actions: {

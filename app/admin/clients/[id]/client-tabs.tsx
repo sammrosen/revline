@@ -258,6 +258,7 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
                             meta: integration.meta,
                             secrets: parseSecrets(integration.secrets),
                           }}
+                          clientId={clientId}
                           dependentWorkflows={dependentWorkflows}
                         />
                       </div>
