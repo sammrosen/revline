@@ -127,6 +127,33 @@ export interface AbcIgniteMeta {
 }
 
 /**
+ * RevLine integration metadata
+ * Forms configuration and internal settings
+ * 
+ * @example
+ * {
+ *   "forms": {
+ *     "prospect-intake": { "enabled": true, "triggerOperation": "form_submitted" },
+ *     "waiver": { "enabled": true, "triggerOperation": "waiver_signed" }
+ *   },
+ *   "settings": {
+ *     "defaultSource": "landing"
+ *   }
+ * }
+ */
+export interface RevlineMeta {
+  /** Enabled forms with their trigger operations */
+  forms: Record<string, { 
+    enabled: boolean; 
+    triggerOperation?: string;
+  }>;
+  /** General RevLine settings */
+  settings: {
+    defaultSource?: string;
+  };
+}
+
+/**
  * Union of all integration meta types
  */
 export type IntegrationMeta = 
@@ -135,6 +162,7 @@ export type IntegrationMeta =
   | CalendlyMeta 
   | ManyChatMeta 
   | AbcIgniteMeta
+  | RevlineMeta
   | Record<string, unknown>;
 
 /**

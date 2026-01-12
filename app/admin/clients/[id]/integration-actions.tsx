@@ -6,8 +6,9 @@ import { IntegrationHelp, IntegrationTemplateButton } from './integration-help';
 import { MailerLiteConfigEditor } from './mailerlite-config-editor';
 import { StripeConfigEditor } from './stripe-config-editor';
 import { AbcIgniteConfigEditor } from './abc-ignite-config-editor';
+import { RevlineConfigEditor } from './revline-config-editor';
 
-type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE';
+type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE';
 
 // Available secret names by integration type
 const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
@@ -16,6 +17,7 @@ const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
   CALENDLY: ['Webhook Secret'],
   MANYCHAT: ['API Key'],
   ABC_IGNITE: ['App ID', 'App Key'],
+  REVLINE: [], // No secrets - internal system
 };
 
 interface SecretSummary {
@@ -37,11 +39,13 @@ interface WorkflowDependency {
 
 interface IntegrationActionsProps {
   integration: Integration;
+  /** Client ID - used for formId duplicate checking */
+  clientId?: string;
   /** Workflows that depend on this integration */
   dependentWorkflows?: WorkflowDependency[];
 }
 
-export function IntegrationActions({ integration, dependentWorkflows = [] }: IntegrationActionsProps) {
+export function IntegrationActions({ integration, clientId, dependentWorkflows = [] }: IntegrationActionsProps) {
   const [showEditMeta, setShowEditMeta] = useState(false);
   const [showManageSecrets, setShowManageSecrets] = useState(false);
   const [metaText, setMetaText] = useState(JSON.stringify(integration.meta || {}, null, 2));
@@ -61,6 +65,7 @@ export function IntegrationActions({ integration, dependentWorkflows = [] }: Int
   const isMailerLite = integrationType === 'MAILERLITE';
   const isStripe = integrationType === 'STRIPE';
   const isAbcIgnite = integrationType === 'ABC_IGNITE';
+  const isRevline = integrationType === 'REVLINE';
   
   // Check if this integration has dependent workflows
   const hasDependents = dependentWorkflows.length > 0;
@@ -257,25 +262,29 @@ export function IntegrationActions({ integration, dependentWorkflows = [] }: Int
 
   // Edit Meta Modal
   if (showEditMeta) {
-    const hasStructuredEditor = isMailerLite || isStripe || isAbcIgnite;
+    const hasStructuredEditor = isMailerLite || isStripe || isAbcIgnite || isRevline;
     const modalTitle = isMailerLite 
       ? 'MailerLite Configuration' 
       : isStripe 
         ? 'Stripe Configuration' 
         : isAbcIgnite
           ? 'ABC Ignite Configuration'
-          : 'Meta Config';
+          : isRevline
+            ? 'RevLine Configuration'
+            : 'Meta Config';
     const modalDescription = isMailerLite 
       ? 'Configure MailerLite groups. Use the Workflows tab to set up automations.'
       : isStripe
         ? 'Configure product mappings for payment routing.'
         : isAbcIgnite
           ? 'Configure club settings and sync event types from ABC Ignite.'
-          : 'Update non-sensitive configuration (group IDs, product maps, etc.)';
+          : isRevline
+            ? 'Enable forms and configure trigger operations for this client.'
+            : 'Update non-sensitive configuration (group IDs, product maps, etc.)';
 
     return (
-      <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-0 sm:p-4 z-50">
+        <div className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg p-4 sm:p-6 max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
           <div className="flex items-center gap-2 mb-2">
             <h3 className="text-lg font-semibold">Edit {modalTitle}</h3>
             {!hasStructuredEditor && (
@@ -306,6 +315,14 @@ export function IntegrationActions({ integration, dependentWorkflows = [] }: Int
               onChange={setMetaText}
               error={error}
               integrationId={integration.id}
+            />
+          ) : isRevline ? (
+            <RevlineConfigEditor
+              value={metaText}
+              onChange={setMetaText}
+              error={error}
+              integrationId={integration.id}
+              clientId={clientId}
             />
           ) : (
             <>
@@ -353,8 +370,8 @@ export function IntegrationActions({ integration, dependentWorkflows = [] }: Int
   // Manage Secrets Modal
   if (showManageSecrets) {
     return (
-      <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-lg w-full">
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-0 sm:p-4 z-50">
+        <div className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg p-4 sm:p-6 max-w-lg w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
           <h3 className="text-lg font-semibold mb-2">Manage Secrets</h3>
           <p className="text-sm text-zinc-400 mb-4">
             Add, update, or remove secrets for this integration. Secrets are encrypted at rest.

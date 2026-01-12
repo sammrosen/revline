@@ -6,6 +6,7 @@ import { IntegrationHelp, IntegrationTemplateButton } from './integration-help';
 import { MailerLiteConfigEditor } from './mailerlite-config-editor';
 import { StripeConfigEditor } from './stripe-config-editor';
 import { AbcIgniteAddConfig } from './abc-ignite-add-config';
+import { RevlineAddConfig } from './revline-add-config';
 import { lockScroll, unlockScroll } from '@/app/_lib/utils/scroll-lock';
 import { 
   INTEGRATION_TYPES, 
@@ -47,9 +48,10 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
     e.preventDefault();
     setError('');
 
-    // Validate secrets
+    // Validate secrets (RevLine doesn't require secrets)
     const validSecrets = secrets.filter(s => s.name.trim() && s.value.trim());
-    if (validSecrets.length === 0) {
+    const requiresSecrets = integration !== 'REVLINE';
+    if (requiresSecrets && validSecrets.length === 0) {
       setError('At least one secret is required');
       return;
     }
@@ -164,14 +166,15 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
   const isMailerLite = integration === 'MAILERLITE';
   const isStripe = integration === 'STRIPE';
   const isAbcIgnite = integration === 'ABC_IGNITE';
+  const isRevline = integration === 'REVLINE';
 
   // Get the first secret's description as hint
   const secretHint = config?.secrets[0]?.description;
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={() => setIsOpen(false)}>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 z-50" onClick={() => setIsOpen(false)}>
       <div 
-        className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+        className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg p-4 sm:p-6 max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
@@ -196,7 +199,7 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <label className="text-sm font-semibold text-zinc-300">Integration Type</label>
-                {!isMailerLite && !isStripe && !isAbcIgnite && (
+                {!isMailerLite && !isStripe && !isAbcIgnite && !isRevline && (
                   <IntegrationHelp 
                     integration={integration} 
                     context="create"
@@ -218,79 +221,83 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
             </div>
           </div>
 
-          {/* Secrets Section */}
-          <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
-            <label className="block text-sm font-semibold text-zinc-300 mb-3">
-              Secrets
-            </label>
-            <div className="space-y-3">
-              {secrets.map((secret, index) => (
-                <div key={index} className="flex gap-2">
-                  <select
-                    value={secret.name}
-                    onChange={(e) => updateSecret(index, 'name', e.target.value)}
-                    className="w-40 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm outline-none"
-                  >
-                    {getAvailableNamesForIndex(index).map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="password"
-                    value={secret.value}
-                    onChange={(e) => updateSecret(index, 'value', e.target.value)}
-                    placeholder="Secret value (encrypted on save)"
-                    className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white font-mono text-sm outline-none focus:border-zinc-500 transition-colors"
-                  />
-                  {secrets.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeSecret(index)}
-                      className="px-2 text-red-400 hover:text-red-300 transition-colors"
+          {/* Secrets Section - hidden for RevLine */}
+          {!isRevline && (
+            <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
+              <label className="block text-sm font-semibold text-zinc-300 mb-3">
+                Secrets
+              </label>
+              <div className="space-y-3">
+                {secrets.map((secret, index) => (
+                  <div key={index} className="flex gap-2">
+                    <select
+                      value={secret.name}
+                      onChange={(e) => updateSecret(index, 'name', e.target.value)}
+                      className="w-40 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm outline-none"
                     >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            {canAddMoreSecrets && (
-              <button
-                type="button"
-                onClick={addSecret}
-                className="mt-3 text-xs text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1"
-              >
-                <span className="text-lg">+</span> Add another secret
-              </button>
-            )}
-            
-            {/* Dynamic integration hint from config */}
-            {secretHint && (
-              <div className="mt-3 pt-3 border-t border-zinc-800/50">
-                <p className="text-xs text-zinc-500">
-                  💡 {secretHint}
-                </p>
+                      {getAvailableNamesForIndex(index).map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="password"
+                      value={secret.value}
+                      onChange={(e) => updateSecret(index, 'value', e.target.value)}
+                      placeholder="Secret value (encrypted on save)"
+                      className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white font-mono text-sm outline-none focus:border-zinc-500 transition-colors"
+                    />
+                    {secrets.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeSecret(index)}
+                        className="px-2 text-red-400 hover:text-red-300 transition-colors"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-            )}
-          </div>
+              {canAddMoreSecrets && (
+                <button
+                  type="button"
+                  onClick={addSecret}
+                  className="mt-3 text-xs text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1"
+                >
+                  <span className="text-lg">+</span> Add another secret
+                </button>
+              )}
+              
+              {/* Dynamic integration hint from config */}
+              {secretHint && (
+                <div className="mt-3 pt-3 border-t border-zinc-800/50">
+                  <p className="text-xs text-zinc-500">
+                    💡 {secretHint}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Configuration Editor */}
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="text-sm font-semibold text-zinc-300">
-                {config?.metaDescription ? `${config.displayName} Config` : 'Meta (JSON, optional)'}
-              </label>
-              {!isMailerLite && !isStripe && !isAbcIgnite && (
-                <IntegrationTemplateButton 
-                  integration={integration}
-                  onCopyTemplate={(template) => setMeta(template)}
-                />
-              )}
-            </div>
+            {!isRevline && (
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-sm font-semibold text-zinc-300">
+                  {config?.metaDescription ? `${config.displayName} Config` : 'Meta (JSON, optional)'}
+                </label>
+                {!isMailerLite && !isStripe && !isAbcIgnite && (
+                  <IntegrationTemplateButton 
+                    integration={integration}
+                    onCopyTemplate={(template) => setMeta(template)}
+                  />
+                )}
+              </div>
+            )}
             
             {isMailerLite ? (
               <MailerLiteConfigEditor
@@ -304,6 +311,11 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
               />
             ) : isAbcIgnite ? (
               <AbcIgniteAddConfig
+                value={meta}
+                onChange={setMeta}
+              />
+            ) : isRevline ? (
+              <RevlineAddConfig
                 value={meta}
                 onChange={setMeta}
               />

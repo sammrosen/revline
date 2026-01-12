@@ -64,6 +64,7 @@ enum IntegrationType {
   CALENDLY
   MANYCHAT
   ABC_IGNITE
+  REVLINE
 }
 
 enum HealthStatus {

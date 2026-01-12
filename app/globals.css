@@ -51,3 +51,12 @@ body.scroll-locked {
   width: 100%;
   touch-action: none;
 }
+
+/* Hide scrollbar but keep scroll functionality (for tabs, tables) */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;     /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;             /* Chrome, Safari, Opera */
+}

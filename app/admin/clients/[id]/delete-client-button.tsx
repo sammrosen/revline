@@ -67,9 +67,9 @@ export function DeleteClientButton({
           Delete Client
         </button>
         {showConfirm && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-0 sm:p-4 z-50" onClick={(e) => e.stopPropagation()}>
             {/* Modal content same as before */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg p-4 sm:p-6 max-w-md w-full h-full sm:h-auto overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-semibold mb-2 text-red-400">⚠️ Delete Client</h3>
               <p className="text-sm text-zinc-400 mb-4">
                 This will <span className="font-bold text-red-400">permanently delete</span>:
@@ -135,8 +135,8 @@ export function DeleteClientButton({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-md w-full">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg p-4 sm:p-6 max-w-md w-full h-full sm:h-auto overflow-y-auto">
         <h3 className="text-lg font-semibold mb-2 text-red-400">⚠️ Delete Client</h3>
         <p className="text-sm text-zinc-400 mb-4">
           This will <span className="font-bold text-red-400">permanently delete</span>:

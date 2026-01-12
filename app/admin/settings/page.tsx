@@ -306,8 +306,8 @@ export default function AdminSettingsPage() {
 
         {/* 2FA Setup Modal */}
         {showSetup && setupData && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-md w-full">
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-0 sm:p-4 z-50">
+            <div className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg p-4 sm:p-6 max-w-md w-full h-full sm:h-auto overflow-y-auto">
               <h3 className="text-lg font-semibold mb-4">Set Up Two-Factor Authentication</h3>
 
               <div className="space-y-4">
@@ -384,8 +384,8 @@ export default function AdminSettingsPage() {
 
         {/* Recovery Codes Modal */}
         {showRecoveryCodes && recoveryCodes.length > 0 && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-md w-full">
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-0 sm:p-4 z-50">
+            <div className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg p-4 sm:p-6 max-w-md w-full h-full sm:h-auto overflow-y-auto">
               <h3 className="text-lg font-semibold mb-2">Save Your Recovery Codes</h3>
               <p className="text-sm text-zinc-400 mb-4">
                 These codes can be used to access your account if you lose your authenticator device.
@@ -428,8 +428,8 @@ export default function AdminSettingsPage() {
 
         {/* Disable 2FA Modal */}
         {showDisable && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-md w-full">
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-0 sm:p-4 z-50">
+            <div className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg p-4 sm:p-6 max-w-md w-full h-full sm:h-auto overflow-y-auto">
               <h3 className="text-lg font-semibold mb-2 text-red-400">Disable Two-Factor Authentication</h3>
               <p className="text-sm text-zinc-400 mb-4">
                 This will remove the extra security layer from your account. Enter your password to confirm.
@@ -471,8 +471,8 @@ export default function AdminSettingsPage() {
 
         {/* Regenerate Codes Modal */}
         {showRegenerate && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-md w-full">
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-0 sm:p-4 z-50">
+            <div className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg p-4 sm:p-6 max-w-md w-full h-full sm:h-auto overflow-y-auto">
               <h3 className="text-lg font-semibold mb-2">Regenerate Recovery Codes</h3>
               <p className="text-sm text-zinc-400 mb-4">
                 This will invalidate all your existing recovery codes and generate new ones.
