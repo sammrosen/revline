@@ -21,12 +21,11 @@
  */
 
 import { runCleanup, getRetentionConfig } from './cleanup';
-import { getTableStats } from '@/app/_lib/observability/metrics';
+import { ObservabilityService, TableStats } from '@/app/_lib/observability';
 import {
   RetentionConfig,
   CleanupResult,
   CleanupOptions,
-  TableStats,
 } from './types';
 
 // Re-export types
@@ -38,7 +37,7 @@ export type {
 
 export { DEFAULT_RETENTION, DEFAULT_BATCH_SIZE } from './types';
 
-// Import TableStats from observability to avoid duplication
+// Re-export TableStats from observability
 export type { TableStats } from '@/app/_lib/observability';
 
 // =============================================================================
@@ -76,7 +75,7 @@ export const RetentionService = {
    * Useful for monitoring database growth
    */
   async getTableStats(): Promise<TableStats> {
-    return getTableStats();
+    return ObservabilityService.getTableStats();
   },
 
   /**

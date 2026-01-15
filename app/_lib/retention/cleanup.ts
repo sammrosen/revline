@@ -48,17 +48,25 @@ export function getRetentionConfig(): RetentionConfig {
  * Delete records in batches to prevent long transactions
  * Returns total count of deleted records
  */
+// Type for generic Prisma table operations
+type PrismaTableOps = {
+  count: (args: { where: object }) => Promise<number>;
+  findMany: (args: { where: object; take: number; select: { id: true } }) => Promise<Array<{ id: string }>>;
+  deleteMany: (args: { where: { id: { in: string[] } } }) => Promise<{ count: number }>;
+};
+
 async function batchDelete(
   tableName: 'event' | 'webhookEvent' | 'workflowExecution' | 'idempotencyKey',
   whereClause: object,
   batchSize: number,
   dryRun: boolean
 ): Promise<number> {
+  // Cast through unknown to satisfy TypeScript
+  const table = prisma[tableName] as unknown as PrismaTableOps;
+
   if (dryRun) {
     // In dry-run mode, just count what would be deleted
-    const count = await (prisma[tableName] as { count: (args: { where: object }) => Promise<number> }).count({
-      where: whereClause,
-    });
+    const count = await table.count({ where: whereClause });
     return count;
   }
 
@@ -67,9 +75,7 @@ async function batchDelete(
 
   do {
     // Find IDs to delete in this batch
-    const records = await (prisma[tableName] as { 
-      findMany: (args: { where: object; take: number; select: { id: true } }) => Promise<Array<{ id: string }>> 
-    }).findMany({
+    const records = await table.findMany({
       where: whereClause,
       take: batchSize,
       select: { id: true },
@@ -80,9 +86,7 @@ async function batchDelete(
     const ids = records.map(r => r.id);
 
     // Delete this batch
-    const result = await (prisma[tableName] as {
-      deleteMany: (args: { where: { id: { in: string[] } } }) => Promise<{ count: number }>
-    }).deleteMany({
+    const result = await table.deleteMany({
       where: { id: { in: ids } },
     });
 
