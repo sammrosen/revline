@@ -82,11 +82,12 @@ app/
 ├── _components/             # Shared React components
 ├── admin/                   # Admin dashboard (internal only)
 ├── api/                     # API routes
-│   ├── subscribe/           # Lead capture endpoint
-│   ├── stripe-webhook/      # Stripe webhooks
-│   ├── calendly-webhook/    # Calendly webhooks
-│   ├── cron/                # Scheduled tasks
-│   └── admin/               # Admin API routes
+│   └── v1/                  # API v1 (all versioned endpoints)
+│       ├── subscribe/       # Lead capture endpoint
+│       ├── stripe-webhook/  # Stripe webhooks
+│       ├── calendly-webhook/# Calendly webhooks
+│       ├── cron/            # Scheduled tasks
+│       └── admin/           # Admin API routes
 └── [landing-pages]/         # Client-facing pages
 ```
 
@@ -211,8 +212,8 @@ console.log('Using API key:', apiKey.substring(0, 10) + '...');
 
 Public endpoints MUST implement rate limiting:
 
-- `/api/subscribe`: 10 requests per minute per IP
-- `/api/*/webhook`: 100 requests per minute per client
+- `/api/v1/subscribe`: 10 requests per minute per IP
+- `/api/v1/*/webhook`: 100 requests per minute per client
 
 ### 5. Security Headers
 

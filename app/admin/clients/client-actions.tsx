@@ -18,7 +18,7 @@ export function ClientActions({ clientId, currentStatus, isDropdownItem = false 
     const action = currentStatus === 'ACTIVE' ? 'pause' : 'unpause';
 
     try {
-      const res = await fetch(`/api/admin/clients/${clientId}`, {
+      const res = await fetch(`/api/v1/admin/clients/${clientId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),

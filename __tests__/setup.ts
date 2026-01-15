@@ -291,6 +291,8 @@ export async function getEventsForClient(clientId: string) {
 
 /**
  * Test helper: Create a test workflow
+ * Note: Defaults to enabled: false to match production behavior
+ * (workflows start disabled and must be explicitly enabled)
  */
 export async function createTestWorkflow(
   clientId: string,
@@ -306,7 +308,7 @@ export async function createTestWorkflow(
     data: {
       clientId,
       name: overrides.name ?? 'Test Workflow',
-      enabled: overrides.enabled ?? true,
+      enabled: overrides.enabled ?? false, // Default to disabled - must be explicitly enabled
       triggerAdapter: overrides.triggerAdapter ?? 'revline',
       triggerOperation: overrides.triggerOperation ?? 'email_captured',
       actions: (overrides.actions ?? []) as Parameters<typeof testPrisma.workflow.create>[0]['data']['actions'],
@@ -369,5 +371,25 @@ export async function createTestIdempotencyKey(
       expiresAt: overrides.expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
   });
+}
+
+/**
+ * Test helper: Cleanup all test data
+ * 
+ * Can be called explicitly in beforeEach/afterEach if needed.
+ * Note: afterEach already calls this automatically.
+ */
+export async function cleanupTestData() {
+  // Order matters due to foreign key constraints
+  await testPrisma.idempotencyKey.deleteMany();
+  await testPrisma.webhookEvent.deleteMany();
+  await testPrisma.workflowExecution.deleteMany();
+  await testPrisma.workflow.deleteMany();
+  await testPrisma.event.deleteMany();
+  await testPrisma.lead.deleteMany();
+  await testPrisma.clientIntegration.deleteMany();
+  await testPrisma.adminSession.deleteMany();
+  await testPrisma.admin.deleteMany();
+  await testPrisma.client.deleteMany();
 }
 

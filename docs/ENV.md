@@ -43,7 +43,7 @@ REVLINE_ENCRYPTION_KEY_V1=<your-64-hex-char-key>
 STRIPE_API_KEY=sk_test_xxxxx
 ```
 - **What:** Stripe secret key (test or live)
-- **Used for:** Verifying webhook signatures in `/api/stripe-webhook`
+- **Used for:** Verifying webhook signatures in `/api/v1/stripe-webhook`
 - **Get from:** https://dashboard.stripe.com/apikeys
 - **Note:** Use `sk_test_` for development, `sk_live_` for production
 
@@ -70,7 +70,7 @@ CRON_SECRET=ee2b99f3d87aecfd196f67f773e00c51a3bae73cd19d08b37dfb126b966fa31d
 
 **`CRON_SECRET`**
 - **What:** Secret token for authenticating cron job requests
-- **Used for:** Securing `/api/cron/health-check` endpoint
+- **Used for:** Securing `/api/v1/cron/health-check` endpoint
 - **Generate with:** `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 - **Setup:** Add to Railway cron job as header `Authorization: Bearer {CRON_SECRET}`
 

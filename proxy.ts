@@ -34,18 +34,22 @@ export async function proxy(request: NextRequest) {
   // 1. Handle admin authentication first
   // Protect /admin routes (except /admin/login)
   const isAdminPage = pathname.startsWith('/admin');
-  // Protect /api/admin routes (except /api/admin/login)
-  const isAdminApi = pathname.startsWith('/api/admin');
+  // Protect /api/admin and /api/v1/admin routes
+  const isAdminApi = pathname.startsWith('/api/admin') || pathname.startsWith('/api/v1/admin');
 
   if (isAdminPage || isAdminApi) {
     // Allow access to login, setup, and logout pages without authentication
     const publicAdminPaths = [
       '/admin/login',
       '/api/admin/login',
+      '/api/v1/admin/login',
       '/api/admin/login/verify-2fa',
+      '/api/v1/admin/login/verify-2fa',
       '/admin/setup',
       '/api/admin/setup',
+      '/api/v1/admin/setup',
       '/api/admin/logout',
+      '/api/v1/admin/logout',
     ];
     
     if (publicAdminPaths.includes(pathname)) {

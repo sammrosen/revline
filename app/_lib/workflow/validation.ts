@@ -153,7 +153,11 @@ export async function validateWorkflowConfig(
 
 /**
  * Validate that an integration can be deleted
- * Checks no workflows depend on it
+ * Checks no **enabled** workflows depend on it
+ * 
+ * Disabled workflows are allowed to reference unconfigured integrations
+ * since they can't run anyway. This allows users to delete an integration
+ * as long as they first disable any workflows using it.
  *
  * @param clientId - Client ID
  * @param integrationType - Integration type to delete
@@ -163,16 +167,18 @@ export async function validateCanDeleteIntegration(
   clientId: string,
   integrationType: string
 ): Promise<ValidationResult> {
+  // Only check enabled workflows - disabled workflows can reference anything
   const dependentWorkflows = await getWorkflowsUsingIntegration(
     clientId,
-    integrationType.toLowerCase()
+    integrationType.toLowerCase(),
+    { enabledOnly: true }
   );
 
   if (dependentWorkflows.length > 0) {
     const workflowNames = dependentWorkflows.map(w => w.name).join(', ');
     return failure([{
       code: 'HAS_DEPENDENTS',
-      message: `Cannot delete: used by ${dependentWorkflows.length} workflow(s): ${workflowNames}`,
+      message: `Cannot delete: used by ${dependentWorkflows.length} active workflow(s): ${workflowNames}. Disable them first.`,
       adapter: integrationType,
     }]);
   }
@@ -407,13 +413,21 @@ async function validateActionRequirements(
 
 /**
  * Get all workflows that use a specific integration
+ * 
+ * @param clientId - Client ID
+ * @param adapterId - Adapter ID to search for
+ * @param options.enabledOnly - If true, only return enabled workflows
  */
 export async function getWorkflowsUsingIntegration(
   clientId: string,
-  adapterId: string
+  adapterId: string,
+  options: { enabledOnly?: boolean } = {}
 ): Promise<Array<{ id: string; name: string; enabled: boolean }>> {
   const workflows = await prisma.workflow.findMany({
-    where: { clientId },
+    where: { 
+      clientId,
+      ...(options.enabledOnly && { enabled: true }),
+    },
     select: {
       id: true,
       name: true,

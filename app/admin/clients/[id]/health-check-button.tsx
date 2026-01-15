@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { lockScroll, unlockScroll } from '@/app/_lib/utils/scroll-lock';
 
 type TestStatus = 'PASS' | 'WARN' | 'FAIL';
-type TestCategory = 'configuration' | 'api_connectivity';
+type TestCategory = 'configuration' | 'api_connectivity' | 'system_metrics';
 
 interface TestResult {
   category: TestCategory;
@@ -11,6 +12,25 @@ interface TestResult {
   status: TestStatus;
   message: string;
   duration: number;
+}
+
+interface SystemMetrics {
+  webhooks: {
+    pending: number;
+    processing: number;
+    failed: number;
+    oldestPendingMinutes: number | null;
+  };
+  events: {
+    totalLastHour: number;
+    failedLastHour: number;
+    errorRatePercent: number;
+  };
+  workflows: {
+    failedLastHour: number;
+    runningNow: number;
+  };
+  collectedAt: string;
 }
 
 interface HealthCheckResponse {
@@ -21,6 +41,7 @@ interface HealthCheckResponse {
   overallStatus: TestStatus;
   duration: number;
   tests: TestResult[];
+  metrics?: SystemMetrics;
 }
 
 function StatusIcon({ status }: { status: TestStatus }) {
@@ -48,15 +69,87 @@ function StatusBadge({ status }: { status: TestStatus }) {
   );
 }
 
+function TestSection({ 
+  title, 
+  tests, 
+  titleColor = 'text-zinc-300' 
+}: { 
+  title: string; 
+  tests: TestResult[];
+  titleColor?: string;
+}) {
+  if (tests.length === 0) return null;
+  
+  return (
+    <div>
+      <h3 className={`text-sm font-semibold mb-3 ${titleColor}`}>{title}</h3>
+      <div className="space-y-3">
+        {tests.map((test, idx) => (
+          <div
+            key={idx}
+            className="flex items-start gap-3 text-sm bg-zinc-950 rounded p-3"
+          >
+            <StatusIcon status={test.status} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-white">{test.name}</span>
+                <span className="text-zinc-500 text-xs">({test.duration}ms)</span>
+              </div>
+              <div
+                className={`text-xs mt-1 break-words ${
+                  test.status === 'PASS'
+                    ? 'text-zinc-400'
+                    : test.status === 'WARN'
+                    ? 'text-yellow-400'
+                    : 'text-red-400'
+                }`}
+              >
+                {test.message}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function HealthCheckDialog({
-  results,
+  clientId,
   onClose,
 }: {
-  results: HealthCheckResponse;
+  clientId: string;
   onClose: () => void;
 }) {
-  const configTests = results.tests.filter((t) => t.category === 'configuration');
-  const apiTests = results.tests.filter((t) => t.category === 'api_connectivity');
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<HealthCheckResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function runHealthCheck() {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/v1/admin/clients/${clientId}/health-check`);
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const data = await res.json();
+      setResults(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to run health check';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const configTests = results?.tests.filter((t) => t.category === 'configuration') ?? [];
+  const apiTests = results?.tests.filter((t) => t.category === 'api_connectivity') ?? [];
+  const metricsTests = results?.tests.filter((t) => t.category === 'system_metrics') ?? [];
 
   return (
     <div
@@ -64,14 +157,14 @@ function HealthCheckDialog({
       onClick={onClose}
     >
       <div
-        className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg w-full h-full sm:h-auto sm:max-w-2xl sm:max-h-[80vh] overflow-hidden flex flex-col"
+        className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg w-full h-full sm:h-auto sm:max-w-2xl sm:max-h-[85vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-zinc-800">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold">Health Check Results</h2>
-            <StatusBadge status={results.overallStatus} />
+            <h2 className="text-xl font-semibold">Health Check</h2>
+            {results && <StatusBadge status={results.overallStatus} />}
           </div>
           <button
             onClick={onClose}
@@ -95,78 +188,92 @@ function HealthCheckDialog({
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto p-6 space-y-6">
-          {/* Summary */}
-          <div className="flex items-center justify-between text-sm text-zinc-400">
-            <span>
-              Client: <span className="text-white font-medium">{results.clientName}</span>
-            </span>
-            <span>Completed in {(results.duration / 1000).toFixed(1)}s</span>
-          </div>
+        <div className="overflow-y-auto p-6 space-y-6 flex-1">
+          {/* Description */}
+          <p className="text-sm text-zinc-400">
+            Run a comprehensive health check to verify client configuration, API connectivity, 
+            and system metrics. This will test integrations and check for any issues.
+          </p>
 
-          {/* Configuration Tests */}
-          <div>
-            <h3 className="text-sm font-semibold text-zinc-300 mb-3">Configuration Tests</h3>
-            <div className="space-y-3">
-              {configTests.map((test, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-start gap-3 text-sm bg-zinc-950 rounded p-3"
-                >
-                  <StatusIcon status={test.status} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-white">{test.name}</span>
-                      <span className="text-zinc-500 text-xs">({test.duration}ms)</span>
-                    </div>
-                    <div
-                      className={`text-xs mt-1 ${
-                        test.status === 'PASS'
-                          ? 'text-zinc-400'
-                          : test.status === 'WARN'
-                          ? 'text-yellow-400'
-                          : 'text-red-400'
-                      }`}
-                    >
-                      {test.message}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* Run Button (shown when no results) */}
+          {!results && !loading && (
+            <button
+              onClick={runHealthCheck}
+              className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg font-medium transition-colors"
+            >
+              Run Health Check
+            </button>
+          )}
 
-          {/* API Connectivity Tests */}
-          <div>
-            <h3 className="text-sm font-semibold text-zinc-300 mb-3">API Connectivity Tests</h3>
-            <div className="space-y-3">
-              {apiTests.map((test, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-start gap-3 text-sm bg-zinc-950 rounded p-3"
-                >
-                  <StatusIcon status={test.status} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-white">{test.name}</span>
-                      <span className="text-zinc-500 text-xs">({test.duration}ms)</span>
-                    </div>
-                    <div
-                      className={`text-xs mt-1 break-words ${
-                        test.status === 'PASS'
-                          ? 'text-zinc-400'
-                          : test.status === 'WARN'
-                          ? 'text-yellow-400'
-                          : 'text-red-400'
-                      }`}
-                    >
-                      {test.message}
-                    </div>
-                  </div>
-                </div>
-              ))}
+          {/* Loading State */}
+          {loading && (
+            <div className="flex items-center justify-center py-8 gap-3">
+              <svg
+                className="animate-spin h-5 w-5 text-zinc-400"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+              <span className="text-zinc-400">Running health check...</span>
             </div>
-          </div>
+          )}
+
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4 text-sm text-red-400">
+              <div className="font-medium mb-1">Health check failed</div>
+              <div className="text-xs opacity-80">{error}</div>
+            </div>
+          )}
+
+          {/* Results */}
+          {results && (
+            <>
+              {/* Summary */}
+              <div className="flex items-center justify-between text-sm text-zinc-400 bg-zinc-950 rounded-lg p-3">
+                <span>
+                  Client: <span className="text-white font-medium">{results.clientName}</span>
+                </span>
+                <span>Completed in {(results.duration / 1000).toFixed(1)}s</span>
+              </div>
+
+              {/* Configuration Tests */}
+              <TestSection title="Configuration Tests" tests={configTests} />
+
+              {/* API Connectivity Tests */}
+              <TestSection title="API Connectivity Tests" tests={apiTests} />
+
+              {/* System Metrics Tests */}
+              <TestSection 
+                title="System Metrics" 
+                tests={metricsTests} 
+                titleColor="text-blue-400"
+              />
+
+              {/* Re-run Button */}
+              <button
+                onClick={runHealthCheck}
+                disabled={loading}
+                className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {loading ? 'Running...' : 'Run Again'}
+              </button>
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -190,48 +297,17 @@ export function HealthCheckButton({
   clientId: string;
   isDropdownItem?: boolean;
 }) {
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<HealthCheckResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [lastRunTime, setLastRunTime] = useState<number>(0);
+  const [showModal, setShowModal] = useState(false);
 
-  async function runHealthCheck() {
-    // Rate limiting: prevent spam clicking (1 minute cooldown)
-    const now = Date.now();
-    const timeSinceLastRun = now - lastRunTime;
-    if (timeSinceLastRun < 60000 && lastRunTime > 0) {
-      const secondsRemaining = Math.ceil((60000 - timeSinceLastRun) / 1000);
-      setError(`Please wait ${secondsRemaining}s before running again`);
-      setTimeout(() => setError(null), 3000);
-      return;
+  // Lock body scroll when modal is open (mobile UX)
+  useEffect(() => {
+    if (showModal) {
+      lockScroll();
+    } else {
+      unlockScroll();
     }
-
-    setLoading(true);
-    setError(null);
-    setResults(null);
-
-    try {
-      const res = await fetch(`/api/admin/clients/${clientId}/health-check`);
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-
-      const data = await res.json();
-      setResults(data);
-      setLastRunTime(now);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to run health check';
-      setError(message);
-      setTimeout(() => setError(null), 5000);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function closeDialog() {
-    setResults(null);
-  }
+    return () => unlockScroll();
+  }, [showModal]);
 
   if (isDropdownItem) {
     return (
@@ -239,14 +315,16 @@ export function HealthCheckButton({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            runHealthCheck();
+            setShowModal(true);
           }}
-          disabled={loading}
-          className="w-full text-left px-3 py-2 text-sm rounded hover:bg-zinc-800 transition-colors flex items-center gap-2 text-zinc-300 hover:text-white disabled:opacity-50"
+          className="w-full text-left px-3 py-2 text-sm rounded hover:bg-zinc-800 transition-colors text-zinc-300 hover:text-white"
         >
-          {loading ? 'Running...' : 'Run Health Check'}
+          Run Health Check
         </button>
-        {results && <HealthCheckDialog results={results} onClose={closeDialog} />}
+
+        {showModal && (
+          <HealthCheckDialog clientId={clientId} onClose={() => setShowModal(false)} />
+        )}
       </>
     );
   }
@@ -254,51 +332,15 @@ export function HealthCheckButton({
   return (
     <>
       <button
-        onClick={runHealthCheck}
-        disabled={loading}
-        className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-          loading
-            ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed'
-            : 'bg-zinc-800 hover:bg-zinc-700 text-white'
-        }`}
+        onClick={() => setShowModal(true)}
+        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded text-sm font-medium transition-colors"
       >
-        {loading ? (
-          <span className="flex items-center gap-2">
-            <svg
-              className="animate-spin h-4 w-4"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              ></circle>
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
-            Running Tests...
-          </span>
-        ) : (
-          'Run Health Check'
-        )}
+        Run Health Check
       </button>
 
-      {error && (
-        <div className="fixed top-4 right-4 bg-red-500/10 border border-red-500/50 rounded-lg p-3 text-sm text-red-400 z-50 max-w-md">
-          {error}
-        </div>
+      {showModal && (
+        <HealthCheckDialog clientId={clientId} onClose={() => setShowModal(false)} />
       )}
-
-      {results && <HealthCheckDialog results={results} onClose={closeDialog} />}
     </>
   );
 }
-

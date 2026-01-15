@@ -7,7 +7,7 @@ A comprehensive health check system that verifies client configurations and API 
 ## Files Created
 
 ### 1. API Route
-**File:** `app/api/admin/clients/[id]/health-check/route.ts`
+**File:** `app/api/v1/admin/clients/[id]/health-check/route.ts`
 
 **Features:**
 - Admin authentication check

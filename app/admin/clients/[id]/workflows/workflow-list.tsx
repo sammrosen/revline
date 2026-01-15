@@ -75,7 +75,7 @@ export function WorkflowList({
   const fetchValidation = useCallback(async () => {
     setIsLoadingValidation(true);
     try {
-      const response = await fetch(`/api/admin/clients/${clientId}/dependency-graph`);
+      const response = await fetch(`/api/v1/admin/clients/${clientId}/dependency-graph`);
       if (response.ok) {
         const data = await response.json();
         const graph = data.data?.graph;
@@ -107,7 +107,7 @@ export function WorkflowList({
     setTogglingId(workflowId);
     setToggleError(null);
     try {
-      const response = await fetch(`/api/admin/workflows/${workflowId}/toggle`, {
+      const response = await fetch(`/api/v1/admin/workflows/${workflowId}/toggle`, {
         method: 'PATCH',
       });
 
@@ -117,17 +117,18 @@ export function WorkflowList({
         fetchValidation();
       } else {
         const data = await response.json();
-        const errorMessage = data.error || data.data?.errors?.[0]?.message || 'Failed to toggle';
+        // Handle new validation error format with validationErrors array
+        const errorMessage = data.error || 'Failed to toggle';
         setToggleError(errorMessage);
         
-        // Update validation map with errors
-        if (data.data?.errors) {
+        // Update validation map with errors from the new format
+        if (data.validationErrors) {
           setValidationMap(prev => ({
             ...prev,
             [workflowId]: {
               canEnable: false,
-              errors: data.data.errors.map((e: { message: string }) => e.message),
-              warnings: data.data.warnings?.map((w: { message: string }) => w.message) || [],
+              errors: data.validationErrors.map((e: { message: string }) => e.message),
+              warnings: [],
             },
           }));
         }
@@ -149,7 +150,7 @@ export function WorkflowList({
   const handleEditWorkflow = async (workflowId: string) => {
     setEditingWorkflowId(workflowId);
     try {
-      const response = await fetch(`/api/admin/workflows/${workflowId}`);
+      const response = await fetch(`/api/v1/admin/workflows/${workflowId}`);
       if (response.ok) {
         const data = await response.json();
         const workflow = data.data.workflow;

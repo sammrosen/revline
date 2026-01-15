@@ -66,7 +66,8 @@ export function WorkflowEditor({
   // Form state
   const [name, setName] = useState(initialData?.name || '');
   const [description, setDescription] = useState(initialData?.description || '');
-  const [enabled, setEnabled] = useState(initialData?.enabled ?? true);
+  // Default new workflows to disabled - they need to pass validation to be enabled
+  const [enabled, setEnabled] = useState(initialData?.enabled ?? false);
   const [triggerAdapter, setTriggerAdapter] = useState(
     initialData?.triggerAdapter || ''
   );
@@ -101,7 +102,7 @@ export function WorkflowEditor({
   useEffect(() => {
     async function loadRegistry() {
       try {
-        const response = await fetch('/api/admin/workflow-registry');
+        const response = await fetch('/api/v1/admin/workflow-registry');
         if (response.ok) {
           const data = await response.json();
           setTriggers(data.data.triggers || []);
@@ -120,7 +121,7 @@ export function WorkflowEditor({
     
     setIsDisabling(true);
     try {
-      const response = await fetch(`/api/admin/workflows/${workflowId}/toggle`, {
+      const response = await fetch(`/api/v1/admin/workflows/${workflowId}/toggle`, {
         method: 'PATCH',
       });
       
@@ -143,10 +144,9 @@ export function WorkflowEditor({
   const availableTriggers =
     triggers.find((t) => t.adapterId === triggerAdapter)?.triggers || [];
 
-  // Filter action options to only show configured integrations
-  const availableActions = actionOptions.filter(
-    (a) => !a.requiresIntegration || configuredIntegrations.includes(a.adapterId.toUpperCase())
-  );
+  // Show all action options - workflows can be created with any adapters
+  // but can only be enabled when all integrations are configured
+  const availableActions = actionOptions;
 
   const handleAddAction = () => {
     setActions([
@@ -247,8 +247,8 @@ export function WorkflowEditor({
       };
 
       const url = workflowId
-        ? `/api/admin/workflows/${workflowId}`
-        : '/api/admin/workflows';
+        ? `/api/v1/admin/workflows/${workflowId}`
+        : '/api/v1/admin/workflows';
       const method = workflowId ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
@@ -378,23 +378,30 @@ export function WorkflowEditor({
           />
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setEnabled(!enabled)}
-            className={`w-10 h-5 rounded-full relative transition-colors ${
-              enabled ? 'bg-green-500' : 'bg-zinc-700'
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-                enabled ? 'left-5' : 'left-0.5'
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setEnabled(!enabled)}
+              className={`w-10 h-5 rounded-full relative transition-colors ${
+                enabled ? 'bg-green-500' : 'bg-zinc-700'
               }`}
-            />
-          </button>
-          <span className="text-sm text-zinc-400">
-            {enabled ? 'Enabled' : 'Disabled'}
-          </span>
+            >
+              <span
+                className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                  enabled ? 'left-5' : 'left-0.5'
+                }`}
+              />
+            </button>
+            <span className="text-sm text-zinc-400">
+              {enabled ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+          {!workflowId && (
+            <p className="text-xs text-zinc-500">
+              New workflows start disabled. Enable after verifying all integrations are configured.
+            </p>
+          )}
         </div>
       </div>
 

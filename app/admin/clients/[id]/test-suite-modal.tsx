@@ -86,7 +86,7 @@ function TestSuiteDialog({
     setResults(null);
 
     try {
-      const res = await fetch(`/api/admin/clients/${clientId}/test-action`, {
+      const res = await fetch(`/api/v1/admin/clients/${clientId}/test-action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ trigger, email, name: name || undefined }),

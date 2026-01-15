@@ -69,6 +69,7 @@ interface ClientTabsProps {
   clientId: string;
   integrations: Integration[];
   events: Event[];
+  eventCount?: number; // Total event count for "X of Y" display
   leads: Lead[];
   workflows: Workflow[];
   configuredIntegrations: string[];
@@ -115,14 +116,14 @@ interface IntegrationDependency {
   usedBy: Array<{ workflowId: string; workflowName: string }>;
 }
 
-export function ClientTabs({ clientId, integrations, events, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {} }: ClientTabsProps) {
+export function ClientTabs({ clientId, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {} }: ClientTabsProps) {
   const [activeTab, setActiveTab] = useState<TabType>('workflows');
   const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
 
   // Fetch integration dependencies when integrations tab is active
   const fetchDependencies = useCallback(async () => {
     try {
-      const response = await fetch(`/api/admin/clients/${clientId}/dependency-graph`);
+      const response = await fetch(`/api/v1/admin/clients/${clientId}/dependency-graph`);
       if (response.ok) {
         const data = await response.json();
         const graph = data.data?.graph;
@@ -146,11 +147,15 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
   }, [activeTab, fetchDependencies]);
 
   // Helper to get dependent workflows for an integration
+  // Only returns ENABLED workflows since deletion is blocked by enabled workflows only
   const getDependentWorkflows = (integrationType: string) => {
     const key = integrationType.toLowerCase();
     const deps = integrationDeps[key];
     if (!deps?.usedBy?.length) return [];
-    return deps.usedBy.map(u => ({ id: u.workflowId, name: u.workflowName }));
+    // Filter to only enabled workflows - disabled workflows don't block deletion
+    return deps.usedBy
+      .filter((u: { workflowId: string; workflowName: string; workflowEnabled?: boolean }) => u.workflowEnabled)
+      .map((u: { workflowId: string; workflowName: string; workflowEnabled?: boolean }) => ({ id: u.workflowId, name: u.workflowName }));
   };
 
   const tabs: { id: TabType; label: string; count?: number }[] = [
@@ -312,7 +317,9 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
 
         {activeTab === 'events' && (
           <div>
-            <h2 className="text-lg font-semibold mb-4">Recent Events (Last 50)</h2>
+            <h2 className="text-lg font-semibold mb-4">
+              Recent Events ({events.length} of {eventCount?.toLocaleString() ?? '...'})
+            </h2>
             <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
               <div className="overflow-x-auto scrollbar-hide">
                 <table className="w-full text-sm min-w-[600px]">

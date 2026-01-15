@@ -53,7 +53,7 @@ export function ExecutionsModal({
   useEffect(() => {
     async function fetchExecutions() {
       try {
-        const response = await fetch(`/api/admin/workflows/${workflowId}/executions`);
+        const response = await fetch(`/api/v1/admin/workflows/${workflowId}/executions`);
         if (!response.ok) {
           throw new Error('Failed to load executions');
         }

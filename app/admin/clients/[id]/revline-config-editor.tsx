@@ -86,7 +86,7 @@ export function RevlineConfigEditor({
 
   // Fetch available forms from registry on mount
   useEffect(() => {
-    fetch('/api/admin/forms')
+    fetch('/api/v1/admin/forms')
       .then(res => res.json())
       .then(data => {
         if (data.forms) {
@@ -104,7 +104,7 @@ export function RevlineConfigEditor({
       const params = new URLSearchParams({ formId });
       if (clientId) params.append('excludeClientId', clientId);
       
-      const response = await fetch(`/api/admin/check-form-id?${params}`);
+      const response = await fetch(`/api/v1/admin/check-form-id?${params}`);
       const data = await response.json();
       
       if (data.inUse) {

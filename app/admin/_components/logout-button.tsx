@@ -15,7 +15,7 @@ export function LogoutButton({ className }: LogoutButtonProps) {
     setLoading(true);
     
     try {
-      await fetch('/api/admin/logout', {
+      await fetch('/api/v1/admin/logout', {
         method: 'POST',
       });
       

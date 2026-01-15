@@ -174,7 +174,7 @@ export function AbcIgniteConfigEditor({
     setSyncError(null);
 
     try {
-      const res = await fetch(`/api/admin/integrations/${integrationId}/sync-event-types`);
+      const res = await fetch(`/api/v1/admin/integrations/${integrationId}/sync-event-types`);
       const data = await res.json();
 
       if (!res.ok) {

@@ -34,7 +34,7 @@ export default function NewClientPage() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/admin/clients', {
+      const res = await fetch('/api/v1/admin/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -100,7 +100,7 @@ export default function NewClientPage() {
               required
             />
             <p className="text-xs text-zinc-500 mt-1">
-              Webhook URL: /api/stripe-webhook?source={slug || 'slug'}
+              Webhook URL: /api/v1/stripe-webhook?source={slug || 'slug'}
             </p>
           </div>
 

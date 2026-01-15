@@ -40,9 +40,9 @@ Complete all items before going live with client data.
 - [ ] **HTTPS enforced** (Railway handles this)
 - [ ] **Database SSL enabled** (`?sslmode=require` in DATABASE_URL)
 - [ ] **No debug endpoints in production**
-  - Remove `/api/admin/setup` if exists
-  - Remove `/api/admin/seed` if exists
-  - Remove `/api/admin/debug-login` if exists
+  - Remove `/api/v1/admin/setup` if exists
+  - Remove `/api/v1/admin/seed` if exists
+  - Remove `/api/v1/admin/debug-login` if exists
 
 ---
 
@@ -108,7 +108,7 @@ Complete all items before going live with client data.
   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   ```
 - [ ] **External cron configured** (cron-job.org, EasyCron, or Railway cron)
-  - URL: `https://your-domain.railway.app/api/cron/health-check`
+  - URL: `https://your-domain.railway.app/api/v1/cron/health-check`
   - Method: GET
   - Header: `Authorization: Bearer YOUR_CRON_SECRET`
   - Schedule: `*/15 * * * *` (every 15 minutes)
@@ -156,7 +156,7 @@ Complete all items before going live with client data.
 - [ ] **App starts without errors** (check Railway logs)
 - [ ] **Home page loads** (if public landing pages exist)
 - [ ] **Admin login works** (`/admin/login`)
-- [ ] **API endpoints respond** (`/api/subscribe` returns 503 without valid source)
+- [ ] **API endpoints respond** (`/api/v1/subscribe` returns 503 without valid source)
 - [ ] **Health check passes** (call with Authorization header)
 
 ### Performance

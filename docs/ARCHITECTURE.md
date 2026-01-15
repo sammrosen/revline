@@ -16,11 +16,11 @@ flowchart TB
     end
 
     subgraph app [Next.js App]
-        Subscribe["/api/subscribe"]
-        StripeWH["/api/stripe-webhook"]
-        CalendlyWH["/api/calendly-webhook"]
+        Subscribe["/api/v1/subscribe"]
+        StripeWH["/api/v1/stripe-webhook"]
+        CalendlyWH["/api/v1/calendly-webhook"]
         Admin["/admin/*"]
-        Cron["/api/cron/health-check"]
+        Cron["/api/v1/cron/health-check"]
     end
 
     subgraph workflow [Workflow Engine]
@@ -358,7 +358,7 @@ Note: App ID and App Key are stored in the encrypted secrets field. Use the "Syn
 
 ### Public Routes (Used by Clients)
 
-**`POST /api/subscribe?source={slug}`**
+**`POST /api/v1/subscribe?source={slug}`**
 - Email capture from landing pages
 - Flow:
   1. Look up client by slug
@@ -387,7 +387,7 @@ Note: App ID and App Key are stored in the encrypted secrets field. Use the "Syn
      - Emit `mailerlite_subscribe_success/failed` event
      - Touch MailerLite integration
 
-**`POST /api/calendly-webhook`**
+**`POST /api/v1/calendly-webhook`**
 - Booking webhooks from Calendly
 - Flow:
   1. Extract client from `utm_source` in payload
@@ -406,12 +406,12 @@ Note: App ID and App Key are stored in the encrypted secrets field. Use the "Syn
 
 ### Admin Routes (Internal Only)
 
-**`POST /api/admin/login`**
+**`POST /api/v1/admin/login`**
 - Verify password against Argon2 hash
 - Create session in `admin_sessions`
 - Set httpOnly cookie with session ID
 
-**`POST /api/admin/logout`**
+**`POST /api/v1/admin/logout`**
 - Delete session from `admin_sessions`
 - Clear cookie
 
@@ -419,7 +419,7 @@ Note: App ID and App Key are stored in the encrypted secrets field. Use the "Syn
 - List all clients with health indicators
 - Client health = worst health among all integrations
 
-**`GET /api/admin/clients/[id]`**
+**`GET /api/v1/admin/clients/[id]`**
 - Client details
 - Last 50 events
 - Per-integration health
@@ -429,7 +429,7 @@ Note: App ID and App Key are stored in the encrypted secrets field. Use the "Syn
 - Actions: `pause`, `unpause`
 - Emits `client_paused/unpaused` event
 
-**`POST /api/admin/integrations`**
+**`POST /api/v1/admin/integrations`**
 - Add new integration for a client
 - Encrypts secret before storing
 - Emits `integration_added` event
@@ -439,13 +439,13 @@ Note: App ID and App Key are stored in the encrypted secrets field. Use the "Syn
 - Tests configuration and API connectivity
 - Returns pass/warn/fail status for each test
 
-**`GET /api/admin/clients/[id]/mailerlite-insights`**
+**`GET /api/v1/admin/clients/[id]/mailerlite-insights`**
 - Fetch MailerLite subscriber stats for client
 - Shows group membership counts
 
 ### Workflow Routes
 
-**`GET /api/admin/workflows?clientId={clientId}`**
+**`GET /api/v1/admin/workflows?clientId={clientId}`**
 - List all workflows for a client
 - Returns workflow definitions with enabled status
 
@@ -453,31 +453,31 @@ Note: App ID and App Key are stored in the encrypted secrets field. Use the "Syn
 - Create a new workflow
 - Body: `{ clientId, name, triggerAdapter, triggerOperation, triggerFilter?, actions }`
 
-**`GET /api/admin/workflows/{id}`**
+**`GET /api/v1/admin/workflows/{id}`**
 - Get a single workflow by ID
 
 **`PATCH /api/admin/workflows/{id}`**
 - Update a workflow
 - Body: Any subset of workflow fields
 
-**`DELETE /api/admin/workflows/{id}`**
+**`DELETE /api/v1/admin/workflows/{id}`**
 - Delete a workflow and its execution history
 
 **`PATCH /api/admin/workflows/{id}/toggle`**
 - Enable or disable a workflow
 - Body: `{ enabled: boolean }`
 
-**`GET /api/admin/workflows/{id}/executions`**
+**`GET /api/v1/admin/workflows/{id}/executions`**
 - Get execution history for a workflow
 - Returns last 50 executions with status and results
 
-**`GET /api/admin/workflow-registry`**
+**`GET /api/v1/admin/workflow-registry`**
 - Get all available adapters with their triggers and actions
 - Used by admin UI for building workflow forms
 
 ### 2FA Routes
 
-**`POST /api/admin/2fa/setup`**
+**`POST /api/v1/admin/2fa/setup`**
 - Generate new TOTP secret for 2FA setup
 - Returns secret and QR code URI
 - Does not enable 2FA until verified
@@ -486,14 +486,14 @@ Note: App ID and App Key are stored in the encrypted secrets field. Use the "Syn
 - Verify TOTP code and enable 2FA
 - Generates and returns recovery codes
 
-**`POST /api/admin/2fa/disable`**
+**`POST /api/v1/admin/2fa/disable`**
 - Disable 2FA for admin account
 - Requires current password
 
 **`GET /api/admin/2fa/status`**
 - Check if 2FA is enabled
 
-**`POST /api/admin/2fa/regenerate`**
+**`POST /api/v1/admin/2fa/regenerate`**
 - Regenerate recovery codes
 - Requires valid TOTP code
 
@@ -503,7 +503,7 @@ Note: App ID and App Key are stored in the encrypted secrets field. Use the "Syn
 
 ### Cron Route
 
-**`GET /api/cron/health-check`**
+**`GET /api/v1/cron/health-check`**
 - **Authentication:** Hard-fails without `Authorization: Bearer {CRON_SECRET}`
 - Runs every 15 minutes via external cron service (Railway cron, cron-job.org, etc.)
 - Checks:

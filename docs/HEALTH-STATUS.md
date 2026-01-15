@@ -16,7 +16,7 @@ This document explains how integration and client health statuses are determined
 
 **Stored in database:** `client_integrations.health_status`
 
-**Updated by:** Health check cron job (`/api/cron/health-check`) running every 15 minutes
+**Updated by:** Health check cron job (`/api/v1/cron/health-check`) running every 15 minutes
 
 ### Logic:
 
@@ -98,7 +98,7 @@ if (any integration is RED) {
 Every time an integration successfully processes an event, update its `lastSeenAt`:
 
 ```typescript
-// In app/api/subscribe/route.ts after successful MailerLite call:
+// In app/api/v1/subscribe/route.ts after successful MailerLite call:
 await prisma.clientIntegration.update({
   where: {
     clientId_integration: {
@@ -109,7 +109,7 @@ await prisma.clientIntegration.update({
   data: { lastSeenAt: new Date() },
 });
 
-// In app/api/stripe-webhook/route.ts after successful processing:
+// In app/api/v1/stripe-webhook/route.ts after successful processing:
 await prisma.clientIntegration.update({
   where: {
     clientId_integration: {
@@ -226,7 +226,7 @@ if (!isBusinessHours) {
 **Trigger manually:**
 
 ```bash
-curl http://localhost:3000/api/cron/health-check \
+curl http://localhost:3000/api/v1/cron/health-check \
   -H "Authorization: Bearer your_cron_secret_from_env"
 ```
 
