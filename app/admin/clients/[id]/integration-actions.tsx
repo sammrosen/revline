@@ -87,7 +87,7 @@ export function IntegrationActions({ integration, clientId, dependentWorkflows =
 
   async function loadSecrets() {
     try {
-      const res = await fetch(`/api/admin/integrations/${integration.id}/secrets`);
+      const res = await fetch(`/api/v1/admin/integrations/${integration.id}/secrets`);
       if (res.ok) {
         const data = await res.json();
         setSecrets(data.secrets || []);
@@ -105,7 +105,7 @@ export function IntegrationActions({ integration, clientId, dependentWorkflows =
     setError('');
 
     try {
-      const res = await fetch(`/api/admin/integrations/${integration.id}`, {
+      const res = await fetch(`/api/v1/admin/integrations/${integration.id}`, {
         method: 'DELETE',
       });
 
@@ -141,7 +141,7 @@ export function IntegrationActions({ integration, clientId, dependentWorkflows =
         }
       }
 
-      const res = await fetch(`/api/admin/integrations/${integration.id}/meta`, {
+      const res = await fetch(`/api/v1/admin/integrations/${integration.id}/meta`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ meta: parsedMeta }),
@@ -173,7 +173,7 @@ export function IntegrationActions({ integration, clientId, dependentWorkflows =
     setError('');
 
     try {
-      const res = await fetch(`/api/admin/integrations/${integration.id}/secrets`, {
+      const res = await fetch(`/api/v1/admin/integrations/${integration.id}/secrets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -211,7 +211,7 @@ export function IntegrationActions({ integration, clientId, dependentWorkflows =
     setError('');
 
     try {
-      const res = await fetch(`/api/admin/integrations/${integration.id}/secrets/${secretId}`, {
+      const res = await fetch(`/api/v1/admin/integrations/${integration.id}/secrets/${secretId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -241,7 +241,7 @@ export function IntegrationActions({ integration, clientId, dependentWorkflows =
     setError('');
 
     try {
-      const res = await fetch(`/api/admin/integrations/${integration.id}/secrets/${secretId}`, {
+      const res = await fetch(`/api/v1/admin/integrations/${integration.id}/secrets/${secretId}`, {
         method: 'DELETE',
       });
 

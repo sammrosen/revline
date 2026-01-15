@@ -127,11 +127,11 @@ Each test shows:
 **Problem:** Stripe webhook endpoint returns 404
 
 **Solution:**
-1. Verify the webhook route exists: `app/api/stripe-webhook/route.ts`
+1. Verify the webhook route exists: `app/api/v1/stripe-webhook/route.ts`
 2. Check that the endpoint accepts `?source=` query parameter
 3. Test manually:
    ```bash
-   curl -X POST http://localhost:3000/api/stripe-webhook?source=clientslug \
+   curl -X POST http://localhost:3000/api/v1/stripe-webhook?source=clientslug \
      -H "Stripe-Signature: test" \
      -d '{"test": true}'
    ```
@@ -233,7 +233,7 @@ This is used for testing landing pages and webhook endpoints.
 
 ## Files Created
 
-- `app/api/admin/clients/[id]/health-check/route.ts` - API endpoint
+- `app/api/v1/admin/clients/[id]/health-check/route.ts` - API endpoint
 - `app/admin/clients/[id]/health-check-button.tsx` - UI component
 - `docs/HEALTH-CHECK-SYSTEM.md` - This documentation
 

@@ -49,7 +49,7 @@ export default function AdminSettingsPage() {
 
   async function handleLogout() {
     try {
-      await fetch('/api/admin/logout', { method: 'POST' });
+      await fetch('/api/v1/admin/logout', { method: 'POST' });
       router.push('/admin/login');
       router.refresh();
     } catch {
@@ -59,7 +59,7 @@ export default function AdminSettingsPage() {
 
   async function fetchStatus() {
     try {
-      const res = await fetch('/api/admin/2fa/status');
+      const res = await fetch('/api/v1/admin/2fa/status');
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
@@ -78,7 +78,7 @@ export default function AdminSettingsPage() {
     setError('');
 
     try {
-      const res = await fetch('/api/admin/2fa/setup', {
+      const res = await fetch('/api/v1/admin/2fa/setup', {
         method: 'POST',
       });
 
@@ -117,7 +117,7 @@ export default function AdminSettingsPage() {
     setError('');
 
     try {
-      const res = await fetch('/api/admin/2fa/verify', {
+      const res = await fetch('/api/v1/admin/2fa/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: verificationCode }),
@@ -150,7 +150,7 @@ export default function AdminSettingsPage() {
     setError('');
 
     try {
-      const res = await fetch('/api/admin/2fa/disable', {
+      const res = await fetch('/api/v1/admin/2fa/disable', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: disablePassword }),
@@ -178,7 +178,7 @@ export default function AdminSettingsPage() {
     setError('');
 
     try {
-      const res = await fetch('/api/admin/2fa/regenerate', {
+      const res = await fetch('/api/v1/admin/2fa/regenerate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: regeneratePassword }),

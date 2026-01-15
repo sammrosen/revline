@@ -74,7 +74,7 @@ export default function MailerLiteInsights({ clientId }: MailerLiteInsightsProps
   useEffect(() => {
     async function fetchInsights() {
       try {
-        const response = await fetch(`/api/admin/clients/${clientId}/mailerlite-insights`);
+        const response = await fetch(`/api/v1/admin/clients/${clientId}/mailerlite-insights`);
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'Failed to fetch insights');

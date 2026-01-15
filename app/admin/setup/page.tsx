@@ -26,7 +26,7 @@ export default function AdminSetupPage() {
   useEffect(() => {
     async function checkSetup() {
       try {
-        const res = await fetch('/api/admin/setup');
+        const res = await fetch('/api/v1/admin/setup');
         if (res.ok) {
           const data = await res.json();
           setSetupRequired(true);
@@ -70,7 +70,7 @@ export default function AdminSetupPage() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/admin/setup', {
+      const res = await fetch('/api/v1/admin/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

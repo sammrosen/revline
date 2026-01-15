@@ -76,7 +76,7 @@ Ask client for:
 **Stripe setup:**
 - Client logs into Stripe
 - Goes to Developers → Webhooks → Add Endpoint
-- Endpoint URL: `https://yourdomain.com/api/stripe-webhook?source=acme_fitness`
+- Endpoint URL: `https://yourdomain.com/api/v1/stripe-webhook?source=acme_fitness`
 - Events to send: `checkout.session.completed`
 - Copies webhook signing secret (starts with `whsec_`)
 
@@ -130,7 +130,7 @@ Secrets are **never shown again** after saving.
 
 **Test email capture:**
 ```bash
-curl -X POST https://yourdomain.com/api/subscribe \
+curl -X POST https://yourdomain.com/api/v1/subscribe \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","source":"acme_fitness"}'
 ```
@@ -210,7 +210,7 @@ Provide client with:
 3. Check admin dashboard for `stripe_payment_succeeded` but `mailerlite_subscribe_failed`
 
 **Common causes:**
-- Stripe webhook URL wrong (missing `?source=slug`)
+- Stripe webhook URL wrong (missing `?source=slug` or not using v1 path)
 - Webhook secret rotated (update integration)
 - MailerLite rate limit
 - Customer group ID wrong in meta
@@ -374,7 +374,7 @@ Returns JSON with issues found (if any).
 
 ### Current Implementation
 
-RevLine uses **in-memory rate limiting** for public API endpoints (`/api/subscribe`, `/api/stripe-webhook`, etc.).
+RevLine uses **in-memory rate limiting** for public API endpoints (`/api/v1/subscribe`, `/api/v1/stripe-webhook`, etc.).
 
 **How it works:**
 - Tracks request counts per IP address or client ID

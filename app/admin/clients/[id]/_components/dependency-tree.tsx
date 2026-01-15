@@ -84,7 +84,7 @@ export function DependencyTree({ clientId }: DependencyTreeProps) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/admin/clients/${clientId}/dependency-graph`);
+      const response = await fetch(`/api/v1/admin/clients/${clientId}/dependency-graph`);
       if (response.ok) {
         const data = await response.json();
         setGraph(data.data?.graph || null);

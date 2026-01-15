@@ -291,6 +291,8 @@ export async function getEventsForClient(clientId: string) {
 
 /**
  * Test helper: Create a test workflow
+ * Note: Defaults to enabled: false to match production behavior
+ * (workflows start disabled and must be explicitly enabled)
  */
 export async function createTestWorkflow(
   clientId: string,
@@ -306,7 +308,7 @@ export async function createTestWorkflow(
     data: {
       clientId,
       name: overrides.name ?? 'Test Workflow',
-      enabled: overrides.enabled ?? true,
+      enabled: overrides.enabled ?? false, // Default to disabled - must be explicitly enabled
       triggerAdapter: overrides.triggerAdapter ?? 'revline',
       triggerOperation: overrides.triggerOperation ?? 'email_captured',
       actions: (overrides.actions ?? []) as Parameters<typeof testPrisma.workflow.create>[0]['data']['actions'],

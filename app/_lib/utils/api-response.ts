@@ -55,6 +55,29 @@ export class ApiResponse {
   }
 
   /**
+   * Validation error response with detailed errors array
+   * Use when activation or other operations fail validation
+   * @param message - Summary error message
+   * @param errors - Array of validation errors for UI display
+   * @param code - Optional error code for client handling
+   */
+  static validationError(
+    message: string,
+    errors: Array<{ code: string; message: string; adapter?: string; operation?: string; param?: string }>,
+    code = 'VALIDATION_FAILED'
+  ): NextResponse {
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: message,
+        code,
+        validationErrors: errors,
+      },
+      { status: 400, headers: SECURITY_HEADERS }
+    );
+  }
+
+  /**
    * Webhook acknowledgment (always 200 to prevent retries)
    * Use for external webhooks like Stripe, Calendly
    */

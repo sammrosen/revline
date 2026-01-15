@@ -211,7 +211,7 @@ export function HealthCheckButton({
     setResults(null);
 
     try {
-      const res = await fetch(`/api/admin/clients/${clientId}/health-check`);
+      const res = await fetch(`/api/v1/admin/clients/${clientId}/health-check`);
 
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);

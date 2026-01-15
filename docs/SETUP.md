@@ -96,7 +96,7 @@ Open browser console (F12) at http://localhost:3000 and run:
 
 ```javascript
 // Create admin account
-await fetch('http://localhost:3000/api/admin/setup', {
+await fetch('http://localhost:3000/api/v1/admin/setup', {
   method: 'POST',
   headers: {'Content-Type': 'application/json'},
   body: JSON.stringify({password: 'YourSecurePassword'})
@@ -116,8 +116,8 @@ await fetch('http://localhost:3000/api/admin/seed', {
 
 **Important:** Delete the temporary seed endpoints after use:
 ```bash
-rm app/api/admin/setup/route.ts
-rm app/api/admin/seed/route.ts
+rm app/api/v1/admin/setup/route.ts
+rm app/api/v1/admin/seed/route.ts
 ```
 
 ---
@@ -167,7 +167,7 @@ For each client, update their Stripe webhook URL to production:
 The cron job runs automatically via `vercel.json`. Test it:
 
 ```bash
-curl https://yourdomain.com/api/cron/health-check \
+curl https://yourdomain.com/api/v1/cron/health-check \
   -H "Authorization: Bearer YOUR_CRON_SECRET"
 ```
 

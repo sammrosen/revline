@@ -35,7 +35,7 @@ export function ClientDangerZoneButton({
 
     try {
       const newStatus = currentStatus === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
-      const res = await fetch(`/api/admin/clients/${clientId}`, {
+      const res = await fetch(`/api/v1/admin/clients/${clientId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -64,7 +64,7 @@ export function ClientDangerZoneButton({
     setError('');
 
     try {
-      const res = await fetch(`/api/admin/clients/${clientId}`, {
+      const res = await fetch(`/api/v1/admin/clients/${clientId}`, {
         method: 'DELETE',
       });
 

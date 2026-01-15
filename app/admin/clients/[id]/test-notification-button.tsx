@@ -83,7 +83,7 @@ function TestAlertDialog({ clientId, onClose }: TestAlertDialogProps) {
 
   // Fetch rate limit status on mount
   useEffect(() => {
-    fetch(`/api/admin/clients/${clientId}/test-alert`)
+    fetch(`/api/v1/admin/clients/${clientId}/test-alert`)
       .then((res) => res.json())
       .then((data) => {
         if (data.rateLimitStatus) {
@@ -100,7 +100,7 @@ function TestAlertDialog({ clientId, onClose }: TestAlertDialogProps) {
     setResult(null);
 
     try {
-      const res = await fetch(`/api/admin/clients/${clientId}/test-alert`, {
+      const res = await fetch(`/api/v1/admin/clients/${clientId}/test-alert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scenario }),
@@ -115,7 +115,7 @@ function TestAlertDialog({ clientId, onClose }: TestAlertDialogProps) {
           scenario: data.scenario,
         });
         // Refresh rate limit status
-        const statusRes = await fetch(`/api/admin/clients/${clientId}/test-alert`);
+        const statusRes = await fetch(`/api/v1/admin/clients/${clientId}/test-alert`);
         const statusData = await statusRes.json();
         if (statusData.rateLimitStatus) {
           setRateLimitStatus(statusData.rateLimitStatus);

@@ -122,7 +122,7 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
   // Fetch integration dependencies when integrations tab is active
   const fetchDependencies = useCallback(async () => {
     try {
-      const response = await fetch(`/api/admin/clients/${clientId}/dependency-graph`);
+      const response = await fetch(`/api/v1/admin/clients/${clientId}/dependency-graph`);
       if (response.ok) {
         const data = await response.json();
         const graph = data.data?.graph;
@@ -146,11 +146,15 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
   }, [activeTab, fetchDependencies]);
 
   // Helper to get dependent workflows for an integration
+  // Only returns ENABLED workflows since deletion is blocked by enabled workflows only
   const getDependentWorkflows = (integrationType: string) => {
     const key = integrationType.toLowerCase();
     const deps = integrationDeps[key];
     if (!deps?.usedBy?.length) return [];
-    return deps.usedBy.map(u => ({ id: u.workflowId, name: u.workflowName }));
+    // Filter to only enabled workflows - disabled workflows don't block deletion
+    return deps.usedBy
+      .filter((u: { workflowId: string; workflowName: string; workflowEnabled?: boolean }) => u.workflowEnabled)
+      .map((u: { workflowId: string; workflowName: string; workflowEnabled?: boolean }) => ({ id: u.workflowId, name: u.workflowName }));
   };
 
   const tabs: { id: TabType; label: string; count?: number }[] = [

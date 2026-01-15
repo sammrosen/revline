@@ -77,7 +77,7 @@ export function AddIntegrationForm({ clientId }: AddIntegrationFormProps) {
         }
       }
 
-      const res = await fetch('/api/admin/integrations', {
+      const res = await fetch('/api/v1/admin/integrations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
