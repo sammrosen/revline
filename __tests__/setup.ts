@@ -373,3 +373,23 @@ export async function createTestIdempotencyKey(
   });
 }
 
+/**
+ * Test helper: Cleanup all test data
+ * 
+ * Can be called explicitly in beforeEach/afterEach if needed.
+ * Note: afterEach already calls this automatically.
+ */
+export async function cleanupTestData() {
+  // Order matters due to foreign key constraints
+  await testPrisma.idempotencyKey.deleteMany();
+  await testPrisma.webhookEvent.deleteMany();
+  await testPrisma.workflowExecution.deleteMany();
+  await testPrisma.workflow.deleteMany();
+  await testPrisma.event.deleteMany();
+  await testPrisma.lead.deleteMany();
+  await testPrisma.clientIntegration.deleteMany();
+  await testPrisma.adminSession.deleteMany();
+  await testPrisma.admin.deleteMany();
+  await testPrisma.client.deleteMany();
+}
+

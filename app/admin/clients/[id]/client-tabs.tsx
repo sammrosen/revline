@@ -69,6 +69,7 @@ interface ClientTabsProps {
   clientId: string;
   integrations: Integration[];
   events: Event[];
+  eventCount?: number; // Total event count for "X of Y" display
   leads: Lead[];
   workflows: Workflow[];
   configuredIntegrations: string[];
@@ -115,7 +116,7 @@ interface IntegrationDependency {
   usedBy: Array<{ workflowId: string; workflowName: string }>;
 }
 
-export function ClientTabs({ clientId, integrations, events, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {} }: ClientTabsProps) {
+export function ClientTabs({ clientId, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {} }: ClientTabsProps) {
   const [activeTab, setActiveTab] = useState<TabType>('workflows');
   const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
 
@@ -316,7 +317,9 @@ export function ClientTabs({ clientId, integrations, events, leads, workflows, c
 
         {activeTab === 'events' && (
           <div>
-            <h2 className="text-lg font-semibold mb-4">Recent Events (Last 50)</h2>
+            <h2 className="text-lg font-semibold mb-4">
+              Recent Events ({events.length} of {eventCount?.toLocaleString() ?? '...'})
+            </h2>
             <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
               <div className="overflow-x-auto scrollbar-hide">
                 <table className="w-full text-sm min-w-[600px]">

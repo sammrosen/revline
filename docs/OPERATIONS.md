@@ -31,9 +31,10 @@ Daily usage, client onboarding, troubleshooting, and maintenance.
 ### Viewing Events
 
 1. Click on any client
-2. See last 50 events
-3. Check for failures (red ✗ icon)
-4. Read error messages for diagnosis
+2. Go to the "Events" tab
+3. See recent events with total count (e.g., "50 of 2,847")
+4. Check for failures (red ✗ icon)
+5. Read error messages for diagnosis
 
 **Common issues:**
 - `mailerlite_subscribe_failed` with "rate limit" → Wait or upgrade MailerLite plan
@@ -241,25 +242,53 @@ Provide client with:
 
 ## Maintenance
 
-### Cleaning Up Old Events
+### Automated Data Cleanup
 
-Events table grows unbounded. Clean up monthly:
+Data retention is enforced automatically via the `data-cleanup` cron job.
 
-```sql
--- Keep last 90 days only
-DELETE FROM events WHERE created_at < NOW() - INTERVAL '90 days';
+**Default retention periods:**
+- Events: 90 days
+- WebhookEvents: 30 days
+- WorkflowExecutions: 90 days
+- IdempotencyKeys: 24 hours (TTL-based)
 
--- Or keep last N events per client
-DELETE FROM events
-WHERE id NOT IN (
-  SELECT id FROM events e
-  WHERE e.client_id = events.client_id
-  ORDER BY created_at DESC
-  LIMIT 1000
-);
+**Configuration (optional):**
+```bash
+# In .env
+RETENTION_EVENTS_DAYS=90
+RETENTION_WEBHOOK_EVENTS_DAYS=30
+RETENTION_WORKFLOW_EXECUTIONS_DAYS=90
 ```
 
-Run via database GUI or CLI. **Backup first.**
+**Manual cleanup trigger:**
+```bash
+# Dry-run first (see what would be deleted)
+curl "https://yourdomain.com/api/v1/cron/data-cleanup?dryRun=true" \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+
+# Run for real
+curl https://yourdomain.com/api/v1/cron/data-cleanup \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "dryRun": false,
+  "result": {
+    "eventsDeleted": 1234,
+    "webhookEventsDeleted": 567,
+    "workflowExecutionsDeleted": 89,
+    "idempotencyKeysDeleted": 0,
+    "durationMs": 2345
+  }
+}
+```
+
+### Legacy Manual Cleanup
+
+If you need more control, you can still run SQL directly:
 
 ### Monitoring Disk Usage
 
@@ -336,37 +365,112 @@ await fetch('https://yourdomain.com/api/admin/reset-password', {
 
 ## Monitoring & Alerts
 
-### Email Alerts
+### Pushover Alerts
 
-You receive email alerts when health check detects:
-- Integration silent for 4+ hours
-- 3+ consecutive failures
-- Leads stuck for 24+ hours
-
-**Alert format:**
-```
-Subject: ⚠️ RevOps Alert: 3 issue(s) detected
-
-Acme Fitness: MAILERLITE silent for 4+ hours
-Acme Fitness: STRIPE has 3+ consecutive failures
-Beta Client: 5 leads stuck for 24+ hours
-```
-
-**What to do:**
-1. Log into admin dashboard
-2. Check affected clients
-3. Review events for errors
-4. Fix issues (rotate secrets, unpause, etc.)
-
-### Manual Health Check
-
-Trigger manually:
+All alerts are sent via Pushover (mobile push notifications). Configure in `.env`:
 ```bash
-curl https://yourdomain.com/api/cron/health-check \
+PUSHOVER_USER_KEY=your_user_key
+PUSHOVER_APP_TOKEN=your_app_token
+```
+
+**Alert types:**
+
+| Alert | Priority | Trigger |
+|-------|----------|---------|
+| Webhook Backlog | High | >50 pending webhooks for >15 min |
+| Error Rate Spike | High | >10% failure rate in last hour |
+| Stuck Processing | High | Webhooks stuck processing >15 min |
+| Integration Issues | Normal | Silence (4h) or consecutive failures |
+| Stuck Leads | Normal | Leads in CAPTURED for 24+ hours |
+| Cleanup Complete | Low | Daily cleanup finished |
+
+**Alert thresholds (configurable):**
+```bash
+ALERT_ERROR_RATE_THRESHOLD=10        # Percentage
+ALERT_WEBHOOK_BACKLOG_MAX=50         # Count
+ALERT_STUCK_PROCESSING_MINUTES=15    # Minutes
+ALERT_FAILED_WORKFLOWS_PER_HOUR=5    # Count
+```
+
+**What to do when alerted:**
+1. Open admin dashboard
+2. Check affected clients or system health
+3. Review events for errors
+4. Fix issues (rotate secrets, unpause, clear backlog, etc.)
+
+### Health Check Cron
+
+Runs every 15 minutes, checking:
+- Per-client integration health (silence, failures)
+- Stuck leads (24+ hours in CAPTURED)
+- System-wide webhook backlog
+- Error rate spikes
+- Workflow failure spikes
+
+**Trigger manually:**
+```bash
+curl https://yourdomain.com/api/v1/cron/health-check \
   -H "Authorization: Bearer YOUR_CRON_SECRET"
 ```
 
-Returns JSON with issues found (if any).
+**Response includes:**
+```json
+{
+  "success": true,
+  "clientsChecked": 5,
+  "issuesFound": 2,
+  "issues": ["..."],
+  "metrics": {
+    "webhookBacklog": 12,
+    "errorRatePercent": 3.5,
+    "workflowFailures": 0
+  }
+}
+```
+
+### Test Notifications
+
+Test your Pushover setup from the admin dashboard:
+1. Go to any client detail page
+2. Click the actions dropdown (top right)
+3. Select "Test Notification"
+4. Verify you receive the push notification
+
+---
+
+## Scheduled Jobs (Crons)
+
+### Overview
+
+| Cron | Endpoint | Interval | Purpose |
+|------|----------|----------|---------|
+| Health Check | `/api/v1/cron/health-check` | 15 min | Monitor client + system health |
+| Data Cleanup | `/api/v1/cron/data-cleanup` | Daily | Enforce retention policies |
+
+### Setting Up Crons
+
+**Railway:**
+1. Go to your project settings
+2. Add cron jobs with schedule:
+   - Health check: `*/15 * * * *` (every 15 min)
+   - Data cleanup: `0 3 * * *` (daily at 3 AM)
+3. Set the endpoint URL and add `Authorization: Bearer YOUR_CRON_SECRET` header
+
+**External scheduler (cron-job.org, EasyCron, etc.):**
+1. Create jobs for each endpoint
+2. Add the Authorization header
+3. Set appropriate schedules
+
+**Verifying crons work:**
+```bash
+# Test health check
+curl https://yourdomain.com/api/v1/cron/health-check \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+
+# Test cleanup (dry run)
+curl "https://yourdomain.com/api/v1/cron/data-cleanup?dryRun=true" \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+```
 
 ---
 

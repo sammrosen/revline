@@ -1,10 +1,31 @@
+/**
+ * Health Check Cron
+ * 
+ * Scheduled health check for all clients and system metrics.
+ * Runs every 15 minutes via Railway cron or external scheduler.
+ * 
+ * Checks:
+ * - Integration silence (4+ hours no activity)
+ * - Consecutive failures (3+ failures = RED)
+ * - Stuck leads (24+ hours in CAPTURED)
+ * - Webhook backlog (pending/processing > threshold)
+ * - Error rate spike (>10% failure rate)
+ * - Workflow failures spike (>5/hour)
+ * 
+ * Alerts via Pushover through AlertService.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/_lib/db';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { HealthStatus, ClientStatus } from '@prisma/client';
-import { Resend } from 'resend';
+import { AlertService } from '@/app/_lib/alerts';
+import { ObservabilityService } from '@/app/_lib/observability';
 
-// Hard-fail without proper authentication
+// =============================================================================
+// AUTHENTICATION
+// =============================================================================
+
 function validateAuth(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
@@ -17,6 +38,10 @@ function validateAuth(request: NextRequest): boolean {
   return authHeader === `Bearer ${cronSecret}`;
 }
 
+// =============================================================================
+// MAIN HANDLER
+// =============================================================================
+
 export async function GET(request: NextRequest) {
   // Route protection - hard-fail without secret
   if (!validateAuth(request)) {
@@ -24,9 +49,13 @@ export async function GET(request: NextRequest) {
   }
 
   const issues: string[] = [];
+  const startTime = Date.now();
 
   try {
-    // Get all active clients with their integrations
+    // =========================================================================
+    // CLIENT-SPECIFIC CHECKS
+    // =========================================================================
+    
     const clients = await prisma.client.findMany({
       where: { status: ClientStatus.ACTIVE },
       include: {
@@ -104,19 +133,94 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Send alert email if there are issues
-    if (issues.length > 0) {
-      await sendAlertEmail(issues);
+    // =========================================================================
+    // SYSTEM-WIDE CHECKS (NEW)
+    // =========================================================================
+    
+    const metrics = await ObservabilityService.getMetrics();
+    const thresholds = ObservabilityService.getThresholds();
+
+    // Check 4: Webhook backlog
+    const totalBacklog = metrics.webhooks.pending + metrics.webhooks.processing;
+    if (totalBacklog > thresholds.webhookBacklogMax) {
+      issues.push(
+        `System: ${totalBacklog} webhooks in backlog (threshold: ${thresholds.webhookBacklogMax})`
+      );
     }
+
+    // Check 5: Stuck webhooks
+    if (
+      metrics.webhooks.oldestPendingMinutes !== null &&
+      metrics.webhooks.oldestPendingMinutes > thresholds.stuckProcessingMinutes
+    ) {
+      issues.push(
+        `System: Webhooks stuck for ${metrics.webhooks.oldestPendingMinutes} minutes`
+      );
+    }
+
+    // Check 6: Error rate spike
+    if (
+      metrics.events.totalLastHour > 10 && // Only alert if there's meaningful traffic
+      metrics.events.errorRatePercent > thresholds.errorRatePercent
+    ) {
+      issues.push(
+        `System: ${metrics.events.errorRatePercent.toFixed(1)}% error rate in last hour (${metrics.events.failedLastHour}/${metrics.events.totalLastHour})`
+      );
+    }
+
+    // Check 7: Workflow failures spike
+    if (metrics.workflows.failedLastHour > thresholds.failedWorkflowsPerHour) {
+      issues.push(
+        `System: ${metrics.workflows.failedLastHour} workflow failures in last hour (threshold: ${thresholds.failedWorkflowsPerHour})`
+      );
+    }
+
+    // =========================================================================
+    // ALERTING (via Pushover)
+    // =========================================================================
+    
+    if (issues.length > 0) {
+      await sendAlerts(issues);
+    }
+
+    // Emit completion event
+    await emitEvent({
+      clientId: 'system',
+      system: EventSystem.CRON,
+      eventType: 'health_check_completed',
+      success: true,
+      errorMessage: issues.length > 0 ? `${issues.length} issue(s) found` : undefined,
+    });
+
+    const durationMs = Date.now() - startTime;
 
     return NextResponse.json({
       success: true,
       clientsChecked: clients.length,
       issuesFound: issues.length,
       issues: issues.length > 0 ? issues : undefined,
+      metrics: {
+        webhookBacklog: totalBacklog,
+        errorRatePercent: metrics.events.errorRatePercent,
+        workflowFailures: metrics.workflows.failedLastHour,
+      },
+      durationMs,
     });
   } catch (error) {
     console.error('Health check error:', error);
+    
+    // Try to alert on failure
+    try {
+      await AlertService.critical(
+        'Health Check Failed',
+        error instanceof Error ? error.message : 'Unknown error',
+        { source: 'health_check_cron' }
+      );
+    } catch {
+      // Alert failed too - just log
+      console.error('Failed to send health check failure alert');
+    }
+
     return NextResponse.json(
       { error: 'Health check failed' },
       { status: 500 }
@@ -124,26 +228,38 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function sendAlertEmail(issues: string[]): Promise<void> {
-  const resendApiKey = process.env.RESEND_API_KEY;
-  const alertEmail = process.env.ADMIN_ALERT_EMAIL;
+// =============================================================================
+// ALERTING
+// =============================================================================
 
-  if (!resendApiKey || !alertEmail) {
-    console.warn('Alert email not configured - skipping notification');
-    return;
-  }
+/**
+ * Send alerts via Pushover through AlertService
+ * Replaces the old Resend email alerting
+ */
+async function sendAlerts(issues: string[]): Promise<void> {
+  if (issues.length === 0) return;
 
-  try {
-    const resend = new Resend(resendApiKey);
+  const message = issues.map((i) => `• ${i}`).join('\n');
+  
+  // Determine severity based on issue types
+  const hasCritical = issues.some(
+    (i) => i.includes('consecutive failures') || 
+           i.includes('stuck for') ||
+           i.includes('error rate')
+  );
 
-    await resend.emails.send({
-      from: 'RevLine RevOps <alerts@resend.dev>',
-      to: alertEmail,
-      subject: `⚠️ RevOps Alert: ${issues.length} issue(s) detected`,
-      text: `Health check detected the following issues:\n\n${issues.map((i) => `• ${i}`).join('\n')}\n\nCheck the admin dashboard for details: /admin/clients`,
-    });
-  } catch (error) {
-    console.error('Failed to send alert email:', error);
+  if (hasCritical) {
+    await AlertService.critical(
+      `Health Check: ${issues.length} issue(s)`,
+      message,
+      { source: 'health_check_cron' }
+    );
+  } else {
+    await AlertService.warning(
+      `Health Check: ${issues.length} issue(s)`,
+      message,
+      { source: 'health_check_cron' }
+    );
   }
 }
 
@@ -151,4 +267,3 @@ async function sendAlertEmail(issues: string[]): Promise<void> {
 export async function POST(request: NextRequest) {
   return GET(request);
 }
-

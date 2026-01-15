@@ -14,6 +14,13 @@ const ALERT_SCENARIOS = [
     icon: '✅',
   },
   {
+    key: 'cron_health_check',
+    label: 'Cron Health Check',
+    description: 'Runs the actual 15-min cron logic and sends a test notification with results',
+    type: 'cron',
+    icon: '🕐',
+  },
+  {
     key: 'webhook_stripe',
     label: 'Stripe Webhook Failed',
     description: 'Simulates a Stripe webhook signature verification failure',
@@ -138,6 +145,7 @@ function TestAlertDialog({ clientId, onClose }: TestAlertDialogProps) {
   const criticalScenarios = ALERT_SCENARIOS.filter((s) => s.type === 'critical');
   const warningScenarios = ALERT_SCENARIOS.filter((s) => s.type === 'warning');
   const basicScenario = ALERT_SCENARIOS.find((s) => s.type === 'basic');
+  const cronScenario = ALERT_SCENARIOS.find((s) => s.type === 'cron');
 
   return (
     <div
@@ -260,6 +268,58 @@ function TestAlertDialog({ clientId, onClose }: TestAlertDialogProps) {
                       )}
                     </div>
                     <div className="text-xs text-zinc-500 mt-1">{basicScenario.description}</div>
+                  </div>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* Cron Health Check Test */}
+          {cronScenario && (
+            <div>
+              <h3 className="text-xs font-semibold text-blue-400/80 uppercase tracking-wide mb-3">
+                Cron Pipeline Test
+              </h3>
+              <button
+                onClick={() => fireTestAlert(cronScenario.key)}
+                disabled={loading !== null}
+                className={`w-full text-left p-4 rounded-lg border transition-all ${
+                  loading === cronScenario.key
+                    ? 'bg-zinc-800 border-blue-700 cursor-wait'
+                    : 'bg-zinc-950 border-zinc-800 hover:border-blue-900/50 hover:bg-zinc-900'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="text-lg">{cronScenario.icon}</span>
+                  <div className="flex-1">
+                    <div className="font-medium text-white text-sm flex items-center gap-2">
+                      {cronScenario.label}
+                      {loading === cronScenario.key && (
+                        <svg
+                          className="animate-spin h-3 w-3 text-zinc-400"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="text-xs text-zinc-500 mt-1">{cronScenario.description}</div>
+                    <div className="text-xs text-blue-400/60 mt-2">
+                      Tests the full 15-min cron check — client issues, webhook backlog, error rates, workflow failures
+                    </div>
                   </div>
                 </div>
               </button>

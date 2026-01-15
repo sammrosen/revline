@@ -9,45 +9,48 @@ import { MailerLiteMeta, isMailerLiteMeta, StripeMeta } from '@/app/_lib/types';
 export const dynamic = 'force-dynamic';
 
 async function getClient(id: string) {
-  const client = await prisma.client.findUnique({
-    where: { id },
-    include: {
-      integrations: true,
-      events: {
-        take: 50,
-        orderBy: { createdAt: 'desc' },
-      },
-      leads: {
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          email: true,
-          stage: true,
-          source: true,
-          lastEventAt: true,
-          createdAt: true,
+  // Run queries in parallel for better performance
+  const [client, eventCount, workflows] = await Promise.all([
+    prisma.client.findUnique({
+      where: { id },
+      include: {
+        integrations: true,
+        events: {
+          take: 50,
+          orderBy: { createdAt: 'desc' },
+        },
+        leads: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            email: true,
+            stage: true,
+            source: true,
+            lastEventAt: true,
+            createdAt: true,
+          },
         },
       },
-    },
-  });
+    }),
+    prisma.event.count({ where: { clientId: id } }),
+    prisma.workflow.findMany({
+      where: { clientId: id },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        _count: {
+          select: { executions: true },
+        },
+      },
+    }),
+  ]);
 
   if (!client) {
     return null;
   }
 
-  // Fetch workflows separately to avoid Prisma type issues
-  const workflows = await prisma.workflow.findMany({
-    where: { clientId: id },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      _count: {
-        select: { executions: true },
-      },
-    },
-  });
-
   return {
     ...client,
+    eventCount,
     workflows,
   };
 }
@@ -129,6 +132,7 @@ export default async function ClientDetailPage({
             createdAt: i.createdAt,
           }))}
           events={client.events}
+          eventCount={client.eventCount}
           leads={client.leads}
           workflows={client.workflows.map((w: typeof client.workflows[0]) => ({
             id: w.id,

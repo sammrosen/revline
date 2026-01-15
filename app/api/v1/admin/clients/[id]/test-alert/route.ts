@@ -3,6 +3,9 @@ import { getAdminIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { AlertService } from '@/app/_lib/alerts';
 import { sendPushoverNotification, isPushoverConfigured } from '@/app/_lib/pushover';
+import { ObservabilityService } from '@/app/_lib/observability';
+import { ClientStatus } from '@prisma/client';
+import { EventSystem } from '@/app/_lib/event-logger';
 
 /**
  * Test Alert Scenarios
@@ -16,6 +19,12 @@ const ALERT_SCENARIOS = {
     type: 'basic' as const,
     label: 'Basic Test',
     description: 'Simple notification to verify Pushover is working',
+  },
+  // Cron health check test
+  cron_health_check: {
+    type: 'cron' as const,
+    label: 'Cron Health Check',
+    description: 'Runs the actual 15-min cron logic and sends a test notification with results',
   },
   // Critical failures
   webhook_stripe: {
@@ -57,6 +66,140 @@ const ALERT_SCENARIOS = {
 } as const;
 
 type ScenarioKey = keyof typeof ALERT_SCENARIOS;
+
+/**
+ * Run the actual cron health check logic and send a test notification with results.
+ * This tests the full cron pipeline without waiting 15 minutes.
+ */
+async function runCronHealthCheckTest(): Promise<{ sent: boolean; error?: string }> {
+  const issues: string[] = [];
+  const startTime = Date.now();
+
+  try {
+    // CLIENT-SPECIFIC CHECKS (same as cron)
+    const clients = await prisma.client.findMany({
+      where: { status: ClientStatus.ACTIVE },
+      include: { integrations: true },
+    });
+
+    const now = new Date();
+    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    for (const client of clients) {
+      for (const integration of client.integrations) {
+        // Check 1: Integration silence
+        if (integration.lastSeenAt && integration.lastSeenAt < fourHoursAgo) {
+          issues.push(`${client.name}: ${integration.integration} silent for 4+ hours`);
+        }
+
+        // Check 2: Consecutive failures
+        const recentEvents = await prisma.event.findMany({
+          where: {
+            clientId: client.id,
+            system: integration.integration as unknown as EventSystem,
+            createdAt: { gte: fourHoursAgo },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        });
+
+        const consecutiveFailures = recentEvents.slice(0, 3).filter((e) => !e.success).length;
+        if (consecutiveFailures >= 3) {
+          issues.push(`${client.name}: ${integration.integration} has 3+ consecutive failures`);
+        }
+      }
+
+      // Check 3: Stuck leads
+      const stuckLeads = await prisma.lead.count({
+        where: {
+          clientId: client.id,
+          stage: 'CAPTURED',
+          lastEventAt: { lt: twentyFourHoursAgo },
+        },
+      });
+
+      if (stuckLeads > 0) {
+        issues.push(`${client.name}: ${stuckLeads} leads stuck for 24+ hours`);
+      }
+    }
+
+    // SYSTEM-WIDE CHECKS
+    const metrics = await ObservabilityService.getMetrics();
+    const thresholds = ObservabilityService.getThresholds();
+
+    // Check 4: Webhook backlog
+    const totalBacklog = metrics.webhooks.pending + metrics.webhooks.processing;
+    if (totalBacklog > thresholds.webhookBacklogMax) {
+      issues.push(`System: ${totalBacklog} webhooks in backlog (threshold: ${thresholds.webhookBacklogMax})`);
+    }
+
+    // Check 5: Stuck webhooks
+    if (
+      metrics.webhooks.oldestPendingMinutes !== null &&
+      metrics.webhooks.oldestPendingMinutes > thresholds.stuckProcessingMinutes
+    ) {
+      issues.push(`System: Webhooks stuck for ${metrics.webhooks.oldestPendingMinutes} minutes`);
+    }
+
+    // Check 6: Error rate spike
+    if (
+      metrics.events.totalLastHour > 10 &&
+      metrics.events.errorRatePercent > thresholds.errorRatePercent
+    ) {
+      issues.push(
+        `System: ${metrics.events.errorRatePercent.toFixed(1)}% error rate in last hour`
+      );
+    }
+
+    // Check 7: Workflow failures spike
+    if (metrics.workflows.failedLastHour > thresholds.failedWorkflowsPerHour) {
+      issues.push(`System: ${metrics.workflows.failedLastHour} workflow failures in last hour`);
+    }
+
+    const durationMs = Date.now() - startTime;
+
+    // Build test notification message
+    let message = `[TEST] Cron Health Check Results\n\n`;
+    message += `Clients checked: ${clients.length}\n`;
+    message += `Duration: ${durationMs}ms\n\n`;
+
+    if (issues.length > 0) {
+      message += `Issues found (${issues.length}):\n`;
+      message += issues.map((i) => `• ${i}`).join('\n');
+    } else {
+      message += `✓ All checks passed\n`;
+      message += `• Webhook backlog: ${totalBacklog}\n`;
+      message += `• Error rate: ${metrics.events.errorRatePercent.toFixed(1)}%\n`;
+      message += `• Workflow failures: ${metrics.workflows.failedLastHour}`;
+    }
+
+    // Send test notification
+    const notifyResult = await sendPushoverNotification({
+      title: issues.length > 0 
+        ? `⚠️ Cron Test: ${issues.length} issue(s)` 
+        : '✅ Cron Test: All Clear',
+      message,
+      priority: issues.length > 0 ? 0 : -1,
+      sound: issues.length > 0 ? 'siren' : 'pushover',
+    });
+
+    return { sent: notifyResult.success, error: notifyResult.error };
+
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Try to send error notification
+    const errorResult = await sendPushoverNotification({
+      title: '❌ Cron Test Failed',
+      message: `[TEST] Cron health check test failed\n\nError: ${message}`,
+      priority: 0,
+      sound: 'siren',
+    });
+
+    return { sent: errorResult.success, error: message };
+  }
+}
 
 /**
  * POST /api/v1/admin/clients/[id]/test-alert
@@ -129,6 +272,12 @@ export async function POST(
           sound: 'pushover',
         });
         result = { sent: basicResult.success, error: basicResult.error };
+        break;
+
+      case 'cron_health_check':
+        // Run actual cron health check logic and send test notification with results
+        const cronResult = await runCronHealthCheckTest();
+        result = cronResult;
         break;
 
       case 'webhook_stripe':

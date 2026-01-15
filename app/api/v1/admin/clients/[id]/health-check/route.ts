@@ -3,9 +3,10 @@ import { getAdminIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { decryptSecret } from '@/app/_lib/crypto';
 import { MailerLiteMeta, isMailerLiteMeta, IntegrationSecret } from '@/app/_lib/types';
+import { ObservabilityService, SystemMetrics } from '@/app/_lib/observability';
 
 type TestStatus = 'PASS' | 'WARN' | 'FAIL';
-type TestCategory = 'configuration' | 'api_connectivity';
+type TestCategory = 'configuration' | 'api_connectivity' | 'system_metrics';
 
 interface TestResult {
   category: TestCategory;
@@ -23,6 +24,7 @@ interface HealthCheckResponse {
   overallStatus: TestStatus;
   duration: number;
   tests: TestResult[];
+  metrics?: SystemMetrics;
 }
 
 // Timeout wrapper for tests
@@ -483,7 +485,7 @@ async function testStripeWebhook(clientSlug: string): Promise<TestResult> {
   const start = Date.now();
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const webhookUrl = `${baseUrl}/api/stripe-webhook?source=${clientSlug}`;
+    const webhookUrl = `${baseUrl}/api/v1/stripe-webhook?source=${clientSlug}`;
     
     const response = await withTimeout(
       fetch(webhookUrl, {
@@ -538,6 +540,178 @@ async function testStripeWebhook(clientSlug: string): Promise<TestResult> {
   }
 }
 
+// System Metrics Tests
+async function testEventRate(clientId: string): Promise<TestResult> {
+  const start = Date.now();
+  try {
+    const metrics = await ObservabilityService.getMetrics(clientId);
+    const thresholds = ObservabilityService.getThresholds();
+    const duration = Date.now() - start;
+    
+    if (metrics.events.totalLastHour === 0) {
+      return {
+        category: 'system_metrics',
+        name: 'Event Rate',
+        status: 'WARN',
+        message: 'No events in the last hour',
+        duration,
+      };
+    }
+    
+    if (metrics.events.errorRatePercent > thresholds.errorRatePercent) {
+      return {
+        category: 'system_metrics',
+        name: 'Event Rate',
+        status: 'FAIL',
+        message: `High error rate: ${metrics.events.errorRatePercent.toFixed(1)}% (${metrics.events.failedLastHour}/${metrics.events.totalLastHour} failed)`,
+        duration,
+      };
+    }
+    
+    return {
+      category: 'system_metrics',
+      name: 'Event Rate',
+      status: 'PASS',
+      message: `${metrics.events.totalLastHour} events in last hour, ${metrics.events.errorRatePercent.toFixed(1)}% error rate`,
+      duration,
+    };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      category: 'system_metrics',
+      name: 'Event Rate',
+      status: 'FAIL',
+      message: `Error: ${message}`,
+      duration: Date.now() - start,
+    };
+  }
+}
+
+async function testWebhookBacklog(clientId: string): Promise<TestResult> {
+  const start = Date.now();
+  try {
+    const metrics = await ObservabilityService.getMetrics(clientId);
+    const thresholds = ObservabilityService.getThresholds();
+    const duration = Date.now() - start;
+    
+    const totalBacklog = metrics.webhooks.pending + metrics.webhooks.processing;
+    
+    if (totalBacklog > thresholds.webhookBacklogMax) {
+      return {
+        category: 'system_metrics',
+        name: 'Webhook Queue',
+        status: 'FAIL',
+        message: `${totalBacklog} webhooks in queue (threshold: ${thresholds.webhookBacklogMax})`,
+        duration,
+      };
+    }
+    
+    if (metrics.webhooks.oldestPendingMinutes !== null && 
+        metrics.webhooks.oldestPendingMinutes > thresholds.stuckProcessingMinutes) {
+      return {
+        category: 'system_metrics',
+        name: 'Webhook Queue',
+        status: 'FAIL',
+        message: `Oldest webhook pending for ${metrics.webhooks.oldestPendingMinutes} minutes`,
+        duration,
+      };
+    }
+    
+    if (metrics.webhooks.failed > 0) {
+      return {
+        category: 'system_metrics',
+        name: 'Webhook Queue',
+        status: 'WARN',
+        message: `${metrics.webhooks.failed} failed webhook(s) need attention`,
+        duration,
+      };
+    }
+    
+    if (totalBacklog === 0) {
+      return {
+        category: 'system_metrics',
+        name: 'Webhook Queue',
+        status: 'PASS',
+        message: 'No pending webhooks',
+        duration,
+      };
+    }
+    
+    return {
+      category: 'system_metrics',
+      name: 'Webhook Queue',
+      status: 'PASS',
+      message: `${totalBacklog} webhook(s) in queue, processing normally`,
+      duration,
+    };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      category: 'system_metrics',
+      name: 'Webhook Queue',
+      status: 'FAIL',
+      message: `Error: ${message}`,
+      duration: Date.now() - start,
+    };
+  }
+}
+
+async function testWorkflowHealth(clientId: string): Promise<TestResult> {
+  const start = Date.now();
+  try {
+    const metrics = await ObservabilityService.getMetrics(clientId);
+    const thresholds = ObservabilityService.getThresholds();
+    const duration = Date.now() - start;
+    
+    if (metrics.workflows.failedLastHour > thresholds.failedWorkflowsPerHour) {
+      return {
+        category: 'system_metrics',
+        name: 'Workflow Health',
+        status: 'FAIL',
+        message: `${metrics.workflows.failedLastHour} workflow failures in last hour (threshold: ${thresholds.failedWorkflowsPerHour})`,
+        duration,
+      };
+    }
+    
+    if (metrics.workflows.runningNow > 10) {
+      return {
+        category: 'system_metrics',
+        name: 'Workflow Health',
+        status: 'WARN',
+        message: `${metrics.workflows.runningNow} workflows currently running (high load)`,
+        duration,
+      };
+    }
+    
+    if (metrics.workflows.failedLastHour > 0) {
+      return {
+        category: 'system_metrics',
+        name: 'Workflow Health',
+        status: 'WARN',
+        message: `${metrics.workflows.failedLastHour} workflow failure(s) in last hour`,
+        duration,
+      };
+    }
+    
+    return {
+      category: 'system_metrics',
+      name: 'Workflow Health',
+      status: 'PASS',
+      message: `${metrics.workflows.runningNow} running, ${metrics.workflows.failedLastHour} failed in last hour`,
+      duration,
+    };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      category: 'system_metrics',
+      name: 'Workflow Health',
+      status: 'FAIL',
+      message: `Error: ${message}`,
+      duration: Date.now() - start,
+    };
+  }
+}
+
 // Main health check handler
 export async function GET(
   request: NextRequest,
@@ -580,6 +754,19 @@ export async function GET(
   tests.push(await testLandingPage(client.slug));
   tests.push(await testStripeWebhook(client.slug));
   
+  // System metrics tests (client-scoped)
+  tests.push(await testEventRate(clientId));
+  tests.push(await testWebhookBacklog(clientId));
+  tests.push(await testWorkflowHealth(clientId));
+  
+  // Get full metrics for response
+  let metrics: SystemMetrics | undefined;
+  try {
+    metrics = await ObservabilityService.getMetrics(clientId);
+  } catch {
+    // Metrics fetch failed, but don't fail the whole health check
+  }
+  
   // Calculate overall status
   const hasFails = tests.some((t) => t.status === 'FAIL');
   const hasWarns = tests.some((t) => t.status === 'WARN');
@@ -593,6 +780,7 @@ export async function GET(
     overallStatus,
     duration: Date.now() - overallStart,
     tests,
+    metrics,
   };
   
   return NextResponse.json(response);

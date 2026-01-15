@@ -16,43 +16,47 @@ export async function GET(
 
   const { id } = await params;
 
-  const client = await prisma.client.findUnique({
-    where: { id },
-    include: {
-      integrations: {
-        select: {
-          id: true,
-          integration: true,
-          healthStatus: true,
-          lastSeenAt: true,
-          meta: true,
-          createdAt: true,
-        },
-      },
-      events: {
-        take: 50,
-        orderBy: { createdAt: 'desc' },
-      },
-      leads: {
-        where: {
-          stage: 'CAPTURED',
-          lastEventAt: {
-            lt: new Date(Date.now() - 24 * 60 * 60 * 1000), // 24h ago
+  // Run client query and event count in parallel
+  const [client, eventCount] = await Promise.all([
+    prisma.client.findUnique({
+      where: { id },
+      include: {
+        integrations: {
+          select: {
+            id: true,
+            integration: true,
+            healthStatus: true,
+            lastSeenAt: true,
+            meta: true,
+            createdAt: true,
           },
         },
-        take: 20,
-        orderBy: { lastEventAt: 'asc' },
-        select: {
-          id: true,
-          email: true,
-          stage: true,
-          source: true,
-          lastEventAt: true,
-          createdAt: true,
+        events: {
+          take: 50,
+          orderBy: { createdAt: 'desc' },
+        },
+        leads: {
+          where: {
+            stage: 'CAPTURED',
+            lastEventAt: {
+              lt: new Date(Date.now() - 24 * 60 * 60 * 1000), // 24h ago
+            },
+          },
+          take: 20,
+          orderBy: { lastEventAt: 'asc' },
+          select: {
+            id: true,
+            email: true,
+            stage: true,
+            source: true,
+            lastEventAt: true,
+            createdAt: true,
+          },
         },
       },
-    },
-  });
+    }),
+    prisma.event.count({ where: { clientId: id } }),
+  ]);
 
   if (!client) {
     return NextResponse.json({ error: 'Client not found' }, { status: 404 });
@@ -60,6 +64,7 @@ export async function GET(
 
   return NextResponse.json({
     ...client,
+    eventCount, // Total event count for "X of Y" display
     stuckLeads: client.leads,
     leads: undefined, // Remove full leads from response
   });
