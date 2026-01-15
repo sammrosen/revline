@@ -319,15 +319,7 @@ export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
         endDate: z.string().optional().describe('End date (YYYY-MM-DD)'),
       }),
     },
-    check_session_balance: {
-      name: 'check_session_balance',
-      label: 'Check Session Balance',
-      description: 'Check if member has session credits for an event type',
-      payloadSchema: AbcIgniteMemberSchema,
-      paramsSchema: z.object({
-        eventTypeId: z.string().optional().describe('Event type ID (uses default if not provided)'),
-      }),
-    },
+    // check_session_balance: removed - requires /session-balance endpoint
 
     // =========================================================================
     // ENROLLMENT ACTIONS
@@ -341,7 +333,6 @@ export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
         eventId: z.string().describe('ABC Ignite event ID'),
         validateServiceRestriction: z.boolean().optional().describe('Validate service restrictions'),
         allowUnfunded: z.boolean().optional().describe('Allow booking even if member has no funding'),
-        checkBalance: z.boolean().optional().describe('Check session balance before enrolling'),
       }),
     },
     unenroll_member: {

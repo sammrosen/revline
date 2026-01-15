@@ -25,9 +25,10 @@ import {
  * 
  * Full-featured provider with:
  * - Barcode-based member lookup
- * - Session balance eligibility checks
  * - Event enrollment
  * - Waitlist support
+ * 
+ * Note: Session balance eligibility checks disabled until /session-balance endpoint activated
  */
 export class AbcIgniteBookingProvider implements BookingProvider {
   readonly providerId = 'abc_ignite';
@@ -35,7 +36,7 @@ export class AbcIgniteBookingProvider implements BookingProvider {
   
   readonly capabilities: BookingProviderCapabilities = {
     requiresCustomerLookup: true,
-    requiresEligibilityCheck: true,
+    requiresEligibilityCheck: false, // Disabled until /session-balance endpoint activated
     supportsWaitlist: true,
     customerIdentifierType: 'barcode',
     customerIdentifierLabel: 'Member Barcode',
@@ -67,40 +68,20 @@ export class AbcIgniteBookingProvider implements BookingProvider {
   }
   
   /**
-   * Check if member is eligible to book (has session credits)
+   * Check if member is eligible to book
+   * 
+   * Note: Session balance check disabled until /session-balance endpoint activated.
+   * Currently always returns eligible - ABC will reject at enrollment if member lacks credits.
    */
   async checkEligibility(
-    customer: BookingCustomer,
-    eventTypeId?: string
+    _customer: BookingCustomer,
+    _eventTypeId?: string
   ): Promise<EligibilityResult> {
-    // Use default event type from config if not provided
-    const typeId = eventTypeId || this.adapter.getDefaultEventTypeId();
-    
-    if (!typeId) {
-      return {
-        eligible: true,
-        reason: 'No event type specified - eligibility not checked',
-      };
-    }
-    
-    const result = await this.adapter.canEnroll(customer.id, typeId);
-    
-    if (!result.success) {
-      return {
-        eligible: false,
-        reason: result.error || 'Failed to check eligibility',
-      };
-    }
-    
-    const data = result.data!;
-    
+    // Session balance endpoint not activated - skip eligibility check
+    // ABC will reject at enrollment time if member doesn't have credits
     return {
-      eligible: data.canEnroll,
-      reason: data.reason,
-      balance: data.balance ? {
-        remaining: data.balance.remainingSessions,
-        unlimited: data.balance.unlimited,
-      } : undefined,
+      eligible: true,
+      reason: 'Eligibility check skipped - will validate at booking time',
     };
   }
   

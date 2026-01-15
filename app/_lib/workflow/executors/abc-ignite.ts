@@ -95,7 +95,7 @@ const lookupMember: ActionExecutor = {
 };
 
 // =============================================================================
-// AVAILABILITY & BALANCE CHECKS
+// AVAILABILITY CHECK
 // =============================================================================
 
 /**
@@ -157,74 +157,8 @@ const checkAvailability: ActionExecutor = {
   },
 };
 
-/**
- * Check session balance for a member
- */
-const checkSessionBalance: ActionExecutor = {
-  async execute(
-    ctx: WorkflowContext,
-    params: Record<string, unknown>
-  ): Promise<ActionResult> {
-    const adapter = await AbcIgniteAdapter.forClient(ctx.clientId);
-    if (!adapter) {
-      return { success: false, error: 'ABC Ignite not configured for this client' };
-    }
-
-    const memberIdentifier = getMemberIdentifier(ctx, params);
-    if (!memberIdentifier) {
-      return { success: false, error: 'Missing memberId or barcode in payload or params' };
-    }
-
-    // Resolve memberId if barcode was provided
-    let memberId: string;
-    if (typeof memberIdentifier === 'object' && 'barcode' in memberIdentifier) {
-      const memberResult = await adapter.getMemberByBarcode(memberIdentifier.barcode);
-      if (!memberResult.success || !memberResult.data) {
-        return { success: false, error: `Member not found with barcode: ${memberIdentifier.barcode}` };
-      }
-      memberId = memberResult.data.memberId;
-    } else {
-      memberId = memberIdentifier;
-    }
-
-    // Get event type ID from params or use default
-    const eventTypeId = (params.eventTypeId as string) || adapter.getDefaultEventTypeId();
-    if (!eventTypeId) {
-      return { success: false, error: 'Missing eventTypeId - provide in params or set defaultEventTypeId in config' };
-    }
-
-    const result = await adapter.getSessionBalance(memberId, eventTypeId);
-
-    await emitEvent({
-      clientId: ctx.clientId,
-      leadId: ctx.leadId,
-      system: EventSystem.ABC_IGNITE,
-      eventType: result.success
-        ? 'abc_ignite_balance_checked'
-        : 'abc_ignite_balance_check_failed',
-      success: result.success,
-      errorMessage: result.error,
-    });
-
-    if (!result.success) {
-      return { success: false, error: result.error };
-    }
-
-    const balance = result.data!;
-    const canEnroll = balance.unlimited || balance.remainingSessions > 0;
-
-    return {
-      success: true,
-      data: {
-        memberId,
-        eventTypeId,
-        balance,
-        canEnroll,
-        reason: canEnroll ? undefined : 'No session credits remaining',
-      },
-    };
-  },
-};
+// NOTE: checkSessionBalance removed - requires /session-balance endpoint
+// Re-add when that endpoint is activated in ABC Ignite
 
 // =============================================================================
 // ENROLLMENT ACTIONS
@@ -251,42 +185,6 @@ const enrollMember: ActionExecutor = {
     const memberIdentifier = getMemberIdentifier(ctx, params);
     if (!memberIdentifier) {
       return { success: false, error: 'Missing memberId or barcode in payload or params' };
-    }
-
-    // Optionally check balance before enrolling
-    if (params.checkBalance) {
-      let memberId: string;
-      if (typeof memberIdentifier === 'object' && 'barcode' in memberIdentifier) {
-        const memberResult = await adapter.getMemberByBarcode(memberIdentifier.barcode);
-        if (!memberResult.success || !memberResult.data) {
-          return { success: false, error: `Member not found with barcode: ${memberIdentifier.barcode}` };
-        }
-        memberId = memberResult.data.memberId;
-      } else {
-        memberId = memberIdentifier;
-      }
-
-      // Get event details to find the event type
-      const eventResult = await adapter.getEvent(eventId);
-      if (eventResult.success && eventResult.data) {
-        const eventTypeId = eventResult.data.eventTypeId;
-        const canEnrollResult = await adapter.canEnroll(memberId, eventTypeId);
-        
-        if (canEnrollResult.success && !canEnrollResult.data?.canEnroll) {
-          await emitEvent({
-            clientId: ctx.clientId,
-            leadId: ctx.leadId,
-            system: EventSystem.ABC_IGNITE,
-            eventType: 'abc_ignite_enroll_blocked_no_credits',
-            success: false,
-            errorMessage: canEnrollResult.data?.reason,
-          });
-          return { 
-            success: false, 
-            error: canEnrollResult.data?.reason || 'Cannot enroll - no session credits',
-          };
-        }
-      }
     }
 
     // Enrollment options from params
@@ -493,7 +391,7 @@ const removeFromWaitlist: ActionExecutor = {
 export const abcIgniteExecutors: Record<string, ActionExecutor> = {
   lookup_member: lookupMember,
   check_availability: checkAvailability,
-  check_session_balance: checkSessionBalance,
+  // check_session_balance: removed - requires /session-balance endpoint
   enroll_member: enrollMember,
   unenroll_member: unenrollMember,
   add_to_waitlist: addToWaitlist,

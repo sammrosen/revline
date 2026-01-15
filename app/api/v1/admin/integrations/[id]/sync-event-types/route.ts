@@ -66,9 +66,7 @@ export async function GET(
     }
 
     // Fetch ALL event types from ABC Ignite (category comes with each event type)
-    const result = await adapter.getEventTypes({
-      isAvailableOnline: true, // Only fetch online-bookable events
-    });
+    const result = await adapter.getEventTypes();
 
     if (!result.success) {
       return NextResponse.json(
