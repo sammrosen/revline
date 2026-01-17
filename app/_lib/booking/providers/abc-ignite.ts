@@ -13,6 +13,7 @@ import {
   BookingProvider,
   BookingProviderCapabilities,
   BookingCustomer,
+  BookingEmployee,
   TimeSlot,
   AvailabilityQuery,
   BookingResult,
@@ -39,16 +40,22 @@ import {
 export class AbcIgniteBookingProvider implements BookingProvider {
   readonly providerId = 'abc_ignite';
   readonly providerName = 'ABC Ignite';
+  readonly capabilities: BookingProviderCapabilities;
   
-  readonly capabilities: BookingProviderCapabilities = {
-    requiresCustomerLookup: true,
-    requiresEligibilityCheck: false, // Disabled until /session-balance endpoint activated
-    supportsWaitlist: true,
-    customerIdentifierType: 'barcode',
-    customerIdentifierLabel: 'Member Barcode',
-  };
-  
-  constructor(private adapter: AbcIgniteAdapter) {}
+  constructor(private adapter: AbcIgniteAdapter) {
+    // Build capabilities - employee selection depends on config
+    const employees = this.adapter.getConfiguredEmployees();
+    const hasEmployees = Object.keys(employees).length > 0;
+    
+    this.capabilities = {
+      requiresCustomerLookup: true,
+      requiresEligibilityCheck: false, // Disabled until /session-balance endpoint activated
+      supportsWaitlist: true,
+      supportsEmployeeSelection: hasEmployees,
+      customerIdentifierType: 'barcode',
+      customerIdentifierLabel: 'Member Barcode',
+    };
+  }
   
   /**
    * Create provider instance for a client
@@ -58,6 +65,35 @@ export class AbcIgniteBookingProvider implements BookingProvider {
     if (!adapter) return null;
     return new AbcIgniteBookingProvider(adapter);
   }
+  
+  // ===========================================================================
+  // EMPLOYEE CONFIGURATION
+  // ===========================================================================
+  
+  /**
+   * Get configured employees for selection UI
+   * Returns employee info suitable for frontend display (keys, not raw IDs)
+   */
+  getConfiguredEmployees(): BookingEmployee[] {
+    const employeesConfig = this.adapter.getConfiguredEmployees();
+    
+    return Object.entries(employeesConfig).map(([key, config]) => ({
+      key,
+      name: config.name,
+      title: config.title,
+    }));
+  }
+  
+  /**
+   * Get the default employee key
+   */
+  getDefaultEmployeeKey(): string | undefined {
+    return this.adapter.getDefaultEmployeeId();
+  }
+  
+  // ===========================================================================
+  // CUSTOMER OPERATIONS
+  // ===========================================================================
   
   /**
    * Look up a member by barcode
@@ -238,15 +274,54 @@ export class AbcIgniteBookingProvider implements BookingProvider {
   }
   
   /**
-   * Create a booking (enroll member in event)
+   * Create a booking
+   * 
+   * Handles two scenarios:
+   * - Availability slots: Creates a new appointment via POST /calendars/events
+   * - Pre-scheduled events: Enrolls member in existing event
    */
   async createBooking(
     slot: TimeSlot,
     customer: BookingCustomer
   ): Promise<BookingResult> {
-    const eventId = slot.id;
     const memberId = customer.id;
     
+    // Check if this is an availability slot (needs appointment creation)
+    // vs a pre-scheduled event (needs enrollment)
+    if (slot.providerData?.isAvailabilitySlot) {
+      // Create appointment from availability
+      const result = await this.adapter.createAppointment({
+        employeeId: slot.providerData.employeeId as string,
+        eventTypeId: slot.providerData.eventTypeId as string,
+        levelId: slot.providerData.levelId as string,
+        startTime: this.formatDateTimeForApi(slot.startTime),
+        memberId,
+      });
+      
+      if (!result.success) {
+        return {
+          success: false,
+          message: result.error || 'Failed to create appointment',
+          error: result.error,
+        };
+      }
+      
+      return {
+        success: true,
+        bookingId: result.data?.eventId,
+        message: 'Appointment booked successfully',
+        booking: {
+          id: result.data?.eventId || slot.id,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          title: slot.title,
+          staffName: slot.staffName,
+        },
+      };
+    }
+    
+    // Existing logic for pre-scheduled events
+    const eventId = slot.id;
     const result = await this.adapter.enrollMember(eventId, memberId);
     
     if (!result.success) {
@@ -270,6 +345,21 @@ export class AbcIgniteBookingProvider implements BookingProvider {
         location: slot.location,
       },
     };
+  }
+  
+  /**
+   * Format ISO datetime to ABC API format
+   * ABC API expects: "YYYY-MM-DD HH:mm:ss"
+   */
+  private formatDateTimeForApi(isoDateTime: string): string {
+    const date = new Date(isoDateTime);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    const ss = String(date.getSeconds()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
   }
   
   /**
@@ -302,18 +392,28 @@ export class AbcIgniteBookingProvider implements BookingProvider {
   
   /**
    * Map ABC Ignite member to generic customer
+   * Handles both nested personal object (GET /members) and flat fields (event context)
    */
   private mapMemberToCustomer(member: AbcIgniteMember): BookingCustomer {
-    const name = [member.firstName, member.lastName]
+    // Support both nested personal object and flat fields
+    const personal = member.personal || {};
+    const firstName = personal.firstName || member.firstName;
+    const lastName = personal.lastName || member.lastName;
+    const barcode = personal.barcode || member.barcode;
+    const homeClub = personal.homeClub || member.homeClub;
+    const email = personal.email;
+    
+    const name = [firstName, lastName]
       .filter(Boolean)
       .join(' ') || 'Member';
     
     return {
       id: member.memberId,
       name,
+      email,
       providerData: {
-        barcode: member.barcode,
-        homeClub: member.homeClub,
+        barcode,
+        homeClub,
         hasActiveRecurringService: member.hasActiveRecurringService,
       },
     };

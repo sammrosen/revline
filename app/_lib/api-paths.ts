@@ -99,6 +99,7 @@ export const BookingApi = {
   availability: `${API_BASE}/booking/availability`,
   eligibility: `${API_BASE}/booking/eligibility`,
   create: `${API_BASE}/booking/create`,
+  employees: `${API_BASE}/booking/employees`,
 } as const;
 
 /**

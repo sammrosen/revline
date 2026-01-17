@@ -706,7 +706,7 @@ export function AbcIgniteConfigEditor({
                 No employees configured.
               </p>
               <p className="text-xs text-zinc-600 mt-1">
-                Add employees to enable trainer-based availability booking.
+                Add employees to enable availability booking.
               </p>
             </div>
           ) : (

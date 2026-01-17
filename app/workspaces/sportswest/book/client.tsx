@@ -12,6 +12,7 @@ import {
   BookingStep,
   BookingProviderCapabilities,
   BookingCustomer,
+  BookingEmployee,
   TimeSlot,
   EligibilityResult,
   BookingResult,
@@ -34,12 +35,14 @@ interface SportsWestBookingClientProps {
   workspaceSlug: string;
   workspaceName: string;
   capabilities: BookingProviderCapabilities;
+  initialBarcode?: string | null;
 }
 
 export function SportsWestBookingClient({
   workspaceSlug,
   workspaceName: _workspaceName,
   capabilities,
+  initialBarcode,
 }: SportsWestBookingClientProps) {
   const [state, setState] = useState<BookingState>({
     ...initialBookingState,
@@ -179,6 +182,7 @@ export function SportsWestBookingClient({
             workspaceSlug={workspaceSlug}
             selectedSlot={state.selectedSlot}
             identifierLabel={capabilities.customerIdentifierLabel || 'Member Barcode'}
+            initialValue={initialBarcode}
             onCustomerFound={handleCustomerFound}
             onError={handleError}
             onBack={goToPreviousStep}
@@ -274,9 +278,46 @@ function TimeSlotStep({
     return today.toISOString().split('T')[0];
   });
   const [fetched, setFetched] = useState(false);
+  
+  // Employee selection state
+  const [employees, setEmployees] = useState<BookingEmployee[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
+  const [employeesLoading, setEmployeesLoading] = useState(true);
+  const [employeesFetched, setEmployeesFetched] = useState(false);
+
+  // Fetch employees on mount
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      setEmployeesLoading(true);
+      try {
+        const params = new URLSearchParams({ workspaceSlug });
+        const response = await fetch(`${BookingApi.employees}?${params}`);
+        const data = await response.json();
+
+        if (response.ok && data.data?.employees) {
+          setEmployees(data.data.employees);
+          // Pre-select default employee if available
+          if (data.data.defaultKey) {
+            setSelectedEmployee(data.data.defaultKey);
+          } else if (data.data.employees.length > 0) {
+            // Fall back to first employee if no default
+            setSelectedEmployee(data.data.employees[0].key);
+          }
+        }
+      } catch {
+        // Silent fail - employees list just won't show
+        console.error('Failed to fetch employees');
+      } finally {
+        setEmployeesLoading(false);
+        setEmployeesFetched(true);
+      }
+    };
+
+    fetchEmployees();
+  }, [workspaceSlug]);
 
   // Fetch availability
-  const fetchAvailability = useCallback(async () => {
+  const fetchAvailability = useCallback(async (employeeKey?: string | null) => {
     setLoading(true);
     setFetched(true);
 
@@ -290,6 +331,11 @@ function TimeSlotStep({
         startDate: start.toISOString().split('T')[0],
         endDate: end.toISOString().split('T')[0],
       });
+      
+      // Add staffId if employee is selected
+      if (employeeKey) {
+        params.append('staffId', employeeKey);
+      }
 
       const response = await fetch(`${BookingApi.availability}?${params}`);
       const data = await response.json();
@@ -307,11 +353,27 @@ function TimeSlotStep({
     }
   }, [workspaceSlug, selectedDate, onError, setLoading, setSlots]);
 
-  // Fetch on mount
+  // Fetch availability once employees are loaded (or if no employees)
   useEffect(() => {
-    fetchAvailability();
+    if (!employeesFetched) return;
+    fetchAvailability(selectedEmployee);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [employeesFetched, selectedEmployee]);
+
+  // Handle employee change
+  const handleEmployeeChange = (key: string) => {
+    setSelectedEmployee(key);
+    setFetched(false);
+    // Availability will be re-fetched via the useEffect above
+  };
+
+  // Handle date change
+  const handleDateChange = (newDate: string) => {
+    setSelectedDate(newDate);
+    setFetched(false);
+    // Re-fetch with current employee
+    fetchAvailability(selectedEmployee);
+  };
 
   // Group slots by date
   const slotsByDate: Record<string, TimeSlot[]> = {};
@@ -321,6 +383,8 @@ function TimeSlotStep({
     slotsByDate[date].push(slot);
   }
   const dates = Object.keys(slotsByDate).sort();
+
+  const showEmployeeSelector = employees.length > 0;
 
   return (
     <div className="bg-white rounded-lg shadow-lg overflow-hidden">
@@ -333,16 +397,40 @@ function TimeSlotStep({
         </p>
       </div>
 
+      {/* Employee selector */}
+      {showEmployeeSelector && (
+        <div className="p-4 border-b" style={{ borderColor: BRAND.border, backgroundColor: '#f9fafb' }}>
+          <label className="block text-sm font-medium mb-2" style={{ color: BRAND.text }}>
+            Trainer
+          </label>
+          <select
+            value={selectedEmployee || ''}
+            onChange={(e) => handleEmployeeChange(e.target.value)}
+            disabled={employeesLoading || loading}
+            className="w-full px-4 py-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ 
+              borderColor: BRAND.border,
+              color: BRAND.text,
+            }}
+          >
+            {employees.map(emp => (
+              <option key={emp.key} value={emp.key}>
+                {emp.name}{emp.title ? ` - ${emp.title}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Date navigation */}
-      <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: BRAND.border, backgroundColor: '#f9fafb' }}>
+      <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: BRAND.border, backgroundColor: showEmployeeSelector ? '#ffffff' : '#f9fafb' }}>
         <button
           onClick={() => {
             const date = new Date(selectedDate);
             date.setDate(date.getDate() - 7);
-            setSelectedDate(date.toISOString().split('T')[0]);
-            setFetched(false);
+            handleDateChange(date.toISOString().split('T')[0]);
           }}
-          disabled={new Date(selectedDate) <= new Date()}
+          disabled={new Date(selectedDate) <= new Date() || loading}
           className="p-2 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -358,10 +446,10 @@ function TimeSlotStep({
           onClick={() => {
             const date = new Date(selectedDate);
             date.setDate(date.getDate() + 7);
-            setSelectedDate(date.toISOString().split('T')[0]);
-            setFetched(false);
+            handleDateChange(date.toISOString().split('T')[0]);
           }}
-          className="p-2 rounded hover:bg-gray-200"
+          disabled={loading}
+          className="p-2 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -370,7 +458,7 @@ function TimeSlotStep({
       </div>
 
       {/* Loading */}
-      {loading && (
+      {(loading || employeesLoading) && (
         <div className="p-12 text-center">
           <div className="animate-spin w-8 h-8 border-4 border-gray-300 border-t-current rounded-full mx-auto mb-4" style={{ borderTopColor: BRAND.primary }} />
           <p style={{ color: BRAND.textMuted }}>Loading available times...</p>
@@ -378,7 +466,7 @@ function TimeSlotStep({
       )}
 
       {/* No slots */}
-      {!loading && fetched && slots.length === 0 && (
+      {!loading && !employeesLoading && fetched && slots.length === 0 && (
         <div className="p-12 text-center">
           <p style={{ color: BRAND.textMuted }}>No available times for this week.</p>
           <p className="text-sm mt-1" style={{ color: BRAND.textMuted }}>Try selecting a different week.</p>
@@ -386,7 +474,7 @@ function TimeSlotStep({
       )}
 
       {/* Slots */}
-      {!loading && slots.length > 0 && (
+      {!loading && !employeesLoading && slots.length > 0 && (
         <div className="divide-y" style={{ borderColor: BRAND.border }}>
           {dates.map(date => (
             <div key={date} className="p-4">
@@ -444,6 +532,7 @@ function MemberLookupStep({
   workspaceSlug,
   selectedSlot,
   identifierLabel,
+  initialValue,
   onCustomerFound,
   onError,
   onBack,
@@ -453,13 +542,14 @@ function MemberLookupStep({
   workspaceSlug: string;
   selectedSlot: TimeSlot | null;
   identifierLabel: string;
+  initialValue?: string | null;
   onCustomerFound: (customer: BookingCustomer) => void;
   onError: (error: string) => void;
   onBack: () => void;
   loading: boolean;
   setLoading: (loading: boolean) => void;
 }) {
-  const [identifier, setIdentifier] = useState('');
+  const [identifier, setIdentifier] = useState(initialValue || '');
   const [localError, setLocalError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -474,7 +564,7 @@ function MemberLookupStep({
     setLoading(true);
 
     try {
-      const response = await fetch('/api/booking/lookup', {
+      const response = await fetch(BookingApi.lookup, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspaceSlug, identifier: identifier.trim() }),

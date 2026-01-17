@@ -98,10 +98,33 @@ export interface AbcIgniteEventType {
 }
 
 /**
- * ABC Ignite member in event context
+ * ABC Ignite member personal info (nested in GET /members response)
+ */
+export interface AbcIgniteMemberPersonal {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  primaryPhone?: string;
+  barcode?: string;
+  homeClub?: string;
+  isActive?: string;
+  memberStatus?: string;
+  birthDate?: string;
+  gender?: string;
+}
+
+/**
+ * ABC Ignite member
+ * 
+ * Supports two response formats:
+ * - GET /members: Has nested `personal` object with member details
+ * - Event member context: Has flat fields directly on the object
  */
 export interface AbcIgniteMember {
   memberId: string;
+  // Nested personal info (from GET /members endpoint)
+  personal?: AbcIgniteMemberPersonal;
+  // Flat fields for backwards compatibility (event member context)
   hasActiveRecurringService?: boolean;
   opportunityLevel?: string;
   lastUsed?: string;
@@ -181,6 +204,26 @@ export interface WaitlistResult {
   eventId: string;
   memberId: string;
   position?: number;
+}
+
+/**
+ * Parameters for creating an appointment from availability
+ */
+export interface CreateAppointmentParams {
+  employeeId: string;
+  eventTypeId: string;
+  levelId: string;
+  startTime: string;  // Format: "YYYY-MM-DD HH:mm:ss"
+  memberId: string;
+}
+
+/**
+ * Result of appointment creation
+ */
+export interface CreateAppointmentResult {
+  success: boolean;
+  eventId?: string;
+  message?: string;
 }
 
 /**
@@ -694,7 +737,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
 
   /**
    * Get employee availability for a specific event type
-   * GET /{clubNumber}/employees/{employeeId}/availability
+   * GET /{clubNumber}/employees/bookingavailability/{employeeId}
    * 
    * Returns raw availability days with time blocks. The provider is responsible
    * for splitting time blocks into bookable slots based on event duration.
@@ -725,7 +768,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
     }
 
     const queryString = params.toString();
-    const endpoint = `/employees/${employeeId}/availability?${queryString}`;
+    const endpoint = `/employees/bookingavailability/${employeeId}?${queryString}`;
     
     const result = await this.apiRequest<AbcAvailabilityResponse>(
       'GET',
@@ -853,6 +896,45 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
       eventId,
       memberId,
       message: 'Successfully enrolled member in event',
+    });
+  }
+
+  /**
+   * Create an appointment from availability
+   * POST /{clubNumber}/calendars/events
+   * 
+   * Used to book an appointment when selecting from employee availability.
+   * Unlike enrollMember which adds to an existing event, this creates a new appointment.
+   * 
+   * @param params - Appointment creation parameters
+   */
+  async createAppointment(
+    params: CreateAppointmentParams
+  ): Promise<IntegrationResult<CreateAppointmentResult>> {
+    const result = await this.apiRequest<{ status?: AbcApiStatus; eventId?: string }>(
+      'POST',
+      '/calendars/events',
+      {
+        employeeId: params.employeeId,
+        eventTypeId: params.eventTypeId,
+        levelId: params.levelId,
+        startTime: params.startTime,
+        memberId: params.memberId,
+      }
+    );
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error,
+        data: { success: false, message: result.error },
+      };
+    }
+
+    return this.success({
+      success: true,
+      eventId: result.data?.eventId,
+      message: 'Appointment created successfully',
     });
   }
 

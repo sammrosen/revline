@@ -21,7 +21,15 @@ import { SportsWestBookingClient } from './client';
 // Form ID - enable this in the workspace's RevLine config to connect
 const FORM_ID = 'sportswest-booking';
 
-export default async function SportsWestBookingPage() {
+export default async function SportsWestBookingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ barcode?: string }>;
+}) {
+  // Get URL params (e.g., ?barcode=123456 for pre-filled barcode links)
+  const params = await searchParams;
+  const initialBarcode = params.barcode || null;
+  
   // Find workspace by formId (configured in RevLine integration)
   let workspace;
   try {
@@ -77,6 +85,7 @@ export default async function SportsWestBookingPage() {
       workspaceSlug={workspace.slug}
       workspaceName={workspace.name}
       capabilities={capabilities}
+      initialBarcode={initialBarcode}
     />
   );
 }
