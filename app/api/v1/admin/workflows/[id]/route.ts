@@ -58,7 +58,7 @@ export async function GET(
     const workflow = await prisma.workflow.findUnique({
       where: { id },
       include: {
-        client: {
+        workspace: {
           select: {
             id: true,
             name: true,
@@ -98,7 +98,7 @@ export async function GET(
         triggerOperation: workflow.triggerOperation,
         triggerFilter: workflow.triggerFilter,
         actions: workflow.actions,
-        client: workflow.client,
+        workspace: workflow.workspace,
         createdAt: workflow.createdAt,
         updatedAt: workflow.updatedAt,
       },
@@ -142,7 +142,7 @@ export async function PUT(
       where: { id },
       select: {
         id: true,
-        clientId: true,
+        workspaceId: true,
         enabled: true,
         name: true,
         triggerAdapter: true,

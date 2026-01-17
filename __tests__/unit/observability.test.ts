@@ -5,18 +5,18 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { testPrisma, createTestClient } from '../setup';
+import { testPrisma, createTestWorkspace } from '../setup';
 
 // Import service after mocks are set up
 const { ObservabilityService } = await import('@/app/_lib/observability');
 
 describe('ObservabilityService', () => {
-  let clientId: string;
+  let workspaceId: string;
 
   beforeEach(async () => {
     // afterEach in setup.ts handles cleanup, but we need a fresh client each test
-    const client = await createTestClient();
-    clientId = client.id;
+    const client = await createTestWorkspace();
+    workspaceId = client.id;
   });
 
   describe('getMetrics', () => {
@@ -39,7 +39,7 @@ describe('ObservabilityService', () => {
       await testPrisma.webhookEvent.createMany({
         data: [
           {
-            clientId,
+            workspaceId,
             correlationId: crypto.randomUUID(),
             provider: 'stripe',
             providerEventId: 'evt_1',
@@ -47,7 +47,7 @@ describe('ObservabilityService', () => {
             status: 'PENDING',
           },
           {
-            clientId,
+            workspaceId,
             correlationId: crypto.randomUUID(),
             provider: 'stripe',
             providerEventId: 'evt_2',
@@ -55,7 +55,7 @@ describe('ObservabilityService', () => {
             status: 'PENDING',
           },
           {
-            clientId,
+            workspaceId,
             correlationId: crypto.randomUUID(),
             provider: 'stripe',
             providerEventId: 'evt_3',
@@ -75,7 +75,7 @@ describe('ObservabilityService', () => {
       const events = [];
       for (let i = 0; i < 10; i++) {
         events.push({
-          clientId,
+          workspaceId,
           system: 'BACKEND' as const,
           eventType: 'test_event',
           success: i >= 3, // First 3 fail
@@ -90,18 +90,18 @@ describe('ObservabilityService', () => {
       expect(metrics.events.errorRatePercent).toBe(30);
     });
 
-    it('scopes metrics to client when clientId provided', async () => {
-      // Create another client
-      const otherClient = await testPrisma.client.create({
-        data: { name: 'Other Client', slug: 'other-client' },
+    it('scopes metrics to workspace when workspaceId provided', async () => {
+      // Create another workspace
+      const otherWorkspace = await testPrisma.workspace.create({
+        data: { name: 'Other Workspace', slug: 'other-workspace' },
       });
 
       // Create events for both clients
       await testPrisma.event.createMany({
         data: [
-          { clientId, system: 'BACKEND', eventType: 'test', success: false },
-          { clientId, system: 'BACKEND', eventType: 'test', success: false },
-          { clientId: otherClient.id, system: 'BACKEND', eventType: 'test', success: false },
+          { workspaceId, system: 'BACKEND', eventType: 'test', success: false },
+          { workspaceId, system: 'BACKEND', eventType: 'test', success: false },
+          { workspaceId: otherWorkspace.id, system: 'BACKEND', eventType: 'test', success: false },
         ],
       });
 
@@ -110,7 +110,7 @@ describe('ObservabilityService', () => {
       expect(systemMetrics.events.failedLastHour).toBe(3);
 
       // Client-scoped should see only 2
-      const clientMetrics = await ObservabilityService.getMetrics(clientId);
+      const clientMetrics = await ObservabilityService.getMetrics(workspaceId);
       expect(clientMetrics.events.failedLastHour).toBe(2);
     });
   });
@@ -128,7 +128,7 @@ describe('ObservabilityService', () => {
       const webhooks = [];
       for (let i = 0; i < 60; i++) {
         webhooks.push({
-          clientId,
+          workspaceId,
           correlationId: crypto.randomUUID(),
           provider: 'stripe' as const,
           providerEventId: `evt_${i}`,
@@ -148,7 +148,7 @@ describe('ObservabilityService', () => {
       const events = [];
       for (let i = 0; i < 10; i++) {
         events.push({
-          clientId,
+          workspaceId,
           system: 'BACKEND' as const,
           eventType: 'test_event',
           success: i >= 5, // First 5 fail
@@ -166,7 +166,7 @@ describe('ObservabilityService', () => {
       const events = [];
       for (let i = 0; i < 5; i++) {
         events.push({
-          clientId,
+          workspaceId,
           system: 'BACKEND' as const,
           eventType: 'test_event',
           success: i !== 0, // Only first one fails
@@ -192,7 +192,7 @@ describe('ObservabilityService', () => {
     it('returns counts for all tables', async () => {
       // Create some data
       await testPrisma.event.create({
-        data: { clientId, system: 'BACKEND', eventType: 'test', success: true },
+        data: { workspaceId, system: 'BACKEND', eventType: 'test', success: true },
       });
 
       const stats = await ObservabilityService.getTableStats();

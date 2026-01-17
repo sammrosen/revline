@@ -11,24 +11,24 @@
  * - Keep integration-specific types with their meta definitions
  */
 
-import { IntegrationType, HealthStatus, LeadStage, EventSystem, ClientStatus } from '@prisma/client';
+import { IntegrationType, HealthStatus, LeadStage, EventSystem, WorkspaceStatus } from '@prisma/client';
 
 // Re-export Prisma enums for convenience
-export { IntegrationType, HealthStatus, LeadStage, EventSystem, ClientStatus };
+export { IntegrationType, HealthStatus, LeadStage, EventSystem, WorkspaceStatus };
 
 // =============================================================================
-// CLIENT TYPES
+// WORKSPACE TYPES
 // =============================================================================
 
-export interface ClientContext {
+export interface WorkspaceContext {
   id: string;
   slug: string;
   name: string;
-  status: ClientStatus;
+  status: WorkspaceStatus;
   timezone: string;
 }
 
-export interface ClientWithIntegrations extends ClientContext {
+export interface WorkspaceWithIntegrations extends WorkspaceContext {
   integrations: IntegrationSummary[];
 }
 
@@ -101,10 +101,14 @@ export interface ManyChatMeta {
  * @example
  * {
  *   "clubNumber": "7715",
- *   "defaultEventCategory": "appointment",
+ *   "defaultEventCategory": "Appointment",
  *   "defaultEventTypeId": "pt_session",
+ *   "defaultEmployeeId": "trainer1",
  *   "eventTypes": {
- *     "pt_session": { "id": "0611116d...", "name": "Personal Training", "duration": 30 }
+ *     "pt_session": { "id": "abc-uuid", "name": "Personal Training", "category": "Appointment", "duration": 60, "levelId": "level-uuid" }
+ *   },
+ *   "employees": {
+ *     "trainer1": { "id": "emp-uuid", "name": "John Smith", "title": "Personal Trainer" }
  *   }
  * }
  */
@@ -115,26 +119,40 @@ export interface AbcIgniteMeta {
   defaultEventTypeId?: string;
   /** Default event category filter for getEventTypes (Appointment | Event) */
   defaultEventCategory?: 'Appointment' | 'Event';
-  /** Synced event types from ABC Ignite (key → { id, name, category, duration }) */
+  /** Synced event types from ABC Ignite (key → { id, name, category, duration, levelId }) */
   eventTypes?: Record<string, { 
     id: string; 
     name: string; 
-    category: 'Appointment' | 'Event';  // Comes from ABC Ignite sync
+    category: 'Appointment' | 'Event';
     duration?: number;
+    /** Training level ID for availability queries */
+    levelId?: string;
   }>;
-  /** Default employee/trainer ID for single-trainer scenarios (advanced) */
+  /** Default employee key (references employees) */
   defaultEmployeeId?: string;
+  /** Configured employees/trainers (key → { id, name, title }) */
+  employees?: Record<string, {
+    /** ABC Ignite employee ID */
+    id: string;
+    /** Display name */
+    name: string;
+    /** Job title (e.g., "Personal Trainer") */
+    title?: string;
+  }>;
 }
 
 /**
  * RevLine integration metadata
  * Forms configuration and internal settings
  * 
+ * Each enabled form becomes a workflow trigger option.
+ * The form ID IS the trigger operation - no separate mapping needed.
+ * 
  * @example
  * {
  *   "forms": {
- *     "prospect-intake": { "enabled": true, "triggerOperation": "form_submitted" },
- *     "waiver": { "enabled": true, "triggerOperation": "waiver_signed" }
+ *     "prospect-intake": { "enabled": true },
+ *     "booking-form": { "enabled": true }
  *   },
  *   "settings": {
  *     "defaultSource": "landing"
@@ -142,10 +160,9 @@ export interface AbcIgniteMeta {
  * }
  */
 export interface RevlineMeta {
-  /** Enabled forms with their trigger operations */
+  /** Enabled forms - each becomes a workflow trigger (formId = trigger operation) */
   forms: Record<string, { 
     enabled: boolean; 
-    triggerOperation?: string;
   }>;
   /** General RevLine settings */
   settings: {
@@ -194,7 +211,7 @@ export interface LeadData {
 
 export interface Lead {
   id: string;
-  clientId: string;
+  workspaceId: string;
   email: string;
   source: string | null;
   stage: LeadStage;
@@ -208,7 +225,7 @@ export interface Lead {
 // =============================================================================
 
 export interface EventData {
-  clientId: string;
+  workspaceId: string;
   leadId?: string;
   system: EventSystem;
   eventType: string;
@@ -218,7 +235,7 @@ export interface EventData {
 
 export interface Event {
   id: string;
-  clientId: string;
+  workspaceId: string;
   leadId: string | null;
   system: EventSystem;
   eventType: string;
@@ -312,7 +329,7 @@ export interface SecretSummary {
  * Configuration for integration adapters
  */
 export interface IntegrationConfig {
-  clientId: string;
+  workspaceId: string;
   secrets: IntegrationSecret[];
   meta: IntegrationMeta | null;
 }
@@ -341,15 +358,15 @@ export interface WebhookVerification {
 // =============================================================================
 
 export interface HealthIssue {
-  clientId: string;
-  clientName: string;
+  workspaceId: string;
+  workspaceName: string;
   integration?: IntegrationType;
   issue: string;
   severity: 'warning' | 'critical';
 }
 
 export interface HealthCheckResult {
-  clientsChecked: number;
+  workspacesChecked: number;
   issuesFound: number;
   issues: HealthIssue[];
   timestamp: Date;
@@ -397,4 +414,3 @@ export const HEALTH_THRESHOLDS = {
   CONSECUTIVE_FAILURES: 3,
   STUCK_LEAD_HOURS: 24,
 } as const;
-

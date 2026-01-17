@@ -8,7 +8,7 @@
 
 import { NextRequest } from 'next/server';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
-import { getActiveClient } from '@/app/_lib/client-gate';
+import { getActiveWorkspace } from '@/app/_lib/client-gate';
 import { getBookingProvider, AvailabilityQuery } from '@/app/_lib/booking';
 import { 
   rateLimitByIP, 
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     
-    const clientSlug = searchParams.get('clientSlug');
+    const workspaceSlug = searchParams.get('workspaceSlug') || searchParams.get('clientSlug');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const eventTypeId = searchParams.get('eventTypeId') || undefined;
@@ -36,9 +36,9 @@ export async function GET(request: NextRequest) {
     const onlineOnly = searchParams.get('onlineOnly') !== 'false';
 
     // Validate required params
-    if (!clientSlug) {
+    if (!workspaceSlug) {
       return ApiResponse.error(
-        'clientSlug is required',
+        'workspaceSlug is required',
         400,
         ErrorCodes.MISSING_REQUIRED
       );
@@ -62,18 +62,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get active client
-    const client = await getActiveClient(clientSlug);
-    if (!client) {
+    // Get active workspace
+    const workspace = await getActiveWorkspace(workspaceSlug);
+    if (!workspace) {
       return ApiResponse.error(
-        'Client not found or inactive',
+        'Workspace not found or inactive',
         404,
         ErrorCodes.CLIENT_NOT_FOUND
       );
     }
 
     // Get booking provider
-    const provider = await getBookingProvider(client.id);
+    const provider = await getBookingProvider(workspace.id);
     if (!provider) {
       return ApiResponse.error(
         'No booking provider configured',

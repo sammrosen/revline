@@ -8,7 +8,7 @@
 
 import { NextRequest } from 'next/server';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
-import { getActiveClient } from '@/app/_lib/client-gate';
+import { getActiveWorkspace } from '@/app/_lib/client-gate';
 import { 
   getBookingProvider, 
   BookingCustomer, 
@@ -19,7 +19,10 @@ import {
   getClientIP, 
   RATE_LIMITS,
 } from '@/app/_lib/middleware';
-import { emitTrigger } from '@/app/_lib/workflow';
+import { emitFormTrigger } from '@/app/_lib/workflow';
+
+// Form ID for booking - must match the form registry
+const BOOKING_FORM_ID = 'sportswest-booking';
 
 export async function POST(request: NextRequest) {
   // Rate limit
@@ -32,17 +35,18 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { clientSlug, slot, customer, useWaitlist } = body as {
-      clientSlug: string;
+    // Support both workspaceSlug and clientSlug for backwards compatibility
+    const workspaceSlug = body.workspaceSlug || body.clientSlug;
+    const { slot, customer, useWaitlist } = body as {
       slot: TimeSlot;
       customer: BookingCustomer;
       useWaitlist?: boolean;
     };
 
     // Validate input
-    if (!clientSlug || typeof clientSlug !== 'string') {
+    if (!workspaceSlug || typeof workspaceSlug !== 'string') {
       return ApiResponse.error(
-        'clientSlug is required',
+        'workspaceSlug is required',
         400,
         ErrorCodes.MISSING_REQUIRED
       );
@@ -64,18 +68,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get active client
-    const client = await getActiveClient(clientSlug);
-    if (!client) {
+    // Get active workspace
+    const workspace = await getActiveWorkspace(workspaceSlug);
+    if (!workspace) {
       return ApiResponse.error(
-        'Client not found or inactive',
+        'Workspace not found or inactive',
         404,
         ErrorCodes.CLIENT_NOT_FOUND
       );
     }
 
     // Get booking provider
-    const provider = await getBookingProvider(client.id);
+    const provider = await getBookingProvider(workspace.id);
     if (!provider) {
       return ApiResponse.error(
         'No booking provider configured',
@@ -97,12 +101,13 @@ export async function POST(request: NextRequest) {
       const result = await provider.addToWaitlist(slot, customer);
       
       if (result.success) {
-        // Emit event for workflow triggers
-        await emitTrigger(
-          client.id,
-          { adapter: 'revline', operation: 'form_submitted' },
+        // Emit validated trigger for workflow execution
+        // Uses emitFormTrigger to ensure trigger is declared in form registry
+        await emitFormTrigger(
+          workspace.id,
+          BOOKING_FORM_ID,
+          'booking-waitlisted', // Must match form registry declaration
           {
-            formId: 'booking-waitlist',
             email: customer.email,
             source: 'booking',
             customerId: customer.id,
@@ -124,12 +129,13 @@ export async function POST(request: NextRequest) {
     const result = await provider.createBooking(slot, customer);
 
     if (result.success) {
-      // Emit event for workflow triggers
-      await emitTrigger(
-        client.id,
-        { adapter: 'revline', operation: 'form_submitted' },
+      // Emit validated trigger for workflow execution
+      // Uses emitFormTrigger to ensure trigger is declared in form registry
+      await emitFormTrigger(
+        workspace.id,
+        BOOKING_FORM_ID,
+        'booking-confirmed', // Must match form registry declaration
         {
-          formId: 'booking-created',
           email: customer.email,
           source: 'booking',
           customerId: customer.id,

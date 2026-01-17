@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { TimeSlot } from '../types';
+import { BookingApi } from '@/app/_lib/api-paths';
 
 interface TimeSlotPickerProps {
   clientSlug: string;
@@ -64,7 +65,7 @@ export function TimeSlotPicker({
         ...(eventTypeId && { eventTypeId }),
       });
 
-      const response = await fetch(`/api/booking/availability?${params}`);
+      const response = await fetch(`${BookingApi.availability}?${params}`);
       const data = await response.json();
 
       if (!response.ok) {

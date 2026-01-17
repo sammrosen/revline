@@ -34,13 +34,13 @@ const createLead: ActionExecutor = {
 
     try {
       const leadId = await upsertLead({
-        clientId: ctx.clientId,
+        workspaceId: ctx.workspaceId,
         email: ctx.email,
         source,
       });
 
       await emitEvent({
-        clientId: ctx.clientId,
+        workspaceId: ctx.workspaceId,
         leadId,
         system: EventSystem.BACKEND,
         eventType: 'lead_created',
@@ -89,7 +89,7 @@ const updateLeadStageAction: ActionExecutor = {
 
       try {
         leadId = await upsertLead({
-          clientId: ctx.clientId,
+          workspaceId: ctx.workspaceId,
           email: ctx.email,
           source: ctx.trigger.adapter,
         });
@@ -105,7 +105,7 @@ const updateLeadStageAction: ActionExecutor = {
       await updateLeadStage(leadId, stage);
 
       await emitEvent({
-        clientId: ctx.clientId,
+        workspaceId: ctx.workspaceId,
         leadId,
         system: EventSystem.BACKEND,
         eventType: `lead_stage_${stage.toLowerCase()}`,
@@ -142,7 +142,7 @@ const emitEventAction: ActionExecutor = {
 
     try {
       await emitEvent({
-        clientId: ctx.clientId,
+        workspaceId: ctx.workspaceId,
         leadId: ctx.leadId,
         system: EventSystem.BACKEND,
         eventType,

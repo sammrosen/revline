@@ -4,7 +4,7 @@ import { EventSystem, Prisma } from '@prisma/client';
 export { EventSystem };
 
 interface EmitEventParams {
-  clientId: string;
+  workspaceId: string;
   leadId?: string;
   system: EventSystem;
   eventType: string;
@@ -28,7 +28,7 @@ interface EmitEventParams {
  * - Debug-level information
  */
 export async function emitEvent({
-  clientId,
+  workspaceId,
   leadId,
   system,
   eventType,
@@ -40,7 +40,7 @@ export async function emitEvent({
   try {
     await db.event.create({
       data: {
-        clientId,
+        workspaceId,
         leadId,
         system,
         eventType,
@@ -77,15 +77,15 @@ export async function touchLead(leadId: string): Promise<void> {
  * Create or update a lead record
  * Returns the lead ID for event correlation
  * 
- * Uses unique constraint on (clientId, email) to prevent duplicates
+ * Uses unique constraint on (workspaceId, email) to prevent duplicates
  */
 export async function upsertLead({
-  clientId,
+  workspaceId,
   email,
   source,
   tx,
 }: {
-  clientId: string;
+  workspaceId: string;
   email: string;
   source?: string;
   tx?: Prisma.TransactionClient;
@@ -93,8 +93,8 @@ export async function upsertLead({
   const db = tx || prisma;
   const lead = await db.lead.upsert({
     where: {
-      clientId_email: {
-        clientId,
+      workspaceId_email: {
+        workspaceId,
         email,
       },
     },
@@ -102,7 +102,7 @@ export async function upsertLead({
       lastEventAt: new Date(),
     },
     create: {
-      clientId,
+      workspaceId,
       email,
       source,
     },
@@ -126,7 +126,3 @@ export async function updateLeadStage(
     },
   });
 }
-
-
-
-

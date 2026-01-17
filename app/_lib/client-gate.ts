@@ -1,95 +1,99 @@
 import { prisma } from './db';
 import { emitEvent, EventSystem } from './event-logger';
-import { Client, ClientStatus } from '@prisma/client';
+import { Workspace, WorkspaceStatus } from '@prisma/client';
 
-export type { Client };
-export { ClientStatus };
+export type { Workspace };
+export { WorkspaceStatus };
 
 /**
- * Get a client by their slug (the ?source= parameter)
- * Returns null if client doesn't exist
+ * Get a workspace by their slug (the ?source= parameter)
+ * Returns null if workspace doesn't exist
  */
-export async function getClientBySlug(slug: string): Promise<Client | null> {
-  return prisma.client.findUnique({
+export async function getWorkspaceBySlug(slug: string): Promise<Workspace | null> {
+  return prisma.workspace.findUnique({
     where: { slug: slug.toLowerCase() },
   });
 }
 
 /**
- * Check if a client is active
- * Returns true only if client exists AND status is ACTIVE
+ * Check if a workspace is active
+ * Returns true only if workspace exists AND status is ACTIVE
  */
-export async function checkClientActive(clientId: string): Promise<boolean> {
-  const client = await prisma.client.findUnique({
-    where: { id: clientId },
+export async function checkWorkspaceActive(workspaceId: string): Promise<boolean> {
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
     select: { status: true },
   });
-  return client?.status === ClientStatus.ACTIVE;
+  return workspace?.status === WorkspaceStatus.ACTIVE;
 }
 
 /**
- * Get an active client by slug, or null if not found or paused
+ * Get an active workspace by slug, or null if not found or paused
  * This is the main entry point for route handlers
  * 
- * If client is paused, emits execution_blocked event and returns null
+ * If workspace is paused, emits execution_blocked event and returns null
  */
-export async function getActiveClient(slug: string): Promise<Client | null> {
-  const client = await getClientBySlug(slug);
+export async function getActiveWorkspace(slug: string): Promise<Workspace | null> {
+  const workspace = await getWorkspaceBySlug(slug);
 
-  if (!client) {
+  if (!workspace) {
     return null;
   }
 
-  if (client.status !== ClientStatus.ACTIVE) {
-    // Client exists but is paused - emit blocked event
+  if (workspace.status !== WorkspaceStatus.ACTIVE) {
+    // Workspace exists but is paused - emit blocked event
     await emitEvent({
-      clientId: client.id,
+      workspaceId: workspace.id,
       system: EventSystem.BACKEND,
       eventType: 'execution_blocked',
       success: false,
-      errorMessage: `Client ${slug} is paused`,
+      errorMessage: `Workspace ${slug} is paused`,
     });
     return null;
   }
 
-  return client;
+  return workspace;
 }
 
 /**
- * Pause a client - blocks all automation execution
+ * Pause a workspace - blocks all automation execution
  */
-export async function pauseClient(clientId: string): Promise<void> {
-  await prisma.client.update({
-    where: { id: clientId },
-    data: { status: ClientStatus.PAUSED },
+export async function pauseWorkspace(workspaceId: string): Promise<void> {
+  await prisma.workspace.update({
+    where: { id: workspaceId },
+    data: { status: WorkspaceStatus.PAUSED },
   });
 
   await emitEvent({
-    clientId,
+    workspaceId,
     system: EventSystem.BACKEND,
-    eventType: 'client_paused',
+    eventType: 'workspace_paused',
     success: true,
   });
 }
 
 /**
- * Unpause a client - resumes automation execution
+ * Unpause a workspace - resumes automation execution
  */
-export async function unpauseClient(clientId: string): Promise<void> {
-  await prisma.client.update({
-    where: { id: clientId },
-    data: { status: ClientStatus.ACTIVE },
+export async function unpauseWorkspace(workspaceId: string): Promise<void> {
+  await prisma.workspace.update({
+    where: { id: workspaceId },
+    data: { status: WorkspaceStatus.ACTIVE },
   });
 
   await emitEvent({
-    clientId,
+    workspaceId,
     system: EventSystem.BACKEND,
-    eventType: 'client_unpaused',
+    eventType: 'workspace_unpaused',
     success: true,
   });
 }
 
-
-
-
-
+// Legacy aliases for backwards compatibility during migration
+export const getClientBySlug = getWorkspaceBySlug;
+export const checkClientActive = checkWorkspaceActive;
+export const getActiveClient = getActiveWorkspace;
+export const pauseClient = pauseWorkspace;
+export const unpauseClient = unpauseWorkspace;
+export type Client = Workspace;
+export const ClientStatus = WorkspaceStatus;

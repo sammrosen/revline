@@ -3,6 +3,10 @@
  * 
  * Wraps the ABC Ignite adapter to implement the BookingProvider interface.
  * Handles member lookup, session balance checks, and event enrollment.
+ * 
+ * Supports two availability modes:
+ * - Employee availability (preferred): Uses configured employees to fetch open time slots
+ * - Event-based (fallback): Fetches pre-scheduled events from the calendar
  */
 
 import {
@@ -18,6 +22,8 @@ import {
   AbcIgniteAdapter,
   AbcIgniteEvent,
   AbcIgniteMember,
+  AbcIgniteAvailabilityDay,
+  AbcIgniteAvailabilityTimeBlock,
 } from '@/app/_lib/integrations/abc-ignite.adapter';
 
 /**
@@ -86,9 +92,135 @@ export class AbcIgniteBookingProvider implements BookingProvider {
   }
   
   /**
-   * Get available time slots/events
+   * Get available time slots
+   * 
+   * Uses employee availability endpoint if employees are configured,
+   * otherwise falls back to pre-scheduled events.
    */
   async getAvailability(query: AvailabilityQuery): Promise<TimeSlot[]> {
+    // Try employee availability first (preferred method)
+    const employeeSlots = await this.getEmployeeAvailability(query);
+    if (employeeSlots !== null) {
+      return employeeSlots;
+    }
+    
+    // Fallback to event-based availability
+    return this.getEventAvailability(query);
+  }
+  
+  /**
+   * Get availability using employee availability endpoint
+   * Returns null if no employee is configured (triggering fallback)
+   */
+  private async getEmployeeAvailability(query: AvailabilityQuery): Promise<TimeSlot[] | null> {
+    // Get employee - from query, or use default
+    const employeeKey = query.staffId || this.adapter.getDefaultEmployeeId();
+    if (!employeeKey) {
+      return null; // No employee configured - use fallback
+    }
+    
+    const employeeConfig = this.adapter.getEmployeeConfig(employeeKey);
+    if (!employeeConfig) {
+      console.warn('Employee key not found in config:', employeeKey);
+      return null;
+    }
+    
+    // Get event type config
+    const eventTypeKey = query.eventTypeId || this.adapter.getDefaultEventTypeId();
+    if (!eventTypeKey) {
+      console.warn('No event type configured for availability');
+      return null;
+    }
+    
+    const eventTypeConfig = this.adapter.getEventTypeConfig(eventTypeKey);
+    if (!eventTypeConfig) {
+      console.warn('Event type key not found in config:', eventTypeKey);
+      return null;
+    }
+    
+    // Fetch availability from ABC Ignite
+    const result = await this.adapter.getEmployeeAvailability(
+      employeeConfig.id,
+      eventTypeConfig.id,
+      { startDate: query.startDate, endDate: query.endDate },
+      eventTypeConfig.levelId
+    );
+    
+    if (!result.success || !result.data) {
+      console.error('Failed to fetch employee availability:', result.error);
+      return [];
+    }
+    
+    // Split time blocks into individual bookable slots
+    const duration = eventTypeConfig.duration || 60;
+    const slots: TimeSlot[] = [];
+    
+    for (const day of result.data) {
+      for (const timeBlock of day.times) {
+        const blockSlots = this.splitTimeBlockIntoSlots(
+          timeBlock,
+          day.date,
+          duration,
+          eventTypeConfig,
+          employeeConfig
+        );
+        slots.push(...blockSlots);
+      }
+    }
+    
+    return slots;
+  }
+  
+  /**
+   * Split a time block into individual bookable slots based on duration
+   */
+  private splitTimeBlockIntoSlots(
+    timeBlock: AbcIgniteAvailabilityTimeBlock,
+    date: string,
+    durationMinutes: number,
+    eventType: { id: string; name: string; levelId?: string },
+    employee: { id: string; name: string; title?: string }
+  ): TimeSlot[] {
+    const slots: TimeSlot[] = [];
+    
+    const blockStart = new Date(timeBlock.utcStartDateTime);
+    const blockEnd = new Date(timeBlock.utcEndDateTime);
+    const durationMs = durationMinutes * 60 * 1000;
+    
+    let slotStart = blockStart;
+    
+    while (slotStart.getTime() + durationMs <= blockEnd.getTime()) {
+      const slotEnd = new Date(slotStart.getTime() + durationMs);
+      
+      slots.push({
+        id: `${employee.id}-${slotStart.toISOString()}`,
+        startTime: slotStart.toISOString(),
+        endTime: slotEnd.toISOString(),
+        duration: durationMinutes,
+        title: eventType.name,
+        staffName: employee.name,
+        spotsAvailable: 1,
+        maxCapacity: 1,
+        providerData: {
+          eventTypeId: eventType.id,
+          employeeId: employee.id,
+          levelId: eventType.levelId,
+          date, // Original date from API
+          localStartTime: timeBlock.startTime,
+          isAvailabilitySlot: true,
+        },
+      });
+      
+      slotStart = slotEnd;
+    }
+    
+    return slots;
+  }
+  
+  /**
+   * Get availability using pre-scheduled events (fallback)
+   */
+  private async getEventAvailability(query: AvailabilityQuery): Promise<TimeSlot[]> {
     const result = await this.adapter.getEvents({
       startDate: query.startDate,
       endDate: query.endDate,

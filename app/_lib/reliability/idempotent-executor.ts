@@ -45,7 +45,7 @@ const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
  * 
  * @example
  * const result = await executeIdempotent(
- *   clientId,
+ *   workspaceId,
  *   generateIdempotencyKey('mailerlite.add_to_group', { email, groupId }),
  *   async () => {
  *     return await mailerliteAdapter.addToGroup(email, groupId);
@@ -53,7 +53,7 @@ const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
  * );
  */
 export async function executeIdempotent<T>(
-  clientId: string,
+  workspaceId: string,
   key: string,
   fn: () => Promise<T>,
   options: IdempotencyOptions = {}
@@ -72,7 +72,7 @@ export async function executeIdempotent<T>(
   try {
     const created = await prisma.idempotencyKey.create({
       data: {
-        clientId,
+        workspaceId,
         key,
         status: 'PENDING',
         expiresAt,
@@ -88,7 +88,7 @@ export async function executeIdempotent<T>(
     ) {
       // Key already exists - fetch it
       const existing = await prisma.idempotencyKey.findFirst({
-        where: { clientId, key },
+        where: { workspaceId, key },
       });
       
       if (!existing) {
@@ -107,7 +107,7 @@ export async function executeIdempotent<T>(
     return handleExistingKey<T>(
       { status: keyRecord.status, result: keyRecord.result, error: keyRecord.error },
       throwOnCachedError,
-      clientId,
+      workspaceId,
       key
     );
   }
@@ -131,7 +131,7 @@ export async function executeIdempotent<T>(
     logStructured({
       correlationId: keyId,
       event: 'idempotent_execution_completed',
-      clientId,
+      workspaceId,
       metadata: { key: key.slice(0, 50) },
     });
 
@@ -153,7 +153,7 @@ export async function executeIdempotent<T>(
     logStructured({
       correlationId: keyId,
       event: 'idempotent_execution_failed',
-      clientId,
+      workspaceId,
       error: errorMessage,
       metadata: { key: key.slice(0, 50) },
     });
@@ -168,7 +168,7 @@ export async function executeIdempotent<T>(
 function handleExistingKey<T>(
   record: { status: string; result: unknown; error: string | null },
   throwOnCachedError: boolean,
-  clientId: string,
+  workspaceId: string,
   key: string
 ): IdempotencyResult<T> {
   switch (record.status) {
@@ -177,7 +177,7 @@ function handleExistingKey<T>(
       logStructured({
         correlationId: crypto.randomUUID(),
         event: 'idempotent_cache_hit',
-        clientId,
+        workspaceId,
         metadata: { key: key.slice(0, 50), cached: true },
       });
       return { executed: false, result: record.result as T };

@@ -15,7 +15,7 @@
 
 import { NextRequest } from 'next/server';
 import { getActiveClient } from '@/app/_lib/client-gate';
-import { emitTrigger } from '@/app/_lib/workflow';
+import { emitFormTrigger } from '@/app/_lib/workflow';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
 import { 
   rateLimitByIP, 
@@ -34,6 +34,8 @@ import { RevlineAdapter } from '@/app/_lib/integrations/revline.adapter';
  */
 interface FormSubmissionBody {
   formId: string;
+  /** Trigger ID to emit - must be declared in form's triggers array */
+  trigger: string;
   source: string;
   data: Record<string, unknown>;
 }
@@ -50,10 +52,14 @@ function validateSubmissionBody(body: unknown): {
     return { success: false, error: 'Invalid request body' };
   }
 
-  const { formId, source, data } = body as Record<string, unknown>;
+  const { formId, trigger, source, data } = body as Record<string, unknown>;
 
   if (!formId || typeof formId !== 'string') {
     return { success: false, error: 'Missing or invalid formId' };
+  }
+
+  if (!trigger || typeof trigger !== 'string') {
+    return { success: false, error: 'Missing or invalid trigger - must specify which trigger to emit' };
   }
 
   if (!source || typeof source !== 'string') {
@@ -68,6 +74,7 @@ function validateSubmissionBody(body: unknown): {
     success: true,
     data: {
       formId,
+      trigger,
       source,
       data: data as Record<string, unknown>,
     },
@@ -109,7 +116,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { formId, source, data } = validation.data;
+    const { formId, trigger, source, data } = validation.data;
 
     // 4. Get active client
     const client = await getActiveClient(source);
@@ -125,7 +132,7 @@ export async function POST(request: NextRequest) {
       logStructured({
         correlationId: crypto.randomUUID(),
         event: 'form_submit_no_revline_config',
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'revline',
         metadata: { formId, source },
       });
@@ -141,8 +148,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 6. Get trigger operation (from config or default)
-    const triggerOperation = revline?.getFormTrigger(formId) ?? 'form_submitted';
+    // 6. Trigger validation happens in emitFormTrigger
+    // It validates that the trigger is declared in the form's registry entry
+    // This ensures intentionality and catches typos at runtime
 
     // 7. Generate unique event ID for deduplication
     // Use primary identifier (email/phone) + formId + minute timestamp
@@ -152,7 +160,7 @@ export async function POST(request: NextRequest) {
 
     // 8. Register with WebhookProcessor for deduplication and audit
     const registration = await WebhookProcessor.register({
-      clientId: client.id,
+      workspaceId: client.id,
       provider: 'revline',
       providerEventId,
       rawBody,
@@ -163,7 +171,7 @@ export async function POST(request: NextRequest) {
       logStructured({
         correlationId: registration.correlationId,
         event: 'form_submit_duplicate',
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'revline',
         metadata: { formId, source },
       });
@@ -186,17 +194,18 @@ export async function POST(request: NextRequest) {
 
     // 11. Build payload - flatten form data into payload
     const payload = {
-      formId,
       source,
       ...data,
       correlationId: registration.correlationId,
       submittedAt: new Date().toISOString(),
     };
 
-    // 12. Emit trigger to workflow engine
-    const result = await emitTrigger(
+    // 12. Emit validated trigger to workflow engine
+    // emitFormTrigger validates that trigger is declared in form registry
+    const result = await emitFormTrigger(
       client.id,
-      { adapter: 'revline', operation: triggerOperation },
+      formId,
+      trigger,
       payload
     );
 
@@ -212,7 +221,7 @@ export async function POST(request: NextRequest) {
       logStructured({
         correlationId: registration.correlationId,
         event: 'form_submit_partial_failure',
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'revline',
         error: failures,
         metadata: { formId },
@@ -227,13 +236,13 @@ export async function POST(request: NextRequest) {
     logStructured({
       correlationId: registration.correlationId,
       event: 'form_submit_processed',
-      clientId: client.id,
+      workspaceId: client.id,
       provider: 'revline',
       success: true,
       metadata: { 
         formId, 
         source,
-        triggerOperation,
+        trigger,
         workflowsExecuted: result.workflowsExecuted,
       },
     });

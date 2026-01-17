@@ -13,7 +13,9 @@ export type WebhookProvider = 'stripe' | 'calendly' | 'revline';
 export type WebhookEventStatus = 'PENDING' | 'PROCESSING' | 'PROCESSED' | 'FAILED';
 
 export interface WebhookRegistration {
-  clientId: string;
+  workspaceId: string;
+  /** @deprecated Use workspaceId instead */
+  clientId?: string;
   provider: WebhookProvider;
   providerEventId: string;
   rawBody: string;
@@ -79,13 +81,17 @@ export interface ResilientFetchResult {
 
 export interface CorrelationContext {
   correlationId: string;
-  clientId: string;
+  workspaceId: string;
+  /** @deprecated Use workspaceId instead */
+  clientId?: string;
   provider?: WebhookProvider;
 }
 
 export interface StructuredLogEntry {
   correlationId: string;
   event: string;
+  workspaceId?: string;
+  /** @deprecated Use workspaceId instead */
   clientId?: string;
   provider?: string;
   success?: boolean;

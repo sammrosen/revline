@@ -9,6 +9,7 @@
 
 import { useState, FormEvent } from 'react';
 import { BookingCustomer } from '../types';
+import { BookingApi } from '@/app/_lib/api-paths';
 
 interface CustomerLookupStepProps {
   clientSlug: string;
@@ -64,7 +65,7 @@ export function CustomerLookupStep({
     setLoading(true);
 
     try {
-      const response = await fetch('/api/booking/lookup', {
+      const response = await fetch(BookingApi.lookup, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

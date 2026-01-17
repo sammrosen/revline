@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { BookingCustomer, EligibilityResult } from '../types';
+import { BookingApi } from '@/app/_lib/api-paths';
 
 interface EligibilityStepProps {
   clientSlug: string;
@@ -43,7 +44,7 @@ export function EligibilityStep({
       setChecked(true);
 
       try {
-        const response = await fetch('/api/booking/eligibility', {
+        const response = await fetch(BookingApi.eligibility, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

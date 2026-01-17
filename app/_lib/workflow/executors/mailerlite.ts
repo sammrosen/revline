@@ -28,7 +28,7 @@ const addToGroup: ActionExecutor = {
     }
 
     // Get adapter for this client
-    const adapter = await MailerLiteAdapter.forClient(ctx.clientId);
+    const adapter = await MailerLiteAdapter.forClient(ctx.workspaceId);
     if (!adapter) {
       return { success: false, error: 'MailerLite not configured for this client' };
     }
@@ -47,7 +47,7 @@ const addToGroup: ActionExecutor = {
 
     // Emit event for tracking
     await emitEvent({
-      clientId: ctx.clientId,
+      workspaceId: ctx.workspaceId,
       leadId: ctx.leadId,
       system: EventSystem.MAILERLITE,
       eventType: result.success
@@ -88,7 +88,7 @@ const removeFromGroup: ActionExecutor = {
     }
 
     // Get adapter for this client
-    const adapter = await MailerLiteAdapter.forClient(ctx.clientId);
+    const adapter = await MailerLiteAdapter.forClient(ctx.workspaceId);
     if (!adapter) {
       return { success: false, error: 'MailerLite not configured for this client' };
     }
@@ -109,7 +109,7 @@ const removeFromGroup: ActionExecutor = {
     );
 
     await emitEvent({
-      clientId: ctx.clientId,
+      workspaceId: ctx.workspaceId,
       leadId: ctx.leadId,
       system: EventSystem.MAILERLITE,
       eventType: 'mailerlite_remove_skipped',
@@ -144,7 +144,7 @@ const addTag: ActionExecutor = {
     }
 
     // Get adapter for this client
-    const adapter = await MailerLiteAdapter.forClient(ctx.clientId);
+    const adapter = await MailerLiteAdapter.forClient(ctx.workspaceId);
     if (!adapter) {
       return { success: false, error: 'MailerLite not configured for this client' };
     }
@@ -154,7 +154,7 @@ const addTag: ActionExecutor = {
     console.warn(`[Workflow] add_tag not implemented: ${tag} for ${ctx.email}`);
 
     await emitEvent({
-      clientId: ctx.clientId,
+      workspaceId: ctx.workspaceId,
       leadId: ctx.leadId,
       system: EventSystem.MAILERLITE,
       eventType: 'mailerlite_tag_skipped',

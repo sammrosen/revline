@@ -18,7 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/_lib/db';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
-import { HealthStatus, ClientStatus } from '@prisma/client';
+import { HealthStatus, WorkspaceStatus } from '@prisma/client';
 import { AlertService } from '@/app/_lib/alerts';
 import { ObservabilityService } from '@/app/_lib/observability';
 
@@ -56,8 +56,8 @@ export async function GET(request: NextRequest) {
     // CLIENT-SPECIFIC CHECKS
     // =========================================================================
     
-    const clients = await prisma.client.findMany({
-      where: { status: ClientStatus.ACTIVE },
+    const clients = await prisma.workspace.findMany({
+      where: { status: WorkspaceStatus.ACTIVE },
       include: {
         integrations: true,
       },
@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
         // Check 2: Consecutive failures
         const recentEvents = await prisma.event.findMany({
           where: {
-            clientId: client.id,
+            workspaceId: client.id,
             system: integration.integration as unknown as EventSystem,
             createdAt: { gte: fourHoursAgo },
           },
@@ -104,13 +104,13 @@ export async function GET(request: NextRequest) {
 
         // Update health status if changed
         if (newStatus !== previousStatus) {
-          await prisma.clientIntegration.update({
+          await prisma.workspaceIntegration.update({
             where: { id: integration.id },
             data: { healthStatus: newStatus },
           });
 
           await emitEvent({
-            clientId: client.id,
+            workspaceId: client.id,
             system: EventSystem.CRON,
             eventType: 'health_status_changed',
             success: true,
@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
       // Check 3: Stuck leads (captured but no progress in 24h)
       const stuckLeads = await prisma.lead.count({
         where: {
-          clientId: client.id,
+          workspaceId: client.id,
           stage: 'CAPTURED',
           lastEventAt: { lt: twentyFourHoursAgo },
         },
@@ -185,7 +185,7 @@ export async function GET(request: NextRequest) {
 
     // Emit completion event
     await emitEvent({
-      clientId: 'system',
+      workspaceId: 'system',
       system: EventSystem.CRON,
       eventType: 'health_check_completed',
       success: true,

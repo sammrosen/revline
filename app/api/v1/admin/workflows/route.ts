@@ -41,7 +41,7 @@ const CreateWorkflowSchema = z.preprocess(
     return data;
   },
   z.object({
-    clientId: z.string().uuid('Invalid client ID'),
+    workspaceId: z.string().uuid('Invalid client ID'),
     name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),
     description: z.string().max(500, 'Description must be 500 characters or less').optional(),
     triggerAdapter: z.string().min(1, 'Trigger integration is required'),
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const workflows = await prisma.workflow.findMany({
-      where: { clientId },
+      where: { workspaceId: clientId },
       orderBy: { createdAt: 'desc' },
       include: {
         _count: {
@@ -185,19 +185,19 @@ export async function POST(request: NextRequest) {
 
     const data = validation.data;
 
-    // Verify client exists
-    const client = await prisma.client.findUnique({
-      where: { id: data.clientId },
+    // Verify workspace exists
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: data.workspaceId },
     });
 
-    if (!client) {
-      return ApiResponse.error('Client not found', 404, ErrorCodes.NOT_FOUND);
+    if (!workspace) {
+      return ApiResponse.error('Workspace not found', 404, ErrorCodes.NOT_FOUND);
     }
 
     // Create workflow
     const workflow = await prisma.workflow.create({
       data: {
-        clientId: data.clientId,
+        workspaceId: data.workspaceId,
         name: data.name,
         description: data.description,
         enabled: data.enabled,

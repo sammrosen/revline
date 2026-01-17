@@ -36,9 +36,9 @@ export async function POST(
     }
 
     // Get the integration
-    const integration = await prisma.clientIntegration.findUnique({
+    const integration = await prisma.workspaceIntegration.findUnique({
       where: { id },
-      select: { id: true, clientId: true, integration: true, secrets: true },
+      select: { id: true, workspaceId: true, integration: true, secrets: true },
     });
 
     if (!integration) {
@@ -72,14 +72,14 @@ export async function POST(
     const updatedSecrets = [...secrets, newSecret];
 
     // Update the integration
-    await prisma.clientIntegration.update({
+    await prisma.workspaceIntegration.update({
       where: { id },
       data: { secrets: updatedSecrets as unknown as Prisma.InputJsonValue },
     });
 
     // Emit event
     await emitEvent({
-      clientId: integration.clientId,
+      workspaceId: integration.workspaceId,
       system: EventSystem.BACKEND,
       eventType: 'integration_secret_added',
       success: true,
@@ -114,7 +114,7 @@ export async function GET(
   const { id } = await params;
 
   try {
-    const integration = await prisma.clientIntegration.findUnique({
+    const integration = await prisma.workspaceIntegration.findUnique({
       where: { id },
       select: { secrets: true },
     });

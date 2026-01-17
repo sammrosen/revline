@@ -8,6 +8,7 @@
 
 import { useState } from 'react';
 import { TimeSlot, BookingCustomer, EligibilityResult, BookingResult } from '../types';
+import { BookingApi } from '@/app/_lib/api-paths';
 
 interface ConfirmationStepProps {
   clientSlug: string;
@@ -51,7 +52,7 @@ export function ConfirmationStep({
     setLoading(true);
 
     try {
-      const response = await fetch('/api/booking/create', {
+      const response = await fetch(BookingApi.create, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

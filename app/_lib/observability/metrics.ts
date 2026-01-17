@@ -27,7 +27,7 @@ import {
  * Get webhook queue metrics
  */
 export async function getWebhookMetrics(clientId?: string): Promise<WebhookMetrics> {
-  const whereClause = clientId ? { clientId } : {};
+  const whereClause = clientId ? { workspaceId: clientId } : {};
 
   const [pending, processing, failed, oldestPending] = await Promise.all([
     prisma.webhookEvent.count({
@@ -69,7 +69,7 @@ export async function getWebhookMetrics(clientId?: string): Promise<WebhookMetri
  */
 export async function getEventMetrics(clientId?: string): Promise<EventMetrics> {
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  const whereClause = clientId ? { clientId } : {};
+  const whereClause = clientId ? { workspaceId: clientId } : {};
 
   const [totalLastHour, failedLastHour] = await Promise.all([
     prisma.event.count({
@@ -107,7 +107,7 @@ export async function getEventMetrics(clientId?: string): Promise<EventMetrics> 
  */
 export async function getWorkflowMetrics(clientId?: string): Promise<WorkflowMetrics> {
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  const whereClause = clientId ? { clientId } : {};
+  const whereClause = clientId ? { workspaceId: clientId } : {};
 
   const [failedLastHour, runningNow] = await Promise.all([
     prisma.workflowExecution.count({

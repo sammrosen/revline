@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
 
     // 6. Register webhook with deduplication
     const registration = await WebhookProcessor.register({
-      clientId: client.id,
+      workspaceId: client.id,
       provider: 'stripe',
       providerEventId,
       rawBody,
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       logStructured({
         correlationId: registration.correlationId,
         event: 'stripe_webhook_duplicate',
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         metadata: { providerEventId },
       });
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
     if (!result.success) {
       await WebhookProcessor.markFailed(registration.id, result.error || 'Signature verification failed');
       await emitEvent({
-        clientId: client.id,
+        workspaceId: client.id,
         system: EventSystem.STRIPE,
         eventType: 'stripe_webhook_invalid_signature',
         success: false,
@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
       logStructured({
         correlationId: registration.correlationId,
         event: 'stripe_workflow_partial_failure',
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         error: warning,
         metadata: { email: checkoutData.email },
@@ -202,7 +202,7 @@ export async function POST(request: NextRequest) {
     logStructured({
       correlationId: registration.correlationId,
       event: 'stripe_webhook_processed',
-      clientId: client.id,
+      workspaceId: client.id,
       provider: 'stripe',
       success: true,
       metadata: { 
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
     logStructured({
       correlationId: crypto.randomUUID(),
       event: 'stripe_webhook_error',
-      clientId: clientSlug,
+      workspaceId: clientSlug,
       provider: 'stripe',
       error: errorMessage,
     });

@@ -36,13 +36,13 @@ import { AlertService } from '@/app/_lib/alerts';
 /**
  * Emit a trigger and execute all matching workflows
  *
- * @param clientId - Client ID
+ * @param workspaceId - Workspace ID
  * @param trigger - Trigger info (adapter + operation)
  * @param payload - Trigger payload
  * @returns Results from all workflow executions
  *
  * @example
- * await emitTrigger(clientId, {
+ * await emitTrigger(workspaceId, {
  *   adapter: 'calendly',
  *   operation: 'booking_created',
  * }, {
@@ -51,14 +51,14 @@ import { AlertService } from '@/app/_lib/alerts';
  * });
  */
 export async function emitTrigger(
-  clientId: string,
+  workspaceId: string,
   trigger: WorkflowTrigger,
   payload: Record<string, unknown>
 ): Promise<TriggerEmitResult> {
   // 1. Find all enabled workflows matching this trigger
   const workflows = await prisma.workflow.findMany({
     where: {
-      clientId,
+      workspaceId,
       enabled: true,
       triggerAdapter: trigger.adapter,
       triggerOperation: trigger.operation,
@@ -78,7 +78,8 @@ export async function emitTrigger(
     trigger: { ...trigger, payload },
     email: extractEmail(payload),
     name: extractName(payload),
-    clientId,
+    workspaceId,
+    clientId: workspaceId, // Legacy alias
     actionData: {},
   };
 
@@ -143,7 +144,7 @@ async function executeWorkflow(
   const execution = await prisma.workflowExecution.create({
     data: {
       workflowId: workflow.id,
-      clientId: baseContext.clientId,
+      workspaceId: baseContext.workspaceId,
       correlationId,
       triggerAdapter: baseContext.trigger.adapter,
       triggerOperation: baseContext.trigger.operation,
@@ -155,7 +156,7 @@ async function executeWorkflow(
   logStructured({
     correlationId,
     event: 'workflow_execution_started',
-    clientId: baseContext.clientId,
+    workspaceId: baseContext.workspaceId,
     metadata: { 
       workflowId: workflow.id, 
       workflowName: workflow.name,
@@ -187,7 +188,7 @@ async function executeWorkflow(
 
       // Execute with idempotency - prevents duplicate actions on retry
       const { result, executed } = await executeIdempotent(
-        baseContext.clientId,
+        baseContext.workspaceId,
         idempotencyKey,
         async () => executor.execute(ctx, action.params),
         { ttlMs: 24 * 60 * 60 * 1000 } // 24 hour TTL
@@ -197,7 +198,7 @@ async function executeWorkflow(
         logStructured({
           correlationId,
           event: 'workflow_action_idempotent_skip',
-          clientId: baseContext.clientId,
+          workspaceId: baseContext.workspaceId,
           metadata: { 
             action: `${action.adapter}.${action.operation}`,
             actionIndex,
@@ -222,7 +223,7 @@ async function executeWorkflow(
         errorMessage = `${action.adapter}.${action.operation}: ${result.error}`;
 
         await emitEvent({
-          clientId: ctx.clientId,
+          workspaceId: ctx.workspaceId,
           leadId: ctx.leadId,
           system: EventSystem.WORKFLOW,
           eventType: 'workflow_action_failed',
@@ -241,7 +242,7 @@ async function executeWorkflow(
       });
 
       await emitEvent({
-        clientId: ctx.clientId,
+        workspaceId: ctx.workspaceId,
         leadId: ctx.leadId,
         system: EventSystem.WORKFLOW,
         eventType: 'workflow_action_error',
@@ -269,7 +270,7 @@ async function executeWorkflow(
 
   // Emit workflow completion event
   await emitEvent({
-    clientId: ctx.clientId,
+    workspaceId: ctx.workspaceId,
     leadId: ctx.leadId,
     system: EventSystem.WORKFLOW,
     eventType: failed ? 'workflow_failed' : 'workflow_completed',
@@ -287,7 +288,7 @@ async function executeWorkflow(
       {
         workflowId: workflow.id,
         workflowName: workflow.name,
-        clientId: baseContext.clientId,
+        workspaceId: baseContext.workspaceId,
         correlationId,
       }
     );
@@ -296,7 +297,7 @@ async function executeWorkflow(
   logStructured({
     correlationId,
     event: failed ? 'workflow_execution_failed' : 'workflow_execution_completed',
-    clientId: baseContext.clientId,
+    workspaceId: baseContext.workspaceId,
     success: !failed,
     error: errorMessage,
     metadata: { 

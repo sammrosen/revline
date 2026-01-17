@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   testPrisma,
-  createTestClient,
+  createTestWorkspace,
 } from '../setup';
 import {
   WebhookProcessor,
@@ -23,10 +23,10 @@ import {
 describe('WebhookProcessor Integration', () => {
   describe('register', () => {
     it('should register a new webhook event and return isDuplicate=false', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       
       const result = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         providerEventId: 'evt_test_new_123',
         rawBody: '{"id":"evt_test_new_123","type":"checkout.session.completed"}',
@@ -48,12 +48,12 @@ describe('WebhookProcessor Integration', () => {
     });
 
     it('should return isDuplicate=true for duplicate webhook', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       const eventId = 'evt_test_duplicate_456';
       
       // First registration
       const first = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         providerEventId: eventId,
         rawBody: '{"id":"evt_test_duplicate_456"}',
@@ -62,7 +62,7 @@ describe('WebhookProcessor Integration', () => {
 
       // Second registration (duplicate)
       const second = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         providerEventId: eventId,
         rawBody: '{"id":"evt_test_duplicate_456"}',
@@ -72,19 +72,19 @@ describe('WebhookProcessor Integration', () => {
     });
 
     it('should allow same eventId for different clients (multi-tenant isolation)', async () => {
-      const client1 = await createTestClient({ slug: 'client-1' });
-      const client2 = await createTestClient({ slug: 'client-2' });
+      const client1 = await createTestWorkspace({ slug: 'client-1' });
+      const client2 = await createTestWorkspace({ slug: 'client-2' });
       const eventId = 'evt_shared_across_tenants';
       
       const first = await WebhookProcessor.register({
-        clientId: client1.id,
+        workspaceId: client1.id,
         provider: 'stripe',
         providerEventId: eventId,
         rawBody: '{}',
       });
 
       const second = await WebhookProcessor.register({
-        clientId: client2.id,
+        workspaceId: client2.id,
         provider: 'stripe',
         providerEventId: eventId,
         rawBody: '{}',
@@ -97,18 +97,18 @@ describe('WebhookProcessor Integration', () => {
     });
 
     it('should allow same eventId for different providers', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       const eventId = 'shared-event-id';
       
       const stripe = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         providerEventId: eventId,
         rawBody: '{}',
       });
 
       const calendly = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'calendly',
         providerEventId: eventId,
         rawBody: '{}',
@@ -120,14 +120,14 @@ describe('WebhookProcessor Integration', () => {
     });
 
     it('should store raw headers as JSON', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       const headers = {
         'stripe-signature': 'whsec_test123',
         'content-type': 'application/json',
       };
       
       const result = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         providerEventId: 'evt_headers_test',
         rawBody: '{}',
@@ -142,11 +142,11 @@ describe('WebhookProcessor Integration', () => {
     });
 
     it('should parse and store JSON payload', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       const payload = { id: 'evt_123', type: 'test', data: { nested: true } };
       
       const result = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         providerEventId: 'evt_parsed_payload',
         rawBody: JSON.stringify(payload),
@@ -160,10 +160,10 @@ describe('WebhookProcessor Integration', () => {
     });
 
     it('should handle non-JSON raw body gracefully', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       
       const result = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         providerEventId: 'evt_non_json',
         rawBody: 'not valid json {{{',
@@ -181,9 +181,9 @@ describe('WebhookProcessor Integration', () => {
 
   describe('markProcessing', () => {
     it('should update status from PENDING to PROCESSING', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       const { id } = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         providerEventId: 'evt_pending_to_processing',
         rawBody: '{}',
@@ -201,9 +201,9 @@ describe('WebhookProcessor Integration', () => {
     });
 
     it('should return false when already PROCESSING (double-claim prevention)', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       const { id } = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         providerEventId: 'evt_already_processing',
         rawBody: '{}',
@@ -219,9 +219,9 @@ describe('WebhookProcessor Integration', () => {
     });
 
     it('should return false when already PROCESSED', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       const { id } = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         providerEventId: 'evt_already_processed',
         rawBody: '{}',
@@ -237,9 +237,9 @@ describe('WebhookProcessor Integration', () => {
 
   describe('markProcessed', () => {
     it('should update status to PROCESSED', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       const { id } = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         providerEventId: 'evt_to_process',
         rawBody: '{}',
@@ -258,9 +258,9 @@ describe('WebhookProcessor Integration', () => {
 
   describe('markFailed', () => {
     it('should update status to FAILED with error message', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       const { id } = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         providerEventId: 'evt_to_fail',
         rawBody: '{}',
@@ -277,9 +277,9 @@ describe('WebhookProcessor Integration', () => {
     });
 
     it('should truncate long error messages', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       const { id } = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         providerEventId: 'evt_long_error',
         rawBody: '{}',
@@ -299,7 +299,7 @@ describe('WebhookProcessor Integration', () => {
 describe('IdempotentExecutor Integration', () => {
   describe('executeIdempotent', () => {
     it('should execute function and return executed=true for new key', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       let executionCount = 0;
       
       const key = generateIdempotencyKey('test.action', { param: 'value' });
@@ -319,7 +319,7 @@ describe('IdempotentExecutor Integration', () => {
 
       // Verify key exists in database
       const record = await testPrisma.idempotencyKey.findFirst({
-        where: { clientId: client.id, key },
+        where: { workspaceId: client.id, key },
       });
       expect(record).not.toBeNull();
       expect(record?.status).toBe('COMPLETED');
@@ -327,7 +327,7 @@ describe('IdempotentExecutor Integration', () => {
     });
 
     it('should return cached result and executed=false for existing key', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       let executionCount = 0;
       
       const key = generateIdempotencyKey('test.cached', { id: 123 });
@@ -358,8 +358,8 @@ describe('IdempotentExecutor Integration', () => {
     });
 
     it('should allow same key for different clients (multi-tenant)', async () => {
-      const client1 = await createTestClient({ slug: 'idempotent-client-1' });
-      const client2 = await createTestClient({ slug: 'idempotent-client-2' });
+      const client1 = await createTestWorkspace({ slug: 'idempotent-client-1' });
+      const client2 = await createTestWorkspace({ slug: 'idempotent-client-2' });
       
       const key = generateIdempotencyKey('shared.action', { shared: true });
       
@@ -383,7 +383,7 @@ describe('IdempotentExecutor Integration', () => {
     });
 
     it('should store error when function throws', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       const key = generateIdempotencyKey('test.error', { willFail: true });
       
       await expect(
@@ -398,14 +398,14 @@ describe('IdempotentExecutor Integration', () => {
 
       // Verify error was stored
       const record = await testPrisma.idempotencyKey.findFirst({
-        where: { clientId: client.id, key },
+        where: { workspaceId: client.id, key },
       });
       expect(record?.status).toBe('FAILED');
       expect(record?.error).toBe('Something went wrong');
     });
 
     it('should throw when trying to execute with previously failed key', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       const key = generateIdempotencyKey('test.retry_failed', { willFail: true });
       
       // First execution fails
@@ -432,7 +432,7 @@ describe('IdempotentExecutor Integration', () => {
     });
 
     it('should set expiration time on idempotency key', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       const key = generateIdempotencyKey('test.ttl', { param: 'value' });
       
       await executeIdempotent(
@@ -443,7 +443,7 @@ describe('IdempotentExecutor Integration', () => {
       );
 
       const record = await testPrisma.idempotencyKey.findFirst({
-        where: { clientId: client.id, key },
+        where: { workspaceId: client.id, key },
       });
 
       expect(record?.expiresAt).toBeDefined();
@@ -456,7 +456,7 @@ describe('IdempotentExecutor Integration', () => {
 
   describe('concurrent execution', () => {
     it('should handle concurrent calls with same key (one wins, others get cached)', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       let executionCount = 0;
       
       const key = generateIdempotencyKey('test.concurrent', { race: true });
@@ -492,7 +492,7 @@ describe('IdempotentExecutor Integration', () => {
       
       // Verify only one key exists
       const records = await testPrisma.idempotencyKey.findMany({
-        where: { clientId: client.id, key },
+        where: { workspaceId: client.id, key },
       });
       expect(records.length).toBe(1);
     });
@@ -501,7 +501,7 @@ describe('IdempotentExecutor Integration', () => {
 
 describe('End-to-end reliability flow', () => {
   it('should prevent duplicate webhook processing with idempotent actions', async () => {
-    const client = await createTestClient();
+    const client = await createTestWorkspace();
     let actionExecutionCount = 0;
     
     // Simulate receiving the same webhook twice
@@ -509,7 +509,7 @@ describe('End-to-end reliability flow', () => {
     
     for (let i = 0; i < 2; i++) {
       const registration = await WebhookProcessor.register({
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'stripe',
         providerEventId: eventId,
         rawBody: '{"id":"evt_e2e_test"}',
@@ -543,7 +543,7 @@ describe('End-to-end reliability flow', () => {
     
     // Verify webhook event status
     const events = await testPrisma.webhookEvent.findMany({
-      where: { clientId: client.id, providerEventId: eventId },
+      where: { workspaceId: client.id, providerEventId: eventId },
     });
     expect(events.length).toBe(1);
     expect(events[0].status).toBe('PROCESSED');

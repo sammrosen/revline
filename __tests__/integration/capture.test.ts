@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { testPrisma, createTestClient, createTestIntegration, createTestWorkflow, getEventsForClient } from '../setup';
+import { testPrisma, createTestWorkspace, createTestIntegration, createTestWorkflow, getEventsForWorkspace } from '../setup';
 
 // Mock the MailerLite API calls (we don't want to hit real API in tests)
 vi.mock('@/app/_lib/integrations/mailerlite.adapter', async () => {
@@ -21,10 +21,10 @@ vi.mock('@/app/_lib/integrations/mailerlite.adapter', async () => {
   return {
     ...actual,
     MailerLiteAdapter: {
-      forClient: vi.fn().mockImplementation(async (clientId: string) => {
+      forClient: vi.fn().mockImplementation(async (workspaceId: string) => {
         // Check if integration exists
-        const integration = await testPrisma.clientIntegration.findFirst({
-          where: { clientId, integration: 'MAILERLITE' },
+        const integration = await testPrisma.workspaceIntegration.findFirst({
+          where: { workspaceId, integration: 'MAILERLITE' },
         });
         
         if (!integration) {
@@ -36,7 +36,7 @@ vi.mock('@/app/_lib/integrations/mailerlite.adapter', async () => {
         
         // Return mock adapter
         return {
-          clientId,
+          workspaceId,
           meta,
           addToGroup: vi.fn().mockResolvedValue({
             success: true,
@@ -57,7 +57,7 @@ describe('Capture Service Integration', () => {
       const { CaptureService } = await import('@/app/_lib/services/capture.service');
       
       // Create test client with MailerLite integration
-      const client = await createTestClient({ slug: 'capture-test' });
+      const client = await createTestWorkspace({ slug: 'capture-test' });
       await createTestIntegration(client.id, 'MAILERLITE', 'mock-api-key', {
         groups: {
           welcome: { id: 'test-group', name: 'Welcome' },
@@ -69,7 +69,7 @@ describe('Capture Service Integration', () => {
       
       // Capture email
       const result = await CaptureService.captureEmail({
-        clientId: client.id,
+        workspaceId: client.id,
         email: 'test@example.com',
         name: 'Test User',
         source: 'landing',
@@ -81,7 +81,7 @@ describe('Capture Service Integration', () => {
       
       // Verify lead was created in database
       const lead = await testPrisma.lead.findFirst({
-        where: { clientId: client.id, email: 'test@example.com' },
+        where: { workspaceId: client.id, email: 'test@example.com' },
       });
       
       expect(lead).not.toBeNull();
@@ -92,7 +92,7 @@ describe('Capture Service Integration', () => {
     it('should emit email_captured event', async () => {
       const { CaptureService } = await import('@/app/_lib/services/capture.service');
       
-      const client = await createTestClient({ slug: 'event-test' });
+      const client = await createTestWorkspace({ slug: 'event-test' });
       await createTestIntegration(client.id, 'MAILERLITE', 'mock-api-key', {
         groups: {
           welcome: { id: 'test-group', name: 'Welcome' },
@@ -103,12 +103,12 @@ describe('Capture Service Integration', () => {
       });
       
       await CaptureService.captureEmail({
-        clientId: client.id,
+        workspaceId: client.id,
         email: 'event@example.com',
         source: 'test',
       });
       
-      const events = await getEventsForClient(client.id);
+      const events = await getEventsForWorkspace(client.id);
       const captureEvent = events.find(e => e.eventType === 'email_captured');
       
       expect(captureEvent).toBeDefined();
@@ -119,7 +119,7 @@ describe('Capture Service Integration', () => {
     it('should emit mailerlite_subscribe_success event on success', async () => {
       const { CaptureService } = await import('@/app/_lib/services/capture.service');
       
-      const client = await createTestClient({ slug: 'ml-success-test' });
+      const client = await createTestWorkspace({ slug: 'ml-success-test' });
       await createTestIntegration(client.id, 'MAILERLITE', 'mock-api-key', {
         groups: {
           welcome: { id: 'test-group', name: 'Welcome' },
@@ -142,12 +142,12 @@ describe('Capture Service Integration', () => {
       });
       
       await CaptureService.captureEmail({
-        clientId: client.id,
+        workspaceId: client.id,
         email: 'success@example.com',
         source: 'test',
       });
       
-      const events = await getEventsForClient(client.id);
+      const events = await getEventsForWorkspace(client.id);
       const subscribeEvent = events.find(e => e.eventType === 'mailerlite_subscribe_success');
       
       expect(subscribeEvent).toBeDefined();
@@ -159,10 +159,10 @@ describe('Capture Service Integration', () => {
       const { CaptureService } = await import('@/app/_lib/services/capture.service');
       
       // Create client WITHOUT MailerLite integration
-      const client = await createTestClient({ slug: 'no-ml-test' });
+      const client = await createTestWorkspace({ slug: 'no-ml-test' });
       
       const result = await CaptureService.captureEmail({
-        clientId: client.id,
+        workspaceId: client.id,
         email: 'noconfig@example.com',
         source: 'test',
       });
@@ -172,7 +172,7 @@ describe('Capture Service Integration', () => {
       
       // Lead should still be created
       const lead = await testPrisma.lead.findFirst({
-        where: { clientId: client.id, email: 'noconfig@example.com' },
+        where: { workspaceId: client.id, email: 'noconfig@example.com' },
       });
       expect(lead).not.toBeNull();
     });
@@ -180,7 +180,7 @@ describe('Capture Service Integration', () => {
     it('should upsert lead if email already exists', async () => {
       const { CaptureService } = await import('@/app/_lib/services/capture.service');
       
-      const client = await createTestClient({ slug: 'upsert-test' });
+      const client = await createTestWorkspace({ slug: 'upsert-test' });
       await createTestIntegration(client.id, 'MAILERLITE', 'mock-api-key', {
         groups: {
           welcome: { id: 'test-group', name: 'Welcome' },
@@ -192,7 +192,7 @@ describe('Capture Service Integration', () => {
       
       // First capture
       const result1 = await CaptureService.captureEmail({
-        clientId: client.id,
+        workspaceId: client.id,
         email: 'duplicate@example.com',
         source: 'first',
       });
@@ -200,7 +200,7 @@ describe('Capture Service Integration', () => {
       
       // Second capture with same email (sequentially, not concurrently)
       const result2 = await CaptureService.captureEmail({
-        clientId: client.id,
+        workspaceId: client.id,
         email: 'duplicate@example.com',
         source: 'second',
       });
@@ -209,7 +209,7 @@ describe('Capture Service Integration', () => {
       
       // Unique constraint ensures only one lead exists
       const leads = await testPrisma.lead.findMany({
-        where: { clientId: client.id, email: 'duplicate@example.com' },
+        where: { workspaceId: client.id, email: 'duplicate@example.com' },
       });
       
       // Should have exactly one lead (upsert works correctly)
@@ -221,7 +221,7 @@ describe('Capture Service Integration', () => {
     it('should handle concurrent captures without crashing and prevent duplicates', async () => {
       const { CaptureService } = await import('@/app/_lib/services/capture.service');
       
-      const client = await createTestClient({ slug: 'concurrent-test' });
+      const client = await createTestWorkspace({ slug: 'concurrent-test' });
       await createTestIntegration(client.id, 'MAILERLITE', 'mock-api-key', {
         groups: {
           welcome: { id: 'test-group', name: 'Welcome' },
@@ -234,7 +234,7 @@ describe('Capture Service Integration', () => {
       // Fire multiple captures concurrently
       const promises = Array(5).fill(null).map(() =>
         CaptureService.captureEmail({
-          clientId: client.id,
+          workspaceId: client.id,
           email: 'concurrent@example.com',
           source: 'test',
         })
@@ -248,7 +248,7 @@ describe('Capture Service Integration', () => {
       
       // Unique constraint ensures only one lead exists even with concurrent requests
       const leads = await testPrisma.lead.findMany({
-        where: { clientId: client.id, email: 'concurrent@example.com' },
+        where: { workspaceId: client.id, email: 'concurrent@example.com' },
       });
       
       // Should have exactly one lead (unique constraint prevents duplicates)
@@ -258,7 +258,7 @@ describe('Capture Service Integration', () => {
     it('should use default source when not provided', async () => {
       const { CaptureService } = await import('@/app/_lib/services/capture.service');
       
-      const client = await createTestClient({ slug: 'default-source' });
+      const client = await createTestWorkspace({ slug: 'default-source' });
       await createTestIntegration(client.id, 'MAILERLITE', 'mock-api-key', {
         groups: {
           welcome: { id: 'test-group', name: 'Welcome' },
@@ -269,13 +269,13 @@ describe('Capture Service Integration', () => {
       });
       
       await CaptureService.captureEmail({
-        clientId: client.id,
+        workspaceId: client.id,
         email: 'nosource@example.com',
         // No source provided
       });
       
       const lead = await testPrisma.lead.findFirst({
-        where: { clientId: client.id, email: 'nosource@example.com' },
+        where: { workspaceId: client.id, email: 'nosource@example.com' },
       });
       
       expect(lead?.source).toBe('landing'); // Default source
@@ -286,18 +286,18 @@ describe('Capture Service Integration', () => {
     it('should prevent duplicate leads with unique constraint', async () => {
       const { upsertLead } = await import('@/app/_lib/event-logger');
       
-      const client = await createTestClient({ slug: 'unique-test' });
+      const client = await createTestWorkspace({ slug: 'unique-test' });
       
       // Create lead
       const leadId1 = await upsertLead({
-        clientId: client.id,
+        workspaceId: client.id,
         email: 'unique@example.com',
         source: 'first',
       });
       
       // Try to create duplicate (should update, not create)
       const leadId2 = await upsertLead({
-        clientId: client.id,
+        workspaceId: client.id,
         email: 'unique@example.com',
         source: 'second',
       });
@@ -307,7 +307,7 @@ describe('Capture Service Integration', () => {
       
       // Verify only one lead exists
       const leads = await testPrisma.lead.findMany({
-        where: { clientId: client.id, email: 'unique@example.com' },
+        where: { workspaceId: client.id, email: 'unique@example.com' },
       });
       expect(leads.length).toBe(1);
     });
@@ -317,7 +317,7 @@ describe('Capture Service Integration', () => {
     it('should return true when MailerLite is configured', async () => {
       const { CaptureService } = await import('@/app/_lib/services/capture.service');
       
-      const client = await createTestClient({ slug: 'config-check' });
+      const client = await createTestWorkspace({ slug: 'config-check' });
       await createTestIntegration(client.id, 'MAILERLITE', 'mock-api-key', {
         groups: {
           welcome: { id: 'test-group', name: 'Welcome' },
@@ -334,7 +334,7 @@ describe('Capture Service Integration', () => {
     it('should return false when MailerLite is not configured', async () => {
       const { CaptureService } = await import('@/app/_lib/services/capture.service');
       
-      const client = await createTestClient({ slug: 'no-config' });
+      const client = await createTestWorkspace({ slug: 'no-config' });
       // No integration created
       
       const isConfigured = await CaptureService.isConfigured(client.id);

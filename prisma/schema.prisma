@@ -1,5 +1,5 @@
 // RevOps MVP Database Schema
-// Source of truth for clients, integrations, leads, events, and admin auth
+// Source of truth for workspaces, integrations, leads, events, and admin auth
 
 generator client {
   provider = "prisma-client-js"
@@ -11,18 +11,18 @@ datasource db {
 }
 
 // =============================================================================
-// CLIENT MANAGEMENT
+// WORKSPACE MANAGEMENT
 // =============================================================================
 
-model Client {
-  id        String       @id @default(uuid())
+model Workspace {
+  id        String          @id @default(uuid())
   name      String
-  slug      String       @unique // Used for ?source= routing (e.g., "sam", "demo")
-  status    ClientStatus @default(ACTIVE)
-  timezone  String       @default("America/New_York") // IANA timezone for health check business hours
-  createdAt DateTime     @default(now()) @map("created_at")
+  slug      String          @unique // Used for ?source= routing (e.g., "sam", "demo")
+  status    WorkspaceStatus @default(ACTIVE)
+  timezone  String          @default("America/New_York") // IANA timezone for health check business hours
+  createdAt DateTime        @default(now()) @map("created_at")
 
-  integrations       ClientIntegration[]
+  integrations       WorkspaceIntegration[]
   leads              Lead[]
   events             Event[]
   workflows          Workflow[]
@@ -30,10 +30,10 @@ model Client {
   webhookEvents      WebhookEvent[]
   idempotencyKeys    IdempotencyKey[]
 
-  @@map("clients")
+  @@map("workspaces")
 }
 
-enum ClientStatus {
+enum WorkspaceStatus {
   ACTIVE
   PAUSED
 }
@@ -42,9 +42,9 @@ enum ClientStatus {
 // INTEGRATION SECRETS & CONFIG
 // =============================================================================
 
-model ClientIntegration {
+model WorkspaceIntegration {
   id           String          @id @default(uuid())
-  clientId     String          @map("client_id")
+  workspaceId  String          @map("workspace_id")
   integration  IntegrationType
   secrets      Json?           // Array of { id: string, name: string, encryptedValue: string, keyVersion: number }
   meta         Json?           // Non-sensitive config: groups, routing, product_map, etc.
@@ -52,10 +52,10 @@ model ClientIntegration {
   lastSeenAt   DateTime?       @map("last_seen_at")
   createdAt    DateTime        @default(now()) @map("created_at")
 
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([clientId, integration])
-  @@map("client_integrations")
+  @@unique([workspaceId, integration])
+  @@map("workspace_integrations")
 }
 
 enum IntegrationType {
@@ -79,7 +79,7 @@ enum HealthStatus {
 
 model Lead {
   id          String    @id @default(uuid())
-  clientId    String    @map("client_id")
+  workspaceId String    @map("workspace_id")
   email       String
   source      String? // e.g., "landing", "ig_dm"
   stage       LeadStage @default(CAPTURED)
@@ -87,12 +87,12 @@ model Lead {
   createdAt   DateTime  @default(now()) @map("created_at")
   lastEventAt DateTime  @default(now()) @map("last_event_at")
 
-  client Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  events Event[]
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  events    Event[]
 
-  @@unique([clientId, email])
-  @@index([clientId, stage])
-  @@index([clientId, lastEventAt])
+  @@unique([workspaceId, email])
+  @@index([workspaceId, stage])
+  @@index([workspaceId, lastEventAt])
   @@map("leads")
 }
 
@@ -109,7 +109,7 @@ enum LeadStage {
 
 model Event {
   id           String      @id @default(uuid())
-  clientId     String      @map("client_id")
+  workspaceId  String      @map("workspace_id")
   leadId       String?     @map("lead_id")
   system       EventSystem
   eventType    String      @map("event_type")
@@ -117,10 +117,10 @@ model Event {
   errorMessage String?     @map("error_message")
   createdAt    DateTime    @default(now()) @map("created_at")
 
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  lead   Lead?  @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead      Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
 
-  @@index([clientId, createdAt])
+  @@index([workspaceId, createdAt])
   @@index([success, createdAt])
   @@map("events")
 }
@@ -172,7 +172,7 @@ model AdminSession {
 
 model Workflow {
   id          String  @id @default(uuid())
-  clientId    String  @map("client_id")
+  workspaceId String  @map("workspace_id")
   name        String
   description String?
   enabled     Boolean @default(true)
@@ -188,18 +188,18 @@ model Workflow {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  client     Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   executions WorkflowExecution[]
 
-  @@index([clientId, enabled])
-  @@index([clientId, triggerAdapter, triggerOperation])
+  @@index([workspaceId, enabled])
+  @@index([workspaceId, triggerAdapter, triggerOperation])
   @@map("workflows")
 }
 
 model WorkflowExecution {
-  id         String   @id @default(uuid())
-  workflowId String   @map("workflow_id")
-  clientId   String   @map("client_id")
+  id          String @id @default(uuid())
+  workflowId  String @map("workflow_id")
+  workspaceId String @map("workspace_id")
 
   // Correlation for tracing
   correlationId String? @map("correlation_id") @db.Uuid
@@ -223,10 +223,10 @@ model WorkflowExecution {
   startedAt   DateTime  @default(now()) @map("started_at")
   completedAt DateTime? @map("completed_at")
 
-  client   Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflow  Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
 
-  @@index([clientId, startedAt])
+  @@index([workspaceId, startedAt])
   @@index([workflowId, startedAt])
   @@index([status])
   @@index([correlationId])
@@ -245,23 +245,23 @@ enum WorkflowExecutionStatus {
 
 // Webhook event deduplication and raw payload storage
 model WebhookEvent {
-  id              String             @id @default(uuid())
-  clientId        String             @map("client_id")
-  correlationId   String             @map("correlation_id") @db.Uuid
-  provider        String             // 'stripe', 'calendly', 'revline'
-  providerEventId String             @map("provider_event_id") // Stripe event ID, Calendly URI, etc.
-  rawBody         String             @map("raw_body") @db.Text // Exact bytes for signature verification
-  rawHeaders      Json?              @map("raw_headers") // Headers needed for verification
-  parsedPayload   Json?              @map("parsed_payload") // Convenience parsed form
-  status          WebhookEventStatus @default(PENDING)
-  error           String?
-  receivedAt      DateTime           @default(now()) @map("received_at")
-  processingStartedAt DateTime?      @map("processing_started_at")
-  processedAt     DateTime?          @map("processed_at")
+  id                  String             @id @default(uuid())
+  workspaceId         String             @map("workspace_id")
+  correlationId       String             @map("correlation_id") @db.Uuid
+  provider            String             // 'stripe', 'calendly', 'revline'
+  providerEventId     String             @map("provider_event_id") // Stripe event ID, Calendly URI, etc.
+  rawBody             String             @map("raw_body") @db.Text // Exact bytes for signature verification
+  rawHeaders          Json?              @map("raw_headers") // Headers needed for verification
+  parsedPayload       Json?              @map("parsed_payload") // Convenience parsed form
+  status              WebhookEventStatus @default(PENDING)
+  error               String?
+  receivedAt          DateTime           @default(now()) @map("received_at")
+  processingStartedAt DateTime?          @map("processing_started_at")
+  processedAt         DateTime?          @map("processed_at")
 
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([clientId, provider, providerEventId])
+  @@unique([workspaceId, provider, providerEventId])
   @@index([status, receivedAt])
   @@map("webhook_events")
 }
@@ -275,19 +275,19 @@ enum WebhookEventStatus {
 
 // Idempotency keys for action deduplication
 model IdempotencyKey {
-  id          String                @id @default(uuid())
-  clientId    String                @map("client_id")
-  key         String                // Hash of (action + params)
-  status      IdempotencyKeyStatus  @default(PENDING)
+  id          String               @id @default(uuid())
+  workspaceId String               @map("workspace_id")
+  key         String               // Hash of (action + params)
+  status      IdempotencyKeyStatus @default(PENDING)
   result      Json?
   error       String?
-  createdAt   DateTime              @default(now()) @map("created_at")
-  completedAt DateTime?             @map("completed_at")
-  expiresAt   DateTime?             @map("expires_at") // Auto-cleanup
+  createdAt   DateTime             @default(now()) @map("created_at")
+  completedAt DateTime?            @map("completed_at")
+  expiresAt   DateTime?            @map("expires_at") // Auto-cleanup
 
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([clientId, key])
+  @@unique([workspaceId, key])
   @@index([expiresAt])
   @@map("idempotency_keys")
 }

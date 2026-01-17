@@ -13,19 +13,19 @@ import { IntegrationType, HealthStatus } from '@prisma/client';
 import { IntegrationMeta, IntegrationSecret } from './types';
 
 /**
- * Get a client's decrypted primary secret for a specific integration
+ * Get a workspace's decrypted primary secret for a specific integration
  * Fetches from DB and decrypts at runtime - never caches secrets
  * 
  * @deprecated Use adapter.forClient() instead
  */
-export async function getClientSecret(
-  clientId: string,
+export async function getWorkspaceSecret(
+  workspaceId: string,
   integration: IntegrationType
 ): Promise<string | null> {
-  const row = await prisma.clientIntegration.findUnique({
+  const row = await prisma.workspaceIntegration.findUnique({
     where: {
-      clientId_integration: {
-        clientId,
+      workspaceId_integration: {
+        workspaceId,
         integration,
       },
     },
@@ -49,21 +49,21 @@ export async function getClientSecret(
 }
 
 /**
- * Get a client's integration config (meta) and optionally the decrypted primary secret
+ * Get a workspace's integration config (meta) and optionally the decrypted primary secret
  * 
  * @deprecated Use adapter.forClient() instead
  */
-export async function getClientIntegration(
-  clientId: string,
+export async function getWorkspaceIntegration(
+  workspaceId: string,
   integration: IntegrationType
 ): Promise<{
   secret: string;
   meta: IntegrationMeta | null;
 } | null> {
-  const row = await prisma.clientIntegration.findUnique({
+  const row = await prisma.workspaceIntegration.findUnique({
     where: {
-      clientId_integration: {
-        clientId,
+      workspaceId_integration: {
+        workspaceId,
         integration,
       },
     },
@@ -96,13 +96,13 @@ export async function getClientIntegration(
  * @deprecated Use adapter.touch() instead (called automatically on success)
  */
 export async function touchIntegration(
-  clientId: string,
+  workspaceId: string,
   integration: IntegrationType
 ): Promise<void> {
-  await prisma.clientIntegration.update({
+  await prisma.workspaceIntegration.update({
     where: {
-      clientId_integration: {
-        clientId,
+      workspaceId_integration: {
+        workspaceId,
         integration,
       },
     },
@@ -119,14 +119,14 @@ export async function touchIntegration(
  * @deprecated Use adapter.markUnhealthy() instead
  */
 export async function markIntegrationUnhealthy(
-  clientId: string,
+  workspaceId: string,
   integration: IntegrationType,
   status: HealthStatus
 ): Promise<void> {
-  await prisma.clientIntegration.update({
+  await prisma.workspaceIntegration.update({
     where: {
-      clientId_integration: {
-        clientId,
+      workspaceId_integration: {
+        workspaceId,
         integration,
       },
     },
@@ -135,3 +135,7 @@ export async function markIntegrationUnhealthy(
     },
   });
 }
+
+// Legacy aliases for backwards compatibility
+export const getClientSecret = getWorkspaceSecret;
+export const getClientIntegration = getWorkspaceIntegration;

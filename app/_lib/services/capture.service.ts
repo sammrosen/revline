@@ -18,7 +18,7 @@ import { withTransaction } from '@/app/_lib/utils/transaction';
  * Input parameters for email capture
  */
 export interface CaptureEmailParams {
-  clientId: string;
+  workspaceId: string;
   email: string;
   name?: string;
   source?: string;
@@ -35,7 +35,7 @@ export class CaptureService {
    * @deprecated Use emitTrigger() instead:
    * 
    * ```typescript
-   * await emitTrigger(clientId, {
+   * await emitTrigger(workspaceId, {
    *   adapter: 'revline',
    *   operation: 'email_captured',
    * }, { email, name, source });
@@ -44,7 +44,7 @@ export class CaptureService {
   static async captureEmail(
     params: CaptureEmailParams
   ): Promise<IntegrationResult<CaptureResult>> {
-    const { clientId, email, name, source = 'landing' } = params;
+    const { workspaceId, email, name, source = 'landing' } = params;
 
     // Step 1 & 2: Create/update lead record and emit event atomically
     let leadId: string;
@@ -52,7 +52,7 @@ export class CaptureService {
       leadId = await withTransaction(async (tx) => {
         // Create/update lead
         const lead = await upsertLead({
-          clientId,
+          workspaceId,
           email,
           source,
           tx,
@@ -60,7 +60,7 @@ export class CaptureService {
         
         // Emit event in same transaction
         await emitEvent({
-          clientId,
+          workspaceId,
           leadId: lead,
           system: EventSystem.BACKEND,
           eventType: 'email_captured',
@@ -72,7 +72,7 @@ export class CaptureService {
       });
     } catch (error) {
       console.error('Failed to upsert lead:', {
-        clientId,
+        workspaceId,
         email,
         error: error instanceof Error ? error.message : 'Unknown',
       });
@@ -84,7 +84,7 @@ export class CaptureService {
 
     // Step 3: Emit trigger to workflow engine
     const result = await emitTrigger(
-      clientId,
+      workspaceId,
       { adapter: 'revline', operation: 'email_captured' },
       { email, name, source }
     );
@@ -93,7 +93,7 @@ export class CaptureService {
     const hasFailure = result.executions.some(e => e.status === 'failed');
     if (hasFailure) {
       console.warn('Some workflows failed for email capture:', {
-        clientId,
+        workspaceId,
         leadId,
         failures: result.executions.filter(e => e.status === 'failed'),
       });
@@ -117,8 +117,8 @@ export class CaptureService {
    * Check if capture is properly configured for a client
    * Use for validation before showing capture forms
    */
-  static async isConfigured(clientId: string): Promise<boolean> {
-    const adapter = await MailerLiteAdapter.forClient(clientId);
+  static async isConfigured(workspaceId: string): Promise<boolean> {
+    const adapter = await MailerLiteAdapter.forClient(workspaceId);
     if (!adapter) return false;
     
     // Check if MailerLite has groups configured
