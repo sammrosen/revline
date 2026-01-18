@@ -20,22 +20,22 @@ export async function PATCH(
     const body = await request.json();
     const { meta } = body;
 
-    const integration = await prisma.clientIntegration.findUnique({
+    const integration = await prisma.workspaceIntegration.findUnique({
       where: { id },
-      select: { clientId: true, integration: true },
+      select: { workspaceId: true, integration: true },
     });
 
     if (!integration) {
       return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
     }
 
-    await prisma.clientIntegration.update({
+    await prisma.workspaceIntegration.update({
       where: { id },
       data: { meta: meta || undefined },
     });
 
     await emitEvent({
-      clientId: integration.clientId,
+      workspaceId: integration.workspaceId,
       system: EventSystem.BACKEND,
       eventType: 'integration_meta_updated',
       success: true,

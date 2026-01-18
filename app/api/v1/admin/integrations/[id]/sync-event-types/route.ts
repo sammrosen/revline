@@ -31,11 +31,11 @@ export async function GET(
 
   try {
     // Load integration to verify it exists and is ABC Ignite
-    const integration = await prisma.clientIntegration.findUnique({
+    const integration = await prisma.workspaceIntegration.findUnique({
       where: { id },
       select: { 
         id: true,
-        clientId: true, 
+        workspaceId: true, 
         integration: true,
         meta: true,
       },
@@ -53,7 +53,7 @@ export async function GET(
     }
 
     // Load the adapter (this validates credentials are configured)
-    const adapter = await AbcIgniteAdapter.forClient(integration.clientId);
+    const adapter = await AbcIgniteAdapter.forClient(integration.workspaceId);
     
     if (!adapter) {
       return NextResponse.json(
@@ -66,9 +66,7 @@ export async function GET(
     }
 
     // Fetch ALL event types from ABC Ignite (category comes with each event type)
-    const result = await adapter.getEventTypes({
-      isAvailableOnline: true, // Only fetch online-bookable events
-    });
+    const result = await adapter.getEventTypes();
 
     if (!result.success) {
       return NextResponse.json(
@@ -88,6 +86,7 @@ export async function GET(
       duration: typeof et.duration === 'string' ? parseInt(et.duration, 10) : et.duration,
       maxAttendees: typeof et.maxAttendees === 'string' ? parseInt(et.maxAttendees, 10) : et.maxAttendees,
       isAvailableOnline: et.isAvailableOnline === 'true',
+      levelId: et.eventTrainingLevels?.[0]?.levelId,  // Extract first training level ID
     }));
 
     return NextResponse.json({

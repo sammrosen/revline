@@ -8,7 +8,7 @@
 
 import { NextRequest } from 'next/server';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
-import { getActiveClient } from '@/app/_lib/client-gate';
+import { getActiveWorkspace } from '@/app/_lib/client-gate';
 import { getBookingProvider, BookingCustomer } from '@/app/_lib/booking';
 import { 
   rateLimitByIP, 
@@ -27,16 +27,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { clientSlug, customer, eventTypeId } = body as {
-      clientSlug: string;
+    // Support both workspaceSlug and clientSlug for backwards compatibility
+    const workspaceSlug = body.workspaceSlug || body.clientSlug;
+    const { customer, eventTypeId } = body as {
       customer: BookingCustomer;
       eventTypeId?: string;
     };
 
     // Validate input
-    if (!clientSlug || typeof clientSlug !== 'string') {
+    if (!workspaceSlug || typeof workspaceSlug !== 'string') {
       return ApiResponse.error(
-        'clientSlug is required',
+        'workspaceSlug is required',
         400,
         ErrorCodes.MISSING_REQUIRED
       );
@@ -50,18 +51,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get active client
-    const client = await getActiveClient(clientSlug);
-    if (!client) {
+    // Get active workspace
+    const workspace = await getActiveWorkspace(workspaceSlug);
+    if (!workspace) {
       return ApiResponse.error(
-        'Client not found or inactive',
+        'Workspace not found or inactive',
         404,
         ErrorCodes.CLIENT_NOT_FOUND
       );
     }
 
     // Get booking provider
-    const provider = await getBookingProvider(client.id);
+    const provider = await getBookingProvider(workspace.id);
     if (!provider) {
       return ApiResponse.error(
         'No booking provider configured',

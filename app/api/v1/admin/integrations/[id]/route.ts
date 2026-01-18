@@ -24,9 +24,9 @@ export async function DELETE(
   const { id } = await params;
 
   try {
-    const integration = await prisma.clientIntegration.findUnique({
+    const integration = await prisma.workspaceIntegration.findUnique({
       where: { id },
-      select: { clientId: true, integration: true },
+      select: { workspaceId: true, integration: true },
     });
 
     if (!integration) {
@@ -35,7 +35,7 @@ export async function DELETE(
 
     // Check for dependent workflows before deleting
     const validation = await validateCanDeleteIntegration(
-      integration.clientId,
+      integration.workspaceId,
       integration.integration
     );
 
@@ -50,12 +50,12 @@ export async function DELETE(
       );
     }
 
-    await prisma.clientIntegration.delete({
+    await prisma.workspaceIntegration.delete({
       where: { id },
     });
 
     await emitEvent({
-      clientId: integration.clientId,
+      workspaceId: integration.workspaceId,
       system: EventSystem.BACKEND,
       eventType: 'integration_deleted',
       success: true,

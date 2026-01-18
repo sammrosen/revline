@@ -88,7 +88,7 @@ export default function AdminSetupPage() {
       }
 
       // Success - redirect to admin dashboard
-      router.push('/admin/clients');
+      router.push('/admin/workspaces');
       router.refresh();
     } catch {
       setError('Network error');

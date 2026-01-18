@@ -54,6 +54,18 @@ export interface TimeSlot {
 }
 
 /**
+ * Employee/staff member for booking selection
+ */
+export interface BookingEmployee {
+  /** Config key for this employee */
+  key: string;
+  /** Display name */
+  name: string;
+  /** Job title (e.g., "Personal Trainer") */
+  title?: string;
+}
+
+/**
  * Query parameters for availability search
  */
 export interface AvailabilityQuery {
@@ -118,6 +130,8 @@ export interface BookingProviderCapabilities {
   requiresEligibilityCheck: boolean;
   /** Supports waitlist for full events */
   supportsWaitlist: boolean;
+  /** Supports employee/staff selection for availability */
+  supportsEmployeeSelection?: boolean;
   /** Identifier type for customer lookup */
   customerIdentifierType?: 'barcode' | 'email' | 'phone' | 'memberId';
   /** Label for customer identifier input */

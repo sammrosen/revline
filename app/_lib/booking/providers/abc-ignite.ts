@@ -3,12 +3,17 @@
  * 
  * Wraps the ABC Ignite adapter to implement the BookingProvider interface.
  * Handles member lookup, session balance checks, and event enrollment.
+ * 
+ * Supports two availability modes:
+ * - Employee availability (preferred): Uses configured employees to fetch open time slots
+ * - Event-based (fallback): Fetches pre-scheduled events from the calendar
  */
 
 import {
   BookingProvider,
   BookingProviderCapabilities,
   BookingCustomer,
+  BookingEmployee,
   TimeSlot,
   AvailabilityQuery,
   BookingResult,
@@ -18,6 +23,8 @@ import {
   AbcIgniteAdapter,
   AbcIgniteEvent,
   AbcIgniteMember,
+  AbcIgniteAvailabilityDay,
+  AbcIgniteAvailabilityTimeBlock,
 } from '@/app/_lib/integrations/abc-ignite.adapter';
 
 /**
@@ -25,23 +32,30 @@ import {
  * 
  * Full-featured provider with:
  * - Barcode-based member lookup
- * - Session balance eligibility checks
  * - Event enrollment
  * - Waitlist support
+ * 
+ * Note: Session balance eligibility checks disabled until /session-balance endpoint activated
  */
 export class AbcIgniteBookingProvider implements BookingProvider {
   readonly providerId = 'abc_ignite';
   readonly providerName = 'ABC Ignite';
+  readonly capabilities: BookingProviderCapabilities;
   
-  readonly capabilities: BookingProviderCapabilities = {
-    requiresCustomerLookup: true,
-    requiresEligibilityCheck: true,
-    supportsWaitlist: true,
-    customerIdentifierType: 'barcode',
-    customerIdentifierLabel: 'Member Barcode',
-  };
-  
-  constructor(private adapter: AbcIgniteAdapter) {}
+  constructor(private adapter: AbcIgniteAdapter) {
+    // Build capabilities - employee selection depends on config
+    const employees = this.adapter.getConfiguredEmployees();
+    const hasEmployees = Object.keys(employees).length > 0;
+    
+    this.capabilities = {
+      requiresCustomerLookup: true,
+      requiresEligibilityCheck: false, // Disabled until /session-balance endpoint activated
+      supportsWaitlist: true,
+      supportsEmployeeSelection: hasEmployees,
+      customerIdentifierType: 'barcode',
+      customerIdentifierLabel: 'Member Barcode',
+    };
+  }
   
   /**
    * Create provider instance for a client
@@ -51,6 +65,35 @@ export class AbcIgniteBookingProvider implements BookingProvider {
     if (!adapter) return null;
     return new AbcIgniteBookingProvider(adapter);
   }
+  
+  // ===========================================================================
+  // EMPLOYEE CONFIGURATION
+  // ===========================================================================
+  
+  /**
+   * Get configured employees for selection UI
+   * Returns employee info suitable for frontend display (keys, not raw IDs)
+   */
+  getConfiguredEmployees(): BookingEmployee[] {
+    const employeesConfig = this.adapter.getConfiguredEmployees();
+    
+    return Object.entries(employeesConfig).map(([key, config]) => ({
+      key,
+      name: config.name,
+      title: config.title,
+    }));
+  }
+  
+  /**
+   * Get the default employee key
+   */
+  getDefaultEmployeeKey(): string | undefined {
+    return this.adapter.getDefaultEmployeeId();
+  }
+  
+  // ===========================================================================
+  // CUSTOMER OPERATIONS
+  // ===========================================================================
   
   /**
    * Look up a member by barcode
@@ -67,47 +110,153 @@ export class AbcIgniteBookingProvider implements BookingProvider {
   }
   
   /**
-   * Check if member is eligible to book (has session credits)
+   * Check if member is eligible to book
+   * 
+   * Note: Session balance check disabled until /session-balance endpoint activated.
+   * Currently always returns eligible - ABC will reject at enrollment if member lacks credits.
    */
   async checkEligibility(
-    customer: BookingCustomer,
-    eventTypeId?: string
+    _customer: BookingCustomer,
+    _eventTypeId?: string
   ): Promise<EligibilityResult> {
-    // Use default event type from config if not provided
-    const typeId = eventTypeId || this.adapter.getDefaultEventTypeId();
-    
-    if (!typeId) {
-      return {
-        eligible: true,
-        reason: 'No event type specified - eligibility not checked',
-      };
-    }
-    
-    const result = await this.adapter.canEnroll(customer.id, typeId);
-    
-    if (!result.success) {
-      return {
-        eligible: false,
-        reason: result.error || 'Failed to check eligibility',
-      };
-    }
-    
-    const data = result.data!;
-    
+    // Session balance endpoint not activated - skip eligibility check
+    // ABC will reject at enrollment time if member doesn't have credits
     return {
-      eligible: data.canEnroll,
-      reason: data.reason,
-      balance: data.balance ? {
-        remaining: data.balance.remainingSessions,
-        unlimited: data.balance.unlimited,
-      } : undefined,
+      eligible: true,
+      reason: 'Eligibility check skipped - will validate at booking time',
     };
   }
   
   /**
-   * Get available time slots/events
+   * Get available time slots
+   * 
+   * Uses employee availability endpoint if employees are configured,
+   * otherwise falls back to pre-scheduled events.
    */
   async getAvailability(query: AvailabilityQuery): Promise<TimeSlot[]> {
+    // Try employee availability first (preferred method)
+    const employeeSlots = await this.getEmployeeAvailability(query);
+    if (employeeSlots !== null) {
+      return employeeSlots;
+    }
+    
+    // Fallback to event-based availability
+    return this.getEventAvailability(query);
+  }
+  
+  /**
+   * Get availability using employee availability endpoint
+   * Returns null if no employee is configured (triggering fallback)
+   */
+  private async getEmployeeAvailability(query: AvailabilityQuery): Promise<TimeSlot[] | null> {
+    // Get employee - from query, or use default
+    const employeeKey = query.staffId || this.adapter.getDefaultEmployeeId();
+    if (!employeeKey) {
+      return null; // No employee configured - use fallback
+    }
+    
+    const employeeConfig = this.adapter.getEmployeeConfig(employeeKey);
+    if (!employeeConfig) {
+      console.warn('Employee key not found in config:', employeeKey);
+      return null;
+    }
+    
+    // Get event type config
+    const eventTypeKey = query.eventTypeId || this.adapter.getDefaultEventTypeId();
+    if (!eventTypeKey) {
+      console.warn('No event type configured for availability');
+      return null;
+    }
+    
+    const eventTypeConfig = this.adapter.getEventTypeConfig(eventTypeKey);
+    if (!eventTypeConfig) {
+      console.warn('Event type key not found in config:', eventTypeKey);
+      return null;
+    }
+    
+    // Fetch availability from ABC Ignite
+    const result = await this.adapter.getEmployeeAvailability(
+      employeeConfig.id,
+      eventTypeConfig.id,
+      { startDate: query.startDate, endDate: query.endDate },
+      eventTypeConfig.levelId
+    );
+    
+    if (!result.success || !result.data) {
+      console.error('Failed to fetch employee availability:', result.error);
+      return [];
+    }
+    
+    // Split time blocks into individual bookable slots
+    const duration = eventTypeConfig.duration || 60;
+    const slots: TimeSlot[] = [];
+    
+    for (const day of result.data) {
+      for (const timeBlock of day.times) {
+        const blockSlots = this.splitTimeBlockIntoSlots(
+          timeBlock,
+          day.date,
+          duration,
+          eventTypeConfig,
+          employeeConfig
+        );
+        slots.push(...blockSlots);
+      }
+    }
+    
+    return slots;
+  }
+  
+  /**
+   * Split a time block into individual bookable slots based on duration
+   */
+  private splitTimeBlockIntoSlots(
+    timeBlock: AbcIgniteAvailabilityTimeBlock,
+    date: string,
+    durationMinutes: number,
+    eventType: { id: string; name: string; levelId?: string },
+    employee: { id: string; name: string; title?: string }
+  ): TimeSlot[] {
+    const slots: TimeSlot[] = [];
+    
+    const blockStart = new Date(timeBlock.utcStartDateTime);
+    const blockEnd = new Date(timeBlock.utcEndDateTime);
+    const durationMs = durationMinutes * 60 * 1000;
+    
+    let slotStart = blockStart;
+    
+    while (slotStart.getTime() + durationMs <= blockEnd.getTime()) {
+      const slotEnd = new Date(slotStart.getTime() + durationMs);
+      
+      slots.push({
+        id: `${employee.id}-${slotStart.toISOString()}`,
+        startTime: slotStart.toISOString(),
+        endTime: slotEnd.toISOString(),
+        duration: durationMinutes,
+        title: eventType.name,
+        staffName: employee.name,
+        spotsAvailable: 1,
+        maxCapacity: 1,
+        providerData: {
+          eventTypeId: eventType.id,
+          employeeId: employee.id,
+          levelId: eventType.levelId,
+          date, // Original date from API
+          localStartTime: timeBlock.startTime,
+          isAvailabilitySlot: true,
+        },
+      });
+      
+      slotStart = slotEnd;
+    }
+    
+    return slots;
+  }
+  
+  /**
+   * Get availability using pre-scheduled events (fallback)
+   */
+  private async getEventAvailability(query: AvailabilityQuery): Promise<TimeSlot[]> {
     const result = await this.adapter.getEvents({
       startDate: query.startDate,
       endDate: query.endDate,
@@ -125,15 +274,54 @@ export class AbcIgniteBookingProvider implements BookingProvider {
   }
   
   /**
-   * Create a booking (enroll member in event)
+   * Create a booking
+   * 
+   * Handles two scenarios:
+   * - Availability slots: Creates a new appointment via POST /calendars/events
+   * - Pre-scheduled events: Enrolls member in existing event
    */
   async createBooking(
     slot: TimeSlot,
     customer: BookingCustomer
   ): Promise<BookingResult> {
-    const eventId = slot.id;
     const memberId = customer.id;
     
+    // Check if this is an availability slot (needs appointment creation)
+    // vs a pre-scheduled event (needs enrollment)
+    if (slot.providerData?.isAvailabilitySlot) {
+      // Create appointment from availability
+      const result = await this.adapter.createAppointment({
+        employeeId: slot.providerData.employeeId as string,
+        eventTypeId: slot.providerData.eventTypeId as string,
+        levelId: slot.providerData.levelId as string,
+        startTime: this.formatDateTimeForApi(slot.startTime),
+        memberId,
+      });
+      
+      if (!result.success) {
+        return {
+          success: false,
+          message: result.error || 'Failed to create appointment',
+          error: result.error,
+        };
+      }
+      
+      return {
+        success: true,
+        bookingId: result.data?.eventId,
+        message: 'Appointment booked successfully',
+        booking: {
+          id: result.data?.eventId || slot.id,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          title: slot.title,
+          staffName: slot.staffName,
+        },
+      };
+    }
+    
+    // Existing logic for pre-scheduled events
+    const eventId = slot.id;
     const result = await this.adapter.enrollMember(eventId, memberId);
     
     if (!result.success) {
@@ -157,6 +345,21 @@ export class AbcIgniteBookingProvider implements BookingProvider {
         location: slot.location,
       },
     };
+  }
+  
+  /**
+   * Format ISO datetime to ABC API format
+   * ABC API expects: "YYYY-MM-DD HH:mm:ss"
+   */
+  private formatDateTimeForApi(isoDateTime: string): string {
+    const date = new Date(isoDateTime);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    const ss = String(date.getSeconds()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
   }
   
   /**
@@ -189,18 +392,28 @@ export class AbcIgniteBookingProvider implements BookingProvider {
   
   /**
    * Map ABC Ignite member to generic customer
+   * Handles both nested personal object (GET /members) and flat fields (event context)
    */
   private mapMemberToCustomer(member: AbcIgniteMember): BookingCustomer {
-    const name = [member.firstName, member.lastName]
+    // Support both nested personal object and flat fields
+    const personal = member.personal || {};
+    const firstName = personal.firstName || member.firstName;
+    const lastName = personal.lastName || member.lastName;
+    const barcode = personal.barcode || member.barcode;
+    const homeClub = personal.homeClub || member.homeClub;
+    const email = personal.email;
+    
+    const name = [firstName, lastName]
       .filter(Boolean)
       .join(' ') || 'Member';
     
     return {
       id: member.memberId,
       name,
+      email,
       providerData: {
-        barcode: member.barcode,
-        homeClub: member.homeClub,
+        barcode,
+        homeClub,
         hasActiveRecurringService: member.hasActiveRecurringService,
       },
     };

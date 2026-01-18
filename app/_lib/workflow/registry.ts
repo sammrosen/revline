@@ -11,7 +11,6 @@ import {
   OperationDefinition,
   BookingPayloadSchema,
   PaymentPayloadSchema,
-  CapturePayloadSchema,
   CommonPayloadSchema,
   LeadStageSchema,
 } from './types';
@@ -150,29 +149,21 @@ export const MAILERLITE_ADAPTER: AdapterDefinition = {
 /**
  * RevLine Adapter (Internal)
  * Handles lead management, event logging, and form submissions
+ * 
+ * TRIGGERS ARE DYNAMIC:
+ * RevLine triggers are workspace-specific, generated from enabled forms.
+ * The workflow registry API injects dynamic triggers based on workspace config.
+ * Each enabled form becomes a trigger where formId = operation name.
+ * 
+ * See: app/api/v1/admin/workflow-registry/route.ts
  */
 export const REVLINE_ADAPTER: AdapterDefinition = {
   id: 'revline',
   name: 'RevLine',
   requiresIntegration: false, // Always available
-  triggers: {
-    email_captured: {
-      name: 'email_captured',
-      label: 'Email Captured',
-      description: 'Fires when a lead submits email on a landing page',
-      payloadSchema: CapturePayloadSchema,
-    },
-    form_submitted: {
-      name: 'form_submitted',
-      label: 'Form Submitted',
-      description: 'Fires when any form is submitted',
-      payloadSchema: z.object({
-        formId: z.string(),
-        email: z.string().email().optional(),
-        source: z.string(),
-      }).passthrough(), // Allow any additional form fields
-    },
-  },
+  // Triggers are DYNAMIC - populated from workspace's enabled forms
+  // The API injects workspace-specific form triggers at runtime
+  triggers: {},
   actions: {
     create_lead: {
       name: 'create_lead',
@@ -319,15 +310,7 @@ export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
         endDate: z.string().optional().describe('End date (YYYY-MM-DD)'),
       }),
     },
-    check_session_balance: {
-      name: 'check_session_balance',
-      label: 'Check Session Balance',
-      description: 'Check if member has session credits for an event type',
-      payloadSchema: AbcIgniteMemberSchema,
-      paramsSchema: z.object({
-        eventTypeId: z.string().optional().describe('Event type ID (uses default if not provided)'),
-      }),
-    },
+    // check_session_balance: removed - requires /session-balance endpoint
 
     // =========================================================================
     // ENROLLMENT ACTIONS
@@ -341,7 +324,6 @@ export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
         eventId: z.string().describe('ABC Ignite event ID'),
         validateServiceRestriction: z.boolean().optional().describe('Validate service restrictions'),
         allowUnfunded: z.boolean().optional().describe('Allow booking even if member has no funding'),
-        checkBalance: z.boolean().optional().describe('Check session balance before enrolling'),
       }),
     },
     unenroll_member: {

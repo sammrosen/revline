@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
 
     // 6. Register with WebhookProcessor for deduplication and audit
     const registration = await WebhookProcessor.register({
-      clientId: client.id,
+      workspaceId: client.id,
       provider: 'revline',
       providerEventId,
       rawBody,
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       logStructured({
         correlationId: registration.correlationId,
         event: 'email_capture_duplicate',
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'revline',
         metadata: { email, source },
       });
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
       logStructured({
         correlationId: registration.correlationId,
         event: 'email_capture_partial_failure',
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'revline',
         error: failures,
         metadata: { email },
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
     logStructured({
       correlationId: registration.correlationId,
       event: 'email_capture_processed',
-      clientId: client.id,
+      workspaceId: client.id,
       provider: 'revline',
       success: true,
       metadata: { 

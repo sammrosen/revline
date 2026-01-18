@@ -1,12 +1,12 @@
 /**
  * Booking Provider Resolver
  * 
- * Determines which booking provider to use for a client based on their integrations.
- * Also handles formId-based client lookup for bespoke forms.
+ * Determines which booking provider to use for a workspace based on their integrations.
+ * Also handles formId-based workspace lookup for bespoke forms.
  */
 
 import { prisma } from '@/app/_lib/db';
-import { IntegrationType, Client, ClientStatus } from '@prisma/client';
+import { IntegrationType, Workspace, WorkspaceStatus } from '@prisma/client';
 import { BookingProvider, BookingProviderCapabilities } from './types';
 import { AbcIgniteBookingProvider } from './providers';
 import { RevlineMeta } from '@/app/_lib/types';
@@ -21,15 +21,15 @@ const BOOKING_PROVIDER_PRIORITY: IntegrationType[] = [
 ];
 
 /**
- * Get the appropriate booking provider for a client
- * Returns null if client has no booking-capable integrations
+ * Get the appropriate booking provider for a workspace
+ * Returns null if workspace has no booking-capable integrations
  */
 export async function getBookingProvider(
-  clientId: string
+  workspaceId: string
 ): Promise<BookingProvider | null> {
-  // Get client's integrations
-  const integrations = await prisma.clientIntegration.findMany({
-    where: { clientId },
+  // Get workspace's integrations
+  const integrations = await prisma.workspaceIntegration.findMany({
+    where: { workspaceId },
     select: { integration: true },
   });
   
@@ -38,7 +38,7 @@ export async function getBookingProvider(
   // Find first matching provider in priority order
   for (const type of BOOKING_PROVIDER_PRIORITY) {
     if (integrationTypes.has(type)) {
-      return await createProvider(type, clientId);
+      return await createProvider(type, workspaceId);
     }
   }
   
@@ -49,14 +49,14 @@ export async function getBookingProvider(
  * Get booking provider by specific type
  */
 export async function getBookingProviderByType(
-  clientId: string,
+  workspaceId: string,
   type: IntegrationType
 ): Promise<BookingProvider | null> {
-  // Verify client has this integration
-  const integration = await prisma.clientIntegration.findUnique({
+  // Verify workspace has this integration
+  const integration = await prisma.workspaceIntegration.findUnique({
     where: {
-      clientId_integration: {
-        clientId,
+      workspaceId_integration: {
+        workspaceId,
         integration: type,
       },
     },
@@ -66,7 +66,7 @@ export async function getBookingProviderByType(
     return null;
   }
   
-  return createProvider(type, clientId);
+  return createProvider(type, workspaceId);
 }
 
 /**
@@ -74,15 +74,15 @@ export async function getBookingProviderByType(
  */
 async function createProvider(
   type: IntegrationType,
-  clientId: string
+  workspaceId: string
 ): Promise<BookingProvider | null> {
   switch (type) {
     case IntegrationType.ABC_IGNITE:
-      return AbcIgniteBookingProvider.forClient(clientId);
+      return AbcIgniteBookingProvider.forClient(workspaceId);
     
     // Future providers:
     // case IntegrationType.CALENDLY:
-    //   return CalendlyBookingProvider.forClient(clientId);
+    //   return CalendlyBookingProvider.forClient(workspaceId);
     
     default:
       return null;
@@ -94,19 +94,19 @@ async function createProvider(
  * Useful for UI to know what steps to show before loading data
  */
 export async function getBookingCapabilities(
-  clientId: string
+  workspaceId: string
 ): Promise<BookingProviderCapabilities | null> {
-  const provider = await getBookingProvider(clientId);
+  const provider = await getBookingProvider(workspaceId);
   return provider?.capabilities ?? null;
 }
 
 /**
- * Check if a client has any booking-capable integrations
+ * Check if a workspace has any booking-capable integrations
  */
-export async function hasBookingProvider(clientId: string): Promise<boolean> {
-  const integrations = await prisma.clientIntegration.findMany({
+export async function hasBookingProvider(workspaceId: string): Promise<boolean> {
+  const integrations = await prisma.workspaceIntegration.findMany({
     where: { 
-      clientId,
+      workspaceId,
       integration: { in: BOOKING_PROVIDER_PRIORITY },
     },
     select: { integration: true },
@@ -116,33 +116,33 @@ export async function hasBookingProvider(clientId: string): Promise<boolean> {
 }
 
 // =============================================================================
-// FORM ID CLIENT LOOKUP
+// FORM ID WORKSPACE LOOKUP
 // =============================================================================
 
 /**
- * Find the client that has a specific formId enabled in their RevLine config.
+ * Find the workspace that has a specific formId enabled in their RevLine config.
  * 
- * This is used by bespoke form pages to find which client they belong to.
- * The formId is configured in the client's RevLine integration meta.forms.
+ * This is used by bespoke form pages to find which workspace they belong to.
+ * The formId is configured in the workspace's RevLine integration meta.forms.
  * 
  * @param formId - The unique form identifier (e.g., 'sportswest-booking')
- * @returns The client if found and active, null if not found
- * @throws Error if multiple clients have the same formId enabled (prevents cross-contamination)
+ * @returns The workspace if found and active, null if not found
+ * @throws Error if multiple workspaces have the same formId enabled (prevents cross-contamination)
  * 
  * @example
  * // In a bespoke form page:
  * const FORM_ID = 'sportswest-booking';
- * const client = await getClientByFormId(FORM_ID);
- * if (!client) notFound();
+ * const workspace = await getWorkspaceByFormId(FORM_ID);
+ * if (!workspace) notFound();
  */
-export async function getClientByFormId(formId: string): Promise<Client | null> {
+export async function getWorkspaceByFormId(formId: string): Promise<Workspace | null> {
   // Find all RevLine integrations
-  const revlineIntegrations = await prisma.clientIntegration.findMany({
+  const revlineIntegrations = await prisma.workspaceIntegration.findMany({
     where: {
       integration: IntegrationType.REVLINE,
     },
     include: {
-      client: true,
+      workspace: true,
     },
   });
   
@@ -162,39 +162,43 @@ export async function getClientByFormId(formId: string): Promise<Client | null> 
   
   // Multiple matches - this is a configuration error
   if (matchingIntegrations.length > 1) {
-    const clientNames = matchingIntegrations.map(i => i.client.name).join(', ');
+    const workspaceNames = matchingIntegrations.map(i => i.workspace.name).join(', ');
     throw new Error(
-      `FormId "${formId}" is enabled for multiple clients: ${clientNames}. ` +
-      `Each formId should only be enabled for one client to prevent data cross-contamination.`
+      `FormId "${formId}" is enabled for multiple workspaces: ${workspaceNames}. ` +
+      `Each formId should only be enabled for one workspace to prevent data cross-contamination.`
     );
   }
   
-  // Single match - return the client if active
-  const client = matchingIntegrations[0].client;
+  // Single match - return the workspace if active
+  const workspace = matchingIntegrations[0].workspace;
   
-  if (client.status !== ClientStatus.ACTIVE) {
-    return null; // Client exists but is paused
+  if (workspace.status !== WorkspaceStatus.ACTIVE) {
+    return null; // Workspace exists but is paused
   }
   
-  return client;
+  return workspace;
 }
 
 /**
- * Get the client and their booking capabilities by formId.
- * Convenience function that combines getClientByFormId with getBookingCapabilities.
+ * Get the workspace and their booking capabilities by formId.
+ * Convenience function that combines getWorkspaceByFormId with getBookingCapabilities.
  * 
  * @param formId - The unique form identifier
- * @returns Object with client and capabilities, or null if not found
+ * @returns Object with workspace and capabilities, or null if not found
  */
-export async function getClientAndCapabilitiesByFormId(formId: string): Promise<{
-  client: Client;
+export async function getWorkspaceAndCapabilitiesByFormId(formId: string): Promise<{
+  workspace: Workspace;
   capabilities: BookingProviderCapabilities;
 } | null> {
-  const client = await getClientByFormId(formId);
-  if (!client) return null;
+  const workspace = await getWorkspaceByFormId(formId);
+  if (!workspace) return null;
   
-  const capabilities = await getBookingCapabilities(client.id);
+  const capabilities = await getBookingCapabilities(workspace.id);
   if (!capabilities) return null;
   
-  return { client, capabilities };
+  return { workspace, capabilities };
 }
+
+// Legacy aliases for backwards compatibility
+export const getClientByFormId = getWorkspaceByFormId;
+export const getClientAndCapabilitiesByFormId = getWorkspaceAndCapabilitiesByFormId;

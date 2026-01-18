@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { testPrisma, createTestClient, createAbcIgniteIntegration } from '../setup';
+import { testPrisma, createTestWorkspace, createAbcIgniteIntegration } from '../setup';
 
 // Mock fetch for API calls
 const mockFetch = vi.fn();
@@ -36,7 +36,7 @@ describe('ABC Ignite Adapter', () => {
 
   describe('configuration validation', () => {
     it('should detect missing clubNumber in meta', async () => {
-      const client = await createTestClient({ slug: 'abc-config-test' });
+      const client = await createTestWorkspace({ slug: 'abc-config-test' });
       
       // Create integration WITHOUT clubNumber in meta
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
@@ -51,12 +51,12 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should detect missing secrets', async () => {
-      const client = await createTestClient({ slug: 'abc-no-secrets' });
+      const client = await createTestWorkspace({ slug: 'abc-no-secrets' });
       
       // Create integration with no secrets (using base function)
-      await testPrisma.clientIntegration.create({
+      await testPrisma.workspaceIntegration.create({
         data: {
-          clientId: client.id,
+          workspaceId: client.id,
           integration: 'ABC_IGNITE',
           secrets: [], // No secrets
           meta: { clubNumber: TEST_CLUB_NUMBER },
@@ -71,7 +71,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should validate config and return missing items', async () => {
-      const client = await createTestClient({ slug: 'abc-validate' });
+      const client = await createTestWorkspace({ slug: 'abc-validate' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -89,7 +89,7 @@ describe('ABC Ignite Adapter', () => {
 
   describe('forClient factory', () => {
     it('should return null when integration does not exist', async () => {
-      const client = await createTestClient({ slug: 'abc-no-integration' });
+      const client = await createTestWorkspace({ slug: 'abc-no-integration' });
       // No integration created
       
       const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
@@ -99,7 +99,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should load adapter successfully when properly configured', async () => {
-      const client = await createTestClient({ slug: 'abc-load-success' });
+      const client = await createTestWorkspace({ slug: 'abc-load-success' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
         eventTypes: {
@@ -115,7 +115,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should return correct client ID', async () => {
-      const client = await createTestClient({ slug: 'abc-client-id' });
+      const client = await createTestWorkspace({ slug: 'abc-client-id' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -129,7 +129,7 @@ describe('ABC Ignite Adapter', () => {
 
   describe('API request handling', () => {
     it('should handle successful API response', async () => {
-      const client = await createTestClient({ slug: 'abc-api-success' });
+      const client = await createTestWorkspace({ slug: 'abc-api-success' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -139,7 +139,7 @@ describe('ABC Ignite Adapter', () => {
         ok: true,
         json: async () => ({
           status: 'success',
-          results: [
+          eventTypes: [
             { eventTypeId: '123', name: 'PT Session', category: 'Appointment' },
           ],
         }),
@@ -165,7 +165,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should mark 5xx errors as retryable', async () => {
-      const client = await createTestClient({ slug: 'abc-5xx-error' });
+      const client = await createTestWorkspace({ slug: 'abc-5xx-error' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -187,7 +187,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should NOT mark 4xx errors as retryable', async () => {
-      const client = await createTestClient({ slug: 'abc-4xx-error' });
+      const client = await createTestWorkspace({ slug: 'abc-4xx-error' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -209,7 +209,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should handle network errors as retryable', async () => {
-      const client = await createTestClient({ slug: 'abc-network-error' });
+      const client = await createTestWorkspace({ slug: 'abc-network-error' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -227,7 +227,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should parse error messages from JSON response', async () => {
-      const client = await createTestClient({ slug: 'abc-json-error' });
+      const client = await createTestWorkspace({ slug: 'abc-json-error' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -251,7 +251,7 @@ describe('ABC Ignite Adapter', () => {
 
   describe('member operations', () => {
     it('should lookup member by barcode', async () => {
-      const client = await createTestClient({ slug: 'abc-member-lookup' });
+      const client = await createTestWorkspace({ slug: 'abc-member-lookup' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -260,7 +260,7 @@ describe('ABC Ignite Adapter', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          results: [
+          members: [
             { memberId: 'member-123', firstName: 'John', lastName: 'Doe', barcode: '12345' },
           ],
         }),
@@ -276,7 +276,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should return null for non-existent member', async () => {
-      const client = await createTestClient({ slug: 'abc-member-not-found' });
+      const client = await createTestWorkspace({ slug: 'abc-member-not-found' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -284,7 +284,7 @@ describe('ABC Ignite Adapter', () => {
       // Mock empty response
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ results: [] }),
+        json: async () => ({ members: [] }),
       });
       
       const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
@@ -299,7 +299,7 @@ describe('ABC Ignite Adapter', () => {
 
   describe('enrollment operations', () => {
     it('should enroll member by memberId', async () => {
-      const client = await createTestClient({ slug: 'abc-enroll-id' });
+      const client = await createTestWorkspace({ slug: 'abc-enroll-id' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -321,7 +321,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should enroll member by barcode (with lookup)', async () => {
-      const client = await createTestClient({ slug: 'abc-enroll-barcode' });
+      const client = await createTestWorkspace({ slug: 'abc-enroll-barcode' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -330,7 +330,7 @@ describe('ABC Ignite Adapter', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          results: [{ memberId: 'member-789', barcode: '12345' }],
+          members: [{ memberId: 'member-789', barcode: '12345' }],
         }),
       });
       
@@ -350,7 +350,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should fail enrollment when member not found by barcode', async () => {
-      const client = await createTestClient({ slug: 'abc-enroll-not-found' });
+      const client = await createTestWorkspace({ slug: 'abc-enroll-not-found' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -358,7 +358,7 @@ describe('ABC Ignite Adapter', () => {
       // Mock empty member lookup
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ results: [] }),
+        json: async () => ({ members: [] }),
       });
       
       const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
@@ -371,7 +371,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should unenroll member successfully', async () => {
-      const client = await createTestClient({ slug: 'abc-unenroll' });
+      const client = await createTestWorkspace({ slug: 'abc-unenroll' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -393,7 +393,7 @@ describe('ABC Ignite Adapter', () => {
 
   describe('waitlist operations', () => {
     it('should add member to waitlist', async () => {
-      const client = await createTestClient({ slug: 'abc-waitlist-add' });
+      const client = await createTestWorkspace({ slug: 'abc-waitlist-add' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -414,7 +414,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should remove member from waitlist', async () => {
-      const client = await createTestClient({ slug: 'abc-waitlist-remove' });
+      const client = await createTestWorkspace({ slug: 'abc-waitlist-remove' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -436,7 +436,7 @@ describe('ABC Ignite Adapter', () => {
 
   describe('secret security', () => {
     it('should send secrets only in headers, never in URL', async () => {
-      const client = await createTestClient({ slug: 'abc-secret-headers' });
+      const client = await createTestWorkspace({ slug: 'abc-secret-headers' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -466,7 +466,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should not include secrets in error messages', async () => {
-      const client = await createTestClient({ slug: 'abc-secret-errors' });
+      const client = await createTestWorkspace({ slug: 'abc-secret-errors' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -490,7 +490,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should not expose secrets through public getters', async () => {
-      const client = await createTestClient({ slug: 'abc-secret-getters' });
+      const client = await createTestWorkspace({ slug: 'abc-secret-getters' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -525,7 +525,7 @@ describe('ABC Ignite Adapter', () => {
 
   describe('connection test', () => {
     it('should test connection successfully', async () => {
-      const client = await createTestClient({ slug: 'abc-test-conn' });
+      const client = await createTestWorkspace({ slug: 'abc-test-conn' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });
@@ -534,7 +534,7 @@ describe('ABC Ignite Adapter', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          results: [
+          eventTypes: [
             { eventTypeId: '1', name: 'PT Session' },
             { eventTypeId: '2', name: 'Group Class' },
           ],
@@ -551,7 +551,7 @@ describe('ABC Ignite Adapter', () => {
     });
 
     it('should report connection failure', async () => {
-      const client = await createTestClient({ slug: 'abc-test-conn-fail' });
+      const client = await createTestWorkspace({ slug: 'abc-test-conn-fail' });
       await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
         clubNumber: TEST_CLUB_NUMBER,
       });

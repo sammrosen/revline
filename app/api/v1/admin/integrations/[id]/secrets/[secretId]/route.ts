@@ -35,9 +35,9 @@ export async function PATCH(
     }
 
     // Get the integration
-    const integration = await prisma.clientIntegration.findUnique({
+    const integration = await prisma.workspaceIntegration.findUnique({
       where: { id },
-      select: { id: true, clientId: true, integration: true, secrets: true },
+      select: { id: true, workspaceId: true, integration: true, secrets: true },
     });
 
     if (!integration) {
@@ -88,14 +88,14 @@ export async function PATCH(
     updatedSecrets[secretIndex] = updatedSecret;
 
     // Update the integration
-    await prisma.clientIntegration.update({
+    await prisma.workspaceIntegration.update({
       where: { id },
       data: { secrets: updatedSecrets as unknown as Prisma.InputJsonValue },
     });
 
     // Emit event
     await emitEvent({
-      clientId: integration.clientId,
+      workspaceId: integration.workspaceId,
       system: EventSystem.BACKEND,
       eventType: 'integration_secret_rotated',
       success: true,
@@ -131,9 +131,9 @@ export async function DELETE(
 
   try {
     // Get the integration
-    const integration = await prisma.clientIntegration.findUnique({
+    const integration = await prisma.workspaceIntegration.findUnique({
       where: { id },
-      select: { id: true, clientId: true, integration: true, secrets: true },
+      select: { id: true, workspaceId: true, integration: true, secrets: true },
     });
 
     if (!integration) {
@@ -159,14 +159,14 @@ export async function DELETE(
     const updatedSecrets = secrets.filter(s => s.id !== secretId);
 
     // Update the integration
-    await prisma.clientIntegration.update({
+    await prisma.workspaceIntegration.update({
       where: { id },
       data: { secrets: updatedSecrets as unknown as Prisma.InputJsonValue },
     });
 
     // Emit event
     await emitEvent({
-      clientId: integration.clientId,
+      workspaceId: integration.workspaceId,
       system: EventSystem.BACKEND,
       eventType: 'integration_secret_deleted',
       success: true,

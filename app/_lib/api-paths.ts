@@ -35,17 +35,17 @@ export const AdminApi = {
   // Login 2FA verification
   loginVerify2fa: `${API_BASE}/admin/login/verify-2fa`,
   
-  // Clients
-  clients: {
-    list: `${API_BASE}/admin/clients`,
-    create: `${API_BASE}/admin/clients`,
-    byId: (id: string) => `${API_BASE}/admin/clients/${id}`,
-    healthCheck: (id: string) => `${API_BASE}/admin/clients/${id}/health-check`,
-    testAlert: (id: string) => `${API_BASE}/admin/clients/${id}/test-alert`,
-    testPushover: (id: string) => `${API_BASE}/admin/clients/${id}/test-pushover`,
-    testAction: (id: string) => `${API_BASE}/admin/clients/${id}/test-action`,
-    dependencyGraph: (id: string) => `${API_BASE}/admin/clients/${id}/dependency-graph`,
-    mailerliteInsights: (id: string) => `${API_BASE}/admin/clients/${id}/mailerlite-insights`,
+  // Workspaces
+  workspaces: {
+    list: `${API_BASE}/admin/workspaces`,
+    create: `${API_BASE}/admin/workspaces`,
+    byId: (id: string) => `${API_BASE}/admin/workspaces/${id}`,
+    healthCheck: (id: string) => `${API_BASE}/admin/workspaces/${id}/health-check`,
+    testAlert: (id: string) => `${API_BASE}/admin/workspaces/${id}/test-alert`,
+    testPushover: (id: string) => `${API_BASE}/admin/workspaces/${id}/test-pushover`,
+    testAction: (id: string) => `${API_BASE}/admin/workspaces/${id}/test-action`,
+    dependencyGraph: (id: string) => `${API_BASE}/admin/workspaces/${id}/dependency-graph`,
+    mailerliteInsights: (id: string) => `${API_BASE}/admin/workspaces/${id}/mailerlite-insights`,
   },
   
   // Integrations
@@ -99,6 +99,7 @@ export const BookingApi = {
   availability: `${API_BASE}/booking/availability`,
   eligibility: `${API_BASE}/booking/eligibility`,
   create: `${API_BASE}/booking/create`,
+  employees: `${API_BASE}/booking/employees`,
 } as const;
 
 /**

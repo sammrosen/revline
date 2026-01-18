@@ -98,10 +98,33 @@ export interface AbcIgniteEventType {
 }
 
 /**
- * ABC Ignite member in event context
+ * ABC Ignite member personal info (nested in GET /members response)
+ */
+export interface AbcIgniteMemberPersonal {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  primaryPhone?: string;
+  barcode?: string;
+  homeClub?: string;
+  isActive?: string;
+  memberStatus?: string;
+  birthDate?: string;
+  gender?: string;
+}
+
+/**
+ * ABC Ignite member
+ * 
+ * Supports two response formats:
+ * - GET /members: Has nested `personal` object with member details
+ * - Event member context: Has flat fields directly on the object
  */
 export interface AbcIgniteMember {
   memberId: string;
+  // Nested personal info (from GET /members endpoint)
+  personal?: AbcIgniteMemberPersonal;
+  // Flat fields for backwards compatibility (event member context)
   hasActiveRecurringService?: boolean;
   opportunityLevel?: string;
   lastUsed?: string;
@@ -117,12 +140,12 @@ export interface AbcIgniteMember {
 }
 
 /**
- * Supporting types
+ * Training level for event types
+ * Used in eventTrainingLevels array from /calendars/eventtypes
  */
 export interface AbcIgniteEventTrainingLevel {
-  eventTrainingLevelId?: string;
-  name?: string;
-  description?: string;
+  levelId?: string;
+  levelName?: string;
 }
 
 export interface AbcIgniteWaitList {
@@ -184,40 +207,119 @@ export interface WaitlistResult {
 }
 
 /**
- * API list response wrapper
+ * Parameters for creating an appointment from availability
  */
-export interface AbcIgniteListResponse<T> {
-  status?: string;
-  results?: T[];
-  pagingStatus?: {
-    totalCount?: number;
-    pageSize?: number;
-    pageNumber?: number;
-  };
+export interface CreateAppointmentParams {
+  employeeId: string;
+  eventTypeId: string;
+  levelId: string;
+  startTime: string;  // Format: "YYYY-MM-DD HH:mm:ss"
+  memberId: string;
 }
 
 /**
- * Availability slot for employee/event booking
+ * Result of appointment creation
+ */
+export interface CreateAppointmentResult {
+  success: boolean;
+  eventId?: string;
+  message?: string;
+}
+
+/**
+ * ABC API response status
+ */
+interface AbcApiStatus {
+  message?: string;
+  count?: string;
+}
+
+/**
+ * Event types response
+ * GET /{clubNumber}/calendars/eventtypes
+ */
+interface AbcEventTypesResponse {
+  status?: AbcApiStatus;
+  eventTypes?: AbcIgniteEventType[];
+}
+
+/**
+ * Events response
+ * GET /{clubNumber}/calendars/events
+ */
+interface AbcEventsResponse {
+  status?: AbcApiStatus;
+  events?: AbcIgniteEvent[];
+}
+
+/**
+ * Members response
+ * GET /{clubNumber}/members
+ */
+interface AbcMembersResponse {
+  status?: AbcApiStatus;
+  members?: AbcIgniteMember[];
+}
+
+/**
+ * Time block within a day's availability
+ * Represents a continuous period when the employee is available
+ */
+export interface AbcIgniteAvailabilityTimeBlock {
+  /** Local time HH:MM format */
+  startTime: string;
+  /** Local time HH:MM format */
+  endTime: string;
+  /** UTC ISO datetime */
+  utcStartDateTime: string;
+  /** UTC ISO datetime */
+  utcEndDateTime: string;
+}
+
+/**
+ * Day availability containing time blocks
+ */
+export interface AbcIgniteAvailabilityDay {
+  /** Date in MM/DD/YYYY format */
+  date: string;
+  /** Available time blocks for this day */
+  times: AbcIgniteAvailabilityTimeBlock[];
+}
+
+/**
+ * Availability response
+ * GET /{clubNumber}/employees/{employeeId}/availability
+ */
+interface AbcAvailabilityResponse {
+  status?: AbcApiStatus;
+  request?: {
+    clubNumber: string;
+    employeeId: string;
+    eventTypeId: string;
+    levelId?: string;
+    startDate: string;
+    endDate: string;
+  };
+  availabilities?: AbcIgniteAvailabilityDay[];
+}
+
+/**
+ * Flattened availability slot for booking UI
+ * Created by splitting time blocks based on event duration
  */
 export interface AbcIgniteAvailabilitySlot {
+  /** UTC ISO datetime for slot start */
   startTime: string;
+  /** UTC ISO datetime for slot end */
   endTime: string;
-  employeeId?: string;
-  employeeName?: string;
-  eventTypeId?: string;
+  /** Original date from API (MM/DD/YYYY) */
+  date: string;
+  /** Local start time (HH:MM) */
+  localStartTime: string;
+  /** Local end time (HH:MM) */
+  localEndTime: string;
+  /** Slot is available for booking */
   available: boolean;
-}
-
-/**
- * Session balance information for a member
- */
-export interface AbcIgniteSessionBalance {
-  memberId: string;
-  eventTypeId: string;
-  totalSessions: number;
-  usedSessions: number;
-  remainingSessions: number;
-  unlimited: boolean;
 }
 
 /**
@@ -251,11 +353,11 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   readonly type = IntegrationType.ABC_IGNITE;
 
   /**
-   * Load ABC Ignite adapter for a client
+   * Load ABC Ignite adapter for a workspace
    */
-  static async forClient(clientId: string): Promise<AbcIgniteAdapter | null> {
+  static async forClient(workspaceId: string): Promise<AbcIgniteAdapter | null> {
     const data = await BaseIntegrationAdapter.loadAdapter<AbcIgniteMeta>(
-      clientId,
+      workspaceId,
       IntegrationType.ABC_IGNITE
     );
     
@@ -265,17 +367,17 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
 
     // Ensure secrets are configured
     if (data.secrets.length === 0) {
-      console.warn('ABC Ignite integration has no secrets configured:', { clientId });
+      console.warn('ABC Ignite integration has no secrets configured:', { workspaceId });
       return null;
     }
     
     // Ensure clubNumber is configured
     if (!data.meta?.clubNumber) {
-      console.warn('ABC Ignite integration missing clubNumber in meta:', { clientId });
+      console.warn('ABC Ignite integration missing clubNumber in meta:', { workspaceId });
       return null;
     }
     
-    return new AbcIgniteAdapter(clientId, data.secrets, data.meta);
+    return new AbcIgniteAdapter(workspaceId, data.secrets, data.meta);
   }
 
   /**
@@ -289,17 +391,72 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   }
 
   /**
-   * Get the default event type ID from meta (optional)
+   * Get the default event type key from meta
    */
   getDefaultEventTypeId(): string | undefined {
     return this.meta?.defaultEventTypeId;
   }
 
   /**
-   * Get the default employee/trainer ID from meta (optional)
+   * Get the default employee key from meta
    */
   getDefaultEmployeeId(): string | undefined {
     return this.meta?.defaultEmployeeId;
+  }
+
+  /**
+   * Get event type config by key
+   * Returns the full config including ABC ID, name, duration, and levelId
+   */
+  getEventTypeConfig(key: string): { 
+    id: string; 
+    name: string; 
+    category: 'Appointment' | 'Event';
+    duration?: number; 
+    levelId?: string;
+  } | undefined {
+    return this.meta?.eventTypes?.[key];
+  }
+
+  /**
+   * Get the default event type config
+   * Convenience method that combines getDefaultEventTypeId + getEventTypeConfig
+   */
+  getDefaultEventTypeConfig(): { 
+    id: string; 
+    name: string; 
+    category: 'Appointment' | 'Event';
+    duration?: number; 
+    levelId?: string;
+  } | undefined {
+    const key = this.getDefaultEventTypeId();
+    if (!key) return undefined;
+    return this.getEventTypeConfig(key);
+  }
+
+  /**
+   * Get all configured employees
+   */
+  getConfiguredEmployees(): Record<string, { id: string; name: string; title?: string }> {
+    return this.meta?.employees || {};
+  }
+
+  /**
+   * Get employee config by key
+   * Returns the full config including ABC ID, name, and title
+   */
+  getEmployeeConfig(key: string): { id: string; name: string; title?: string } | undefined {
+    return this.meta?.employees?.[key];
+  }
+
+  /**
+   * Get the default employee config
+   * Convenience method that combines getDefaultEmployeeId + getEmployeeConfig
+   */
+  getDefaultEmployeeConfig(): { id: string; name: string; title?: string } | undefined {
+    const key = this.getDefaultEmployeeId();
+    if (!key) return undefined;
+    return this.getEmployeeConfig(key);
   }
 
   // ===========================================================================
@@ -372,7 +529,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       console.error('ABC Ignite API error:', {
-        clientId: this.clientId,
+        workspaceId: this.workspaceId,
         method,
         endpoint,
         error: message,
@@ -419,7 +576,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
     const queryString = params.toString();
     const endpoint = `/members${queryString ? `?${queryString}` : ''}`;
     
-    const result = await this.apiRequest<AbcIgniteListResponse<AbcIgniteMember>>(
+    const result = await this.apiRequest<AbcMembersResponse>(
       'GET',
       endpoint
     );
@@ -428,7 +585,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
       return result as IntegrationResult<AbcIgniteMember[]>;
     }
 
-    return this.success(result.data?.results || []);
+    return this.success(result.data?.members || []);
   }
 
   /**
@@ -459,7 +616,8 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
    * GET /{clubNumber}/members/{memberId}/appointments
    */
   async getMemberEvents(memberId: string): Promise<IntegrationResult<AbcIgniteEvent[]>> {
-    const result = await this.apiRequest<AbcIgniteListResponse<AbcIgniteEvent>>(
+    // Response likely has "appointments" key
+    const result = await this.apiRequest<{ status?: AbcApiStatus; appointments?: AbcIgniteEvent[] }>(
       'GET',
       `/members/${memberId}/appointments`
     );
@@ -468,7 +626,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
       return result as IntegrationResult<AbcIgniteEvent[]>;
     }
 
-    return this.success(result.data?.results || []);
+    return this.success(result.data?.appointments || []);
   }
 
   // ===========================================================================
@@ -509,7 +667,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
     const queryString = params.toString();
     const endpoint = `/calendars/events${queryString ? `?${queryString}` : ''}`;
     
-    const result = await this.apiRequest<AbcIgniteListResponse<AbcIgniteEvent>>(
+    const result = await this.apiRequest<AbcEventsResponse>(
       'GET',
       endpoint
     );
@@ -518,7 +676,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
       return result as IntegrationResult<AbcIgniteEvent[]>;
     }
 
-    return this.success(result.data?.results || []);
+    return this.success(result.data?.events || []);
   }
 
   /**
@@ -553,7 +711,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
     const queryString = params.toString();
     const endpoint = `/calendars/eventtypes${queryString ? `?${queryString}` : ''}`;
     
-    const result = await this.apiRequest<AbcIgniteListResponse<AbcIgniteEventType>>(
+    const result = await this.apiRequest<AbcEventTypesResponse>(
       'GET',
       endpoint
     );
@@ -562,7 +720,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
       return result as IntegrationResult<AbcIgniteEventType[]>;
     }
 
-    return this.success(result.data?.results || []);
+    return this.success(result.data?.eventTypes || []);
   }
 
   /**
@@ -579,124 +737,74 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
 
   /**
    * Get employee availability for a specific event type
-   * GET /{clubNumber}/employees/{employeeId}/availability
+   * GET /{clubNumber}/employees/bookingavailability/{employeeId}
+   * 
+   * Returns raw availability days with time blocks. The provider is responsible
+   * for splitting time blocks into bookable slots based on event duration.
    * 
    * @param employeeId - The employee/trainer ID
    * @param eventTypeId - The event type to check availability for
-   * @param dateRange - Optional date range filter
+   * @param dateRange - Optional date range filter (format: MM/DD/YYYY)
+   * @param levelId - Optional training level ID
    */
   async getEmployeeAvailability(
     employeeId: string,
     eventTypeId: string,
-    dateRange?: DateRange
-  ): Promise<IntegrationResult<AbcIgniteAvailabilitySlot[]>> {
+    dateRange?: DateRange,
+    levelId?: string
+  ): Promise<IntegrationResult<AbcIgniteAvailabilityDay[]>> {
     const params = new URLSearchParams();
     params.append('eventTypeId', eventTypeId);
     
     if (dateRange?.startDate) {
-      params.append('startDate', dateRange.startDate);
+      // Convert ISO date to MM/DD/YYYY format expected by ABC API
+      params.append('startDate', this.formatDateForApi(dateRange.startDate));
     }
     if (dateRange?.endDate) {
-      params.append('endDate', dateRange.endDate);
+      params.append('endDate', this.formatDateForApi(dateRange.endDate));
+    }
+    if (levelId) {
+      params.append('levelId', levelId);
     }
 
     const queryString = params.toString();
-    const endpoint = `/employees/${employeeId}/availability?${queryString}`;
+    const endpoint = `/employees/bookingavailability/${employeeId}?${queryString}`;
     
-    const result = await this.apiRequest<AbcIgniteListResponse<AbcIgniteAvailabilitySlot>>(
+    const result = await this.apiRequest<AbcAvailabilityResponse>(
       'GET',
       endpoint
     );
 
     if (!result.success) {
-      return result as IntegrationResult<AbcIgniteAvailabilitySlot[]>;
+      return result as IntegrationResult<AbcIgniteAvailabilityDay[]>;
     }
 
-    return this.success(result.data?.results || []);
+    return this.success(result.data?.availabilities || []);
   }
 
   /**
-   * Get available employees for a specific event
-   * GET /{clubNumber}/calendars/events/{eventId}/availableemployees
+   * Format date for ABC API (MM/DD/YYYY)
+   * Accepts ISO format (YYYY-MM-DD) or already formatted dates
    */
-  async getAvailableEmployees(eventId: string): Promise<IntegrationResult<AbcIgniteMember[]>> {
-    const result = await this.apiRequest<AbcIgniteListResponse<AbcIgniteMember>>(
-      'GET',
-      `/calendars/events/${eventId}/availableemployees`
-    );
-
-    if (!result.success) {
-      return result as IntegrationResult<AbcIgniteMember[]>;
+  private formatDateForApi(date: string): string {
+    // If already in MM/DD/YYYY format, return as-is
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(date)) {
+      return date;
     }
-
-    return this.success(result.data?.results || []);
+    // Convert from ISO (YYYY-MM-DD) to MM/DD/YYYY
+    const [year, month, day] = date.split('-');
+    if (year && month && day) {
+      return `${month}/${day}/${year}`;
+    }
+    // Fallback - return as-is
+    return date;
   }
 
-  /**
-   * Get session balance for a member and event type
-   * GET /{clubNumber}/session-balance
-   * 
-   * @param memberId - The member ID
-   * @param eventTypeId - The event type to check balance for
-   */
-  async getSessionBalance(
-    memberId: string,
-    eventTypeId: string
-  ): Promise<IntegrationResult<AbcIgniteSessionBalance>> {
-    const params = new URLSearchParams();
-    params.append('memberId', memberId);
-    params.append('eventTypeId', eventTypeId);
-
-    const endpoint = `/session-balance?${params.toString()}`;
-    
-    const result = await this.apiRequest<AbcIgniteSessionBalance>('GET', endpoint);
-    
-    if (!result.success) {
-      return result;
-    }
-
-    // Ensure the response includes member and event type info
-    return this.success({
-      ...result.data!,
-      memberId,
-      eventTypeId,
-    });
-  }
-
-  /**
-   * Check if a member can enroll in an event (has sessions/funding)
-   * Convenience method combining session balance check with validation
-   */
-  async canEnroll(
-    memberId: string,
-    eventTypeId: string
-  ): Promise<IntegrationResult<{ canEnroll: boolean; reason?: string; balance?: AbcIgniteSessionBalance }>> {
-    const balanceResult = await this.getSessionBalance(memberId, eventTypeId);
-    
-    if (!balanceResult.success) {
-      return {
-        success: false,
-        error: balanceResult.error,
-        data: { canEnroll: false, reason: balanceResult.error },
-      };
-    }
-
-    const balance = balanceResult.data!;
-    
-    // Check if member has sessions available
-    if (!balance.unlimited && balance.remainingSessions <= 0) {
-      return this.success({
-        canEnroll: false,
-        reason: 'No session credits remaining',
-        balance,
-      });
-    }
-
-    return this.success({
-      canEnroll: true,
-      balance,
-    });
-  }
+  // NOTE: getAvailableEmployees and getSessionBalance/canEnroll removed
+  // These require endpoints not currently activated:
+  // - /calendars/events/{id}/availableemployees
+  // - /session-balance
+  // Re-add when those endpoints are activated in ABC Ignite
 
   // ===========================================================================
   // ENROLLMENT OPERATIONS
@@ -704,7 +812,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
 
   /**
    * Enroll a member in an event (book appointment or class)
-   * POST /{clubNumber}/calendars/secured/events/{eventId}/members/{memberId}
+   * POST /{clubNumber}/calendars/events/{eventId}/members/{memberId}
    * 
    * Supports both direct memberId or barcode lookup.
    * 
@@ -766,7 +874,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
 
     const result = await this.apiRequest<unknown>(
       'POST',
-      `/calendars/secured/events/${eventId}/members/${memberId}`,
+      `/calendars/events/${eventId}/members/${memberId}`,
       body
     );
 
@@ -792,8 +900,47 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   }
 
   /**
+   * Create an appointment from availability
+   * POST /{clubNumber}/calendars/events
+   * 
+   * Used to book an appointment when selecting from employee availability.
+   * Unlike enrollMember which adds to an existing event, this creates a new appointment.
+   * 
+   * @param params - Appointment creation parameters
+   */
+  async createAppointment(
+    params: CreateAppointmentParams
+  ): Promise<IntegrationResult<CreateAppointmentResult>> {
+    const result = await this.apiRequest<{ status?: AbcApiStatus; eventId?: string }>(
+      'POST',
+      '/calendars/events',
+      {
+        employeeId: params.employeeId,
+        eventTypeId: params.eventTypeId,
+        levelId: params.levelId,
+        startTime: params.startTime,
+        memberId: params.memberId,
+      }
+    );
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error,
+        data: { success: false, message: result.error },
+      };
+    }
+
+    return this.success({
+      success: true,
+      eventId: result.data?.eventId,
+      message: 'Appointment created successfully',
+    });
+  }
+
+  /**
    * Unenroll a member from an event (cancel appointment or class booking)
-   * DELETE /{clubNumber}/calendars/secured/events/{eventId}/members/{memberId}
+   * DELETE /{clubNumber}/calendars/events/{eventId}/members/{memberId}
    * 
    * Supports both direct memberId or barcode lookup.
    */
@@ -825,7 +972,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
 
     const result = await this.apiRequest<unknown>(
       'DELETE',
-      `/calendars/secured/events/${eventId}/members/${memberId}`
+      `/calendars/events/${eventId}/members/${memberId}`
     );
 
     if (!result.success) {
@@ -855,7 +1002,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
 
   /**
    * Add a member to event waitlist
-   * POST /{clubNumber}/calendars/secured/events/{eventId}/waitlist/members/{memberId}
+   * POST /{clubNumber}/calendars/events/{eventId}/waitlist/members/{memberId}
    * 
    * Supports both direct memberId or barcode lookup.
    */
@@ -882,7 +1029,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
 
     const result = await this.apiRequest<unknown>(
       'POST',
-      `/calendars/secured/events/${eventId}/waitlist/members/${memberId}`
+      `/calendars/events/${eventId}/waitlist/members/${memberId}`
     );
 
     if (!result.success) {
@@ -906,7 +1053,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
 
   /**
    * Remove a member from event waitlist
-   * DELETE /{clubNumber}/calendars/secured/events/{eventId}/waitlist/members/{memberId}
+   * DELETE /{clubNumber}/calendars/events/{eventId}/waitlist/members/{memberId}
    * 
    * Supports both direct memberId or barcode lookup.
    */
@@ -933,7 +1080,7 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
 
     const result = await this.apiRequest<unknown>(
       'DELETE',
-      `/calendars/secured/events/${eventId}/waitlist/members/${memberId}`
+      `/calendars/events/${eventId}/waitlist/members/${memberId}`
     );
 
     if (!result.success) {

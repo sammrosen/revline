@@ -25,13 +25,13 @@ export async function GET(request: NextRequest) {
 
   try {
     // Find all RevLine integrations
-    const revlineIntegrations = await prisma.clientIntegration.findMany({
+    const revlineIntegrations = await prisma.workspaceIntegration.findMany({
       where: {
         integration: IntegrationType.REVLINE,
-        ...(excludeClientId && { clientId: { not: excludeClientId } }),
+        ...(excludeClientId && { workspaceId: { not: excludeClientId } }),
       },
       include: {
-        client: {
+        workspace: {
           select: { id: true, name: true, slug: true },
         },
       },
@@ -49,10 +49,10 @@ export async function GET(request: NextRequest) {
     if (matchingIntegration) {
       return NextResponse.json({
         inUse: true,
-        client: {
-          id: matchingIntegration.client.id,
-          name: matchingIntegration.client.name,
-          slug: matchingIntegration.client.slug,
+        workspace: {
+          id: matchingIntegration.workspace.id,
+          name: matchingIntegration.workspace.name,
+          slug: matchingIntegration.workspace.slug,
         },
       });
     }

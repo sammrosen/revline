@@ -79,7 +79,7 @@ async function seedWorkflows() {
   console.log('Starting workflow migration...\n');
 
   // Get all clients with their integrations
-  const clients = await prisma.client.findMany({
+  const clients = await prisma.workspace.findMany({
     include: {
       integrations: {
         select: {
@@ -155,7 +155,7 @@ async function seedWorkflows() {
       // Create workflow (disabled by default - admin should review and enable)
       await prisma.workflow.create({
         data: {
-          clientId: client.id,
+          workspaceId: client.id,
           name: template.name,
           description: template.description,
           enabled: false, // Start disabled so admin can review

@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
 
     // Emit event for audit trail
     await emitEvent({
-      clientId: 'system',
+      workspaceId: 'system',
       system: EventSystem.CRON,
       eventType: 'retention_cleanup_completed',
       success: true,
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
 
     // Emit failure event
     await emitEvent({
-      clientId: 'system',
+      workspaceId: 'system',
       system: EventSystem.CRON,
       eventType: 'retention_cleanup_failed',
       success: false,

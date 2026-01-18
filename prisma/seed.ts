@@ -123,14 +123,14 @@ async function main() {
   const YOUR_CLIENT_SLUG = 'sam'; // Change this to your slug
   const YOUR_CLIENT_NAME = 'Sam Rosen'; // Change this to your name
 
-  let client = await prisma.client.findUnique({
+  let client = await prisma.workspace.findUnique({
     where: { slug: YOUR_CLIENT_SLUG },
   });
 
   if (client) {
     console.log(`   ✓ Client "${YOUR_CLIENT_NAME}" already exists\n`);
   } else {
-    client = await prisma.client.create({
+    client = await prisma.workspace.create({
       data: {
         name: YOUR_CLIENT_NAME,
         slug: YOUR_CLIENT_SLUG,
@@ -142,10 +142,10 @@ async function main() {
 
   // 3. Migrate MailerLite Integration
   console.log('📦 Step 3: MailerLite Integration');
-  const existingMailerlite = await prisma.clientIntegration.findUnique({
+  const existingMailerlite = await prisma.workspaceIntegration.findUnique({
     where: {
-      clientId_integration: {
-        clientId: client.id,
+      workspaceId_integration: {
+        workspaceId: client.id,
         integration: IntegrationType.MAILERLITE,
       },
     },
@@ -180,9 +180,9 @@ async function main() {
         routing['lead.paid'] = 'customers';
       }
 
-      await prisma.clientIntegration.create({
+      await prisma.workspaceIntegration.create({
         data: {
-          clientId: client.id,
+          workspaceId: client.id,
           integration: IntegrationType.MAILERLITE,
           secrets: secrets as unknown as Prisma.InputJsonValue,
           meta: {
@@ -197,10 +197,10 @@ async function main() {
 
   // 4. Migrate Stripe Integration
   console.log('📦 Step 4: Stripe Integration');
-  const existingStripe = await prisma.clientIntegration.findUnique({
+  const existingStripe = await prisma.workspaceIntegration.findUnique({
     where: {
-      clientId_integration: {
-        clientId: client.id,
+      workspaceId_integration: {
+        workspaceId: client.id,
         integration: IntegrationType.STRIPE,
       },
     },
@@ -225,9 +225,9 @@ async function main() {
         secrets.push(createSecret('API Key', stripeApiKey, encryptionKey));
       }
 
-      await prisma.clientIntegration.create({
+      await prisma.workspaceIntegration.create({
         data: {
-          clientId: client.id,
+          workspaceId: client.id,
           integration: IntegrationType.STRIPE,
           secrets: secrets as unknown as Prisma.InputJsonValue,
         },
