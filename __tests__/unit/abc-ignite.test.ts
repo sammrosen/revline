@@ -139,7 +139,7 @@ describe('ABC Ignite Adapter', () => {
         ok: true,
         json: async () => ({
           status: 'success',
-          results: [
+          eventTypes: [
             { eventTypeId: '123', name: 'PT Session', category: 'Appointment' },
           ],
         }),
@@ -260,7 +260,7 @@ describe('ABC Ignite Adapter', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          results: [
+          members: [
             { memberId: 'member-123', firstName: 'John', lastName: 'Doe', barcode: '12345' },
           ],
         }),
@@ -284,7 +284,7 @@ describe('ABC Ignite Adapter', () => {
       // Mock empty response
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ results: [] }),
+        json: async () => ({ members: [] }),
       });
       
       const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
@@ -330,7 +330,7 @@ describe('ABC Ignite Adapter', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          results: [{ memberId: 'member-789', barcode: '12345' }],
+          members: [{ memberId: 'member-789', barcode: '12345' }],
         }),
       });
       
@@ -358,7 +358,7 @@ describe('ABC Ignite Adapter', () => {
       // Mock empty member lookup
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ results: [] }),
+        json: async () => ({ members: [] }),
       });
       
       const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
@@ -534,7 +534,7 @@ describe('ABC Ignite Adapter', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          results: [
+          eventTypes: [
             { eventTypeId: '1', name: 'PT Session' },
             { eventTypeId: '2', name: 'Group Class' },
           ],
