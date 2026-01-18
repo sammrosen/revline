@@ -124,7 +124,7 @@ export async function validateCanDeleteIntegration(
 
 ### Part 2: API Changes
 
-#### `PATCH /api/admin/workflows/[id]/toggle`
+#### `PATCH /api/v1/workflows/[id]/toggle`
 
 **Before enabling, validate:**
 
@@ -150,7 +150,7 @@ if (!existing.enabled) {
 }
 ```
 
-#### `PUT /api/admin/workflows/[id]`
+#### `PUT /api/v1/workflows/[id]`
 
 **Before updating, check if active:**
 
@@ -172,7 +172,7 @@ if (!validation.valid) {
 }
 ```
 
-#### `DELETE /api/admin/integrations/[id]`
+#### `DELETE /api/v1/integrations/[id]`
 
 **Before deleting, check dependents:**
 
@@ -190,7 +190,7 @@ if (!validation.valid) {
 }
 ```
 
-#### New Endpoint: `GET /api/admin/clients/[id]/dependency-graph`
+#### New Endpoint: `GET /api/workspaces/[id]/dependency-graph`
 
 Returns the full dependency graph for a client:
 
@@ -432,28 +432,28 @@ Show which workflows depend on each integration:
 ### Phase 1: Core Validation (Backend)
 **Files to create/modify:**
 - [ ] `app/_lib/workflow/validation.ts` - New validation service
-- [ ] `app/api/admin/workflows/[id]/toggle/route.ts` - Add enable validation
-- [ ] `app/api/admin/workflows/[id]/route.ts` - Add edit validation
-- [ ] `app/api/admin/integrations/[id]/route.ts` - Add delete validation
+- [ ] `app/api/v1/workflows/[id]/toggle/route.ts` - Add enable validation
+- [ ] `app/api/v1/workflows/[id]/route.ts` - Add edit validation
+- [ ] `app/api/v1/integrations/[id]/route.ts` - Add delete validation
 
 ### Phase 2: Validation API & Dependencies
 **Files to create/modify:**
-- [ ] `app/api/admin/clients/[id]/dependency-graph/route.ts` - New endpoint
+- [ ] `app/api/workspaces/[id]/dependency-graph/route.ts` - New endpoint
 - [ ] `app/_lib/workflow/dependencies.ts` - Dependency graph builder
 
 ### Phase 3: UI - List View Updates
 **Files to modify:**
-- [ ] `app/admin/clients/[id]/workflows/workflow-list.tsx` - Add validation badges
-- [ ] `app/admin/clients/[id]/_components/workflow-card.tsx` - Add indicators
+- [ ] `app/workspaces/[id]/workflows/workflow-list.tsx` - Add validation badges
+- [ ] `app/workspaces/[id]/_components/workflow-card.tsx` - Add indicators
 
 ### Phase 4: UI - Editor Updates
 **Files to modify:**
-- [ ] `app/admin/clients/[id]/workflows/workflow-editor.tsx` - Add lock modal, warnings
+- [ ] `app/workspaces/[id]/workflows/workflow-editor.tsx` - Add lock modal, warnings
 
 ### Phase 5: UI - Dependency Tree
 **Files to create:**
-- [ ] `app/admin/clients/[id]/_components/dependency-tree.tsx` - New component
-- [ ] `app/admin/clients/[id]/workflows/workflow-list.tsx` - Add view toggle
+- [ ] `app/workspaces/[id]/_components/dependency-tree.tsx` - New component
+- [ ] `app/workspaces/[id]/workflows/workflow-list.tsx` - Add view toggle
 
 ### Phase 6: Integration Tab Updates
 **Files to modify:**
@@ -537,7 +537,7 @@ Could add "soft enable" mode that allows enabling with warnings:
 
 ```typescript
 // Future API
-PATCH /api/admin/workflows/[id]/toggle?force=true
+PATCH /api/v1/workflows/[id]/toggle?force=true
 ```
 
 ### Audit Log for Validation Failures

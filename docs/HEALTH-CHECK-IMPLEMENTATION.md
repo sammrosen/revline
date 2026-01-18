@@ -7,7 +7,7 @@ A comprehensive health check system that verifies client configurations and API 
 ## Files Created
 
 ### 1. API Route
-**File:** `app/api/v1/admin/clients/[id]/health-check/route.ts`
+**File:** `app/api/v1/workspaces/[id]/health-check/route.ts`
 
 **Features:**
 - Admin authentication check
@@ -32,7 +32,7 @@ A comprehensive health check system that verifies client configurations and API 
 - ✅ Stripe Webhook - POST with invalid signature (expects 401)
 
 ### 2. UI Component
-**File:** `app/admin/clients/[id]/health-check-button.tsx`
+**File:** `app/workspaces/[id]/health-check-button.tsx`
 
 **Features:**
 - Client-side React component with state management
@@ -50,7 +50,7 @@ A comprehensive health check system that verifies client configurations and API 
 4. **Error:** Red error banner for failures
 
 ### 3. Integration
-**File:** `app/admin/clients/[id]/page.tsx` (modified)
+**File:** `app/workspaces/[id]/page.tsx` (modified)
 
 **Changes:**
 - Imported HealthCheckButton component
@@ -72,7 +72,7 @@ A comprehensive health check system that verifies client configurations and API 
 ### Quick Start
 
 1. **Navigate to Client Page:**
-   - Go to `/admin/clients`
+   - Go to `/workspaces`
    - Click on any client name
 
 2. **Run Health Check:**
@@ -191,7 +191,7 @@ All requirements from the plan have been met:
 ## Next Steps
 
 ### Immediate Testing
-1. Log into admin panel (`/admin/login`)
+1. Log into admin panel (`/login`)
 2. Navigate to a client detail page
 3. Click "Run Health Check"
 4. Verify all tests pass for a properly configured client
@@ -206,7 +206,7 @@ All requirements from the plan have been met:
 ## Troubleshooting
 
 ### Button Not Visible
-- Check you're on client detail page (`/admin/clients/[id]`)
+- Check you're on client detail page (`/workspaces/[id]`)
 - Verify admin authentication is working
 - Check browser console for errors
 

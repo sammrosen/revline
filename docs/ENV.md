@@ -152,7 +152,7 @@ npm run db:migrate
 # 6. Start dev server
 npm run dev
 
-# 7. Create admin account at /admin/setup
+# 7. Create admin account at /setup
 ```
 
 ### Production (Railway)

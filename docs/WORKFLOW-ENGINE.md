@@ -415,7 +415,7 @@ export const mailerliteExecutors: Record<string, ActionExecutor> = {
 **Create a workflow:**
 
 ```bash
-POST /api/admin/workflows
+POST /api/v1/workflows
 Content-Type: application/json
 
 {
@@ -442,7 +442,7 @@ Content-Type: application/json
 **Update a workflow:**
 
 ```bash
-PATCH /api/admin/workflows/{workflowId}
+PATCH /api/v1/workflows/{workflowId}
 Content-Type: application/json
 
 {
@@ -631,7 +631,7 @@ LIMIT 50;
 ### Viewing via API
 
 ```bash
-GET /api/admin/workflows/{workflowId}/executions
+GET /api/v1/workflows/{workflowId}/executions
 ```
 
 Response:
@@ -661,21 +661,21 @@ Response:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/admin/workflows` | GET | List all workflows |
-| `/api/admin/workflows` | POST | Create a workflow |
-| `/api/admin/workflows/{id}` | GET | Get a workflow |
-| `/api/admin/workflows/{id}` | PATCH | Update a workflow |
-| `/api/admin/workflows/{id}` | DELETE | Delete a workflow |
-| `/api/admin/workflows/{id}/toggle` | PATCH | Enable/disable a workflow |
-| `/api/admin/workflows/{id}/executions` | GET | Get execution history |
+| `/api/v1/workflows` | GET | List all workflows |
+| `/api/v1/workflows` | POST | Create a workflow |
+| `/api/v1/workflows/{id}` | GET | Get a workflow |
+| `/api/v1/workflows/{id}` | PATCH | Update a workflow |
+| `/api/v1/workflows/{id}` | DELETE | Delete a workflow |
+| `/api/v1/workflows/{id}/toggle` | PATCH | Enable/disable a workflow |
+| `/api/v1/workflows/{id}/executions` | GET | Get execution history |
 
 ### Registry
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/admin/workflow-registry` | GET | Get all adapters with triggers/actions |
-| `/api/admin/workflow-registry/triggers` | GET | Get all available triggers |
-| `/api/admin/workflow-registry/actions` | GET | Get all available actions |
+| `/api/v1/workflow-registry` | GET | Get all adapters with triggers/actions |
+| `/api/v1/workflow-registry/triggers` | GET | Get all available triggers |
+| `/api/v1/workflow-registry/actions` | GET | Get all available actions |
 
 ---
 

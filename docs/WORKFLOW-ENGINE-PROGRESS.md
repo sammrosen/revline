@@ -110,7 +110,7 @@ All webhooks now follow the pattern:
 ### 4. Admin API Endpoints
 **Status:** ✅ Complete
 
-#### `/api/admin/workflows` (List & Create)
+#### `/api/v1/workflows` (List & Create)
 - ✅ `GET` - List workflows for a client with execution stats
 - ✅ `POST` - Create workflow with full validation
 - ✅ Enhanced error messages for validation failures
@@ -121,20 +121,20 @@ All webhooks now follow the pattern:
 - Improved validation error messages: "At least one action is required. Please add an action to your workflow before saving."
 - Better error logging for debugging
 
-#### `/api/admin/workflows/[id]` (CRUD)
+#### `/api/v1/workflows/[id]` (CRUD)
 - ✅ `GET` - Get workflow details with recent executions
 - ✅ `PUT` - Update workflow (partial updates supported)
 - ✅ `DELETE` - Delete workflow (cascades to executions)
 
-#### `/api/admin/workflows/[id]/toggle`
+#### `/api/v1/workflows/[id]/toggle`
 - ✅ `PATCH` - Enable/disable workflow
 
-#### `/api/admin/workflows/[id]/executions`
+#### `/api/v1/workflows/[id]/executions`
 - ✅ `GET` - Get execution history with pagination
 - ✅ Filter by status (COMPLETED, FAILED, RUNNING)
 - ✅ Duration calculation
 
-#### `/api/admin/workflow-registry`
+#### `/api/v1/workflow-registry`
 - ✅ `GET` - Get available adapters, triggers, and actions
 - ✅ Returns data formatted for UI consumption
 
@@ -142,12 +142,12 @@ All webhooks now follow the pattern:
 **Status:** ⚠️ Exists but may need updates
 
 **Components Found:**
-- `app/admin/clients/[id]/workflows/page.tsx` - Workflow list view
-- `app/admin/clients/[id]/workflows/new/page.tsx` - Create workflow
-- `app/admin/clients/[id]/workflows/[workflowId]/page.tsx` - Edit workflow
-- `app/admin/clients/[id]/workflows/[workflowId]/executions/page.tsx` - Execution history
-- `app/admin/clients/[id]/workflows/workflow-list.tsx` - List component
-- `app/admin/clients/[id]/workflows/workflow-editor.tsx` - Editor component
+- `app/workspaces/[id]/workflows/page.tsx` - Workflow list view
+- `app/workspaces/[id]/workflows/new/page.tsx` - Create workflow
+- `app/workspaces/[id]/workflows/[workflowId]/page.tsx` - Edit workflow
+- `app/workspaces/[id]/workflows/[workflowId]/executions/page.tsx` - Execution history
+- `app/workspaces/[id]/workflows/workflow-list.tsx` - List component
+- `app/workspaces/[id]/workflows/workflow-editor.tsx` - Editor component
 
 **Note:** UI components exist but may need updates to handle the improved validation error messages and ensure `actions` array is properly initialized.
 
@@ -156,7 +156,7 @@ All webhooks now follow the pattern:
 ## 🔄 Recent Changes (January 2025)
 
 ### Validation Improvements
-**File:** `app/api/admin/workflows/route.ts`
+**File:** `app/api/v1/workflows/route.ts`
 
 **Problem:** Frontend was sending `actions: null` or missing `actions` field, causing cryptic Zod error: "expected record, received null"
 
@@ -214,7 +214,7 @@ The plan document specifies pre-save validation should check:
 
 **Current State:** Basic Zod validation only. Need to add business logic validation.
 
-**Location:** Should be added to `POST /api/admin/workflows` before creating workflow.
+**Location:** Should be added to `POST /api/v1/workflows` before creating workflow.
 
 ### 3. Missing Runtime Safety Features
 **Priority:** Low (future enhancement)
@@ -344,11 +344,11 @@ Frontend may need updates to:
 - `app/_lib/workflow/index.ts` - Public API exports
 
 ### Admin API
-- `app/api/admin/workflows/route.ts` - List & create
-- `app/api/admin/workflows/[id]/route.ts` - CRUD operations
-- `app/api/admin/workflows/[id]/toggle/route.ts` - Enable/disable
-- `app/api/admin/workflows/[id]/executions/route.ts` - Execution history
-- `app/api/admin/workflow-registry/route.ts` - Registry endpoint
+- `app/api/v1/workflows/route.ts` - List & create
+- `app/api/v1/workflows/[id]/route.ts` - CRUD operations
+- `app/api/v1/workflows/[id]/toggle/route.ts` - Enable/disable
+- `app/api/v1/workflows/[id]/executions/route.ts` - Execution history
+- `app/api/v1/workflow-registry/route.ts` - Registry endpoint
 
 ### Webhooks (Migrated)
 - `app/api/subscribe/route.ts` - Email capture
@@ -356,7 +356,7 @@ Frontend may need updates to:
 - `app/api/stripe-webhook/route.ts` - Stripe webhooks
 
 ### Admin UI
-- `app/admin/clients/[id]/workflows/` - All workflow UI components
+- `app/workspaces/[id]/workflows/` - All workflow UI components
 
 ---
 

@@ -155,7 +155,7 @@ export const MAILERLITE_ADAPTER: AdapterDefinition = {
  * The workflow registry API injects dynamic triggers based on workspace config.
  * Each enabled form becomes a trigger where formId = operation name.
  * 
- * See: app/api/v1/admin/workflow-registry/route.ts
+ * See: app/api/v1/workflow-registry/route.ts
  */
 export const REVLINE_ADAPTER: AdapterDefinition = {
   id: 'revline',

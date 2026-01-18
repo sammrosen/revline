@@ -15,71 +15,82 @@ export const API_VERSION = 'v1';
 export const API_BASE = `/api/${API_VERSION}`;
 
 /**
- * Admin API paths
+ * Auth API paths
  */
-export const AdminApi = {
-  // Auth
-  login: `${API_BASE}/admin/login`,
-  logout: `${API_BASE}/admin/logout`,
-  setup: `${API_BASE}/admin/setup`,
+export const AuthApi = {
+  login: `${API_BASE}/auth/login`,
+  logout: `${API_BASE}/auth/logout`,
+  setup: `${API_BASE}/auth/setup`,
+  loginVerify2fa: `${API_BASE}/auth/login/verify-2fa`,
   
-  // 2FA
+  // 2FA management
   twoFa: {
-    setup: `${API_BASE}/admin/2fa/setup`,
-    verify: `${API_BASE}/admin/2fa/verify`,
-    disable: `${API_BASE}/admin/2fa/disable`,
-    status: `${API_BASE}/admin/2fa/status`,
-    regenerate: `${API_BASE}/admin/2fa/regenerate`,
+    setup: `${API_BASE}/auth/2fa/setup`,
+    verify: `${API_BASE}/auth/2fa/verify`,
+    disable: `${API_BASE}/auth/2fa/disable`,
+    status: `${API_BASE}/auth/2fa/status`,
+    regenerate: `${API_BASE}/auth/2fa/regenerate`,
   },
-  
-  // Login 2FA verification
-  loginVerify2fa: `${API_BASE}/admin/login/verify-2fa`,
-  
+} as const;
+
+/**
+ * App API paths (protected routes)
+ */
+export const AppApi = {
   // Workspaces
   workspaces: {
-    list: `${API_BASE}/admin/workspaces`,
-    create: `${API_BASE}/admin/workspaces`,
-    byId: (id: string) => `${API_BASE}/admin/workspaces/${id}`,
-    healthCheck: (id: string) => `${API_BASE}/admin/workspaces/${id}/health-check`,
-    testAlert: (id: string) => `${API_BASE}/admin/workspaces/${id}/test-alert`,
-    testPushover: (id: string) => `${API_BASE}/admin/workspaces/${id}/test-pushover`,
-    testAction: (id: string) => `${API_BASE}/admin/workspaces/${id}/test-action`,
-    dependencyGraph: (id: string) => `${API_BASE}/admin/workspaces/${id}/dependency-graph`,
-    mailerliteInsights: (id: string) => `${API_BASE}/admin/workspaces/${id}/mailerlite-insights`,
+    list: `${API_BASE}/workspaces`,
+    create: `${API_BASE}/workspaces`,
+    byId: (id: string) => `${API_BASE}/workspaces/${id}`,
+    healthCheck: (id: string) => `${API_BASE}/workspaces/${id}/health-check`,
+    testAlert: (id: string) => `${API_BASE}/workspaces/${id}/test-alert`,
+    testPushover: (id: string) => `${API_BASE}/workspaces/${id}/test-pushover`,
+    testAction: (id: string) => `${API_BASE}/workspaces/${id}/test-action`,
+    dependencyGraph: (id: string) => `${API_BASE}/workspaces/${id}/dependency-graph`,
+    mailerliteInsights: (id: string) => `${API_BASE}/workspaces/${id}/mailerlite-insights`,
   },
   
   // Integrations
   integrations: {
-    list: `${API_BASE}/admin/integrations`,
-    create: `${API_BASE}/admin/integrations`,
-    byId: (id: string) => `${API_BASE}/admin/integrations/${id}`,
-    meta: (id: string) => `${API_BASE}/admin/integrations/${id}/meta`,
-    secrets: (id: string) => `${API_BASE}/admin/integrations/${id}/secrets`,
+    list: `${API_BASE}/integrations`,
+    create: `${API_BASE}/integrations`,
+    byId: (id: string) => `${API_BASE}/integrations/${id}`,
+    meta: (id: string) => `${API_BASE}/integrations/${id}/meta`,
+    secrets: (id: string) => `${API_BASE}/integrations/${id}/secrets`,
     secretById: (integrationId: string, secretId: string) => 
-      `${API_BASE}/admin/integrations/${integrationId}/secrets/${secretId}`,
-    syncEventTypes: (id: string) => `${API_BASE}/admin/integrations/${id}/sync-event-types`,
+      `${API_BASE}/integrations/${integrationId}/secrets/${secretId}`,
+    syncEventTypes: (id: string) => `${API_BASE}/integrations/${id}/sync-event-types`,
   },
   
   // Workflows
   workflows: {
-    list: `${API_BASE}/admin/workflows`,
-    create: `${API_BASE}/admin/workflows`,
-    byId: (id: string) => `${API_BASE}/admin/workflows/${id}`,
-    toggle: (id: string) => `${API_BASE}/admin/workflows/${id}/toggle`,
-    executions: (id: string) => `${API_BASE}/admin/workflows/${id}/executions`,
+    list: `${API_BASE}/workflows`,
+    create: `${API_BASE}/workflows`,
+    byId: (id: string) => `${API_BASE}/workflows/${id}`,
+    toggle: (id: string) => `${API_BASE}/workflows/${id}/toggle`,
+    executions: (id: string) => `${API_BASE}/workflows/${id}/executions`,
   },
   
   // Registry
-  workflowRegistry: `${API_BASE}/admin/workflow-registry`,
+  workflowRegistry: `${API_BASE}/workflow-registry`,
   
   // Forms
-  forms: `${API_BASE}/admin/forms`,
-  checkFormId: `${API_BASE}/admin/check-form-id`,
+  forms: `${API_BASE}/forms`,
+  checkFormId: `${API_BASE}/check-form-id`,
   
   // Executions
   executions: {
-    retry: (execId: string) => `${API_BASE}/admin/executions/${execId}/retry`,
+    retry: (execId: string) => `${API_BASE}/executions/${execId}/retry`,
   },
+} as const;
+
+/**
+ * @deprecated Use AuthApi and AppApi instead
+ * Kept for backward compatibility during migration
+ */
+export const AdminApi = {
+  ...AuthApi,
+  ...AppApi,
 } as const;
 
 /**
@@ -121,7 +132,9 @@ export const CronPaths = {
  * All API paths combined for convenience
  */
 export const ApiPaths = {
-  admin: AdminApi,
+  auth: AuthApi,
+  app: AppApi,
+  admin: AdminApi, // deprecated alias
   public: PublicApi,
   booking: BookingApi,
   webhooks: WebhookPaths,

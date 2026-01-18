@@ -174,7 +174,7 @@ ManyChat drives traffic from Instagram to your landing pages. See [ManyChat Setu
 
 **Create Client in Admin Dashboard:**
 
-1. Go to `/admin/clients` → "Add Client"
+1. Go to `/workspaces` → "Add Client"
 2. Enter:
    - **Name**: "Acme Fitness"
    - **Slug**: `acme_fitness` (lowercase, underscores OK)

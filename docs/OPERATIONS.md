@@ -8,9 +8,9 @@ Daily usage, client onboarding, troubleshooting, and maintenance.
 
 ### Accessing Admin Dashboard
 
-1. Go to https://yourdomain.com/admin/login
+1. Go to https://yourdomain.com/login
 2. Enter your password
-3. View clients at `/admin/clients`
+3. View clients at `/workspaces`
 
 ### Reading Health Indicators
 
@@ -49,7 +49,7 @@ Daily usage, client onboarding, troubleshooting, and maintenance.
 
 ### Step 1: Create Client Record
 
-1. Go to `/admin/clients` → "Add Client"
+1. Go to `/workspaces` → "Add Client"
 2. Enter:
    - **Name**: "Acme Fitness"
    - **Slug**: `acme_fitness` (lowercase, underscores OK)
@@ -173,7 +173,7 @@ Provide client with:
 
 ### How to Pause
 
-1. Go to `/admin/clients`
+1. Go to `/workspaces`
 2. Click "Pause" next to client
 3. Confirm paused (status shows PAUSED)
 
@@ -352,7 +352,7 @@ If approaching plan limit: Clean up old events or upgrade database.
 
 Use browser console:
 ```javascript
-await fetch('https://yourdomain.com/api/admin/reset-password', {
+await fetch('https://yourdomain.com/api/v1/auth/reset-password', {
   method: 'POST',
   headers: {'Content-Type': 'application/json'},
   body: JSON.stringify({newPassword: 'YourNewPassword'})

@@ -11,10 +11,23 @@
  * - Keep integration-specific types with their meta definitions
  */
 
-import { IntegrationType, HealthStatus, LeadStage, EventSystem, WorkspaceStatus } from '@prisma/client';
+import { IntegrationType, HealthStatus, LeadStage, EventSystem, WorkspaceStatus, WorkspaceRole } from '@prisma/client';
 
 // Re-export Prisma enums for convenience
-export { IntegrationType, HealthStatus, LeadStage, EventSystem, WorkspaceStatus };
+export { IntegrationType, HealthStatus, LeadStage, EventSystem, WorkspaceStatus, WorkspaceRole };
+
+// =============================================================================
+// USER TYPES
+// =============================================================================
+
+/**
+ * User context for authenticated requests
+ */
+export interface UserContext {
+  id: string;
+  email: string;
+  name: string | null;
+}
 
 // =============================================================================
 // WORKSPACE TYPES
@@ -26,6 +39,14 @@ export interface WorkspaceContext {
   name: string;
   status: WorkspaceStatus;
   timezone: string;
+}
+
+/**
+ * Workspace with the user's access role attached
+ * Used when listing workspaces for a specific user
+ */
+export interface WorkspaceWithAccess extends WorkspaceContext {
+  userRole: WorkspaceRole;
 }
 
 export interface WorkspaceWithIntegrations extends WorkspaceContext {

@@ -84,14 +84,22 @@ vi.mock('@/app/_lib/pushover', () => ({
 vi.mock('next/headers', () => ({
   headers: vi.fn(async () => ({
     get: (key: string) => {
+      if (key === 'x-user-id') {
+        return 'test-user-id';
+      }
+      // Legacy support
       if (key === 'x-admin-id') {
-        return 'test-admin-id';
+        return 'test-user-id';
       }
       return null;
     },
   })),
   cookies: vi.fn(async () => ({
     get: (name: string) => {
+      if (name === 'revline_session') {
+        return { value: 'test-session-id' };
+      }
+      // Legacy support
       if (name === 'revline_admin_session') {
         return { value: 'test-session-id' };
       }
@@ -155,8 +163,9 @@ afterEach(async () => {
   await testPrisma.event.deleteMany();
   await testPrisma.lead.deleteMany();
   await testPrisma.workspaceIntegration.deleteMany();
-  await testPrisma.adminSession.deleteMany();
-  await testPrisma.admin.deleteMany();
+  await testPrisma.workspaceMember.deleteMany();
+  await testPrisma.session.deleteMany();
+  await testPrisma.user.deleteMany();
   await testPrisma.workspace.deleteMany();
   
   // Reset all mocks
@@ -394,7 +403,42 @@ export async function cleanupTestData() {
   await testPrisma.event.deleteMany();
   await testPrisma.lead.deleteMany();
   await testPrisma.workspaceIntegration.deleteMany();
-  await testPrisma.adminSession.deleteMany();
-  await testPrisma.admin.deleteMany();
+  await testPrisma.workspaceMember.deleteMany();
+  await testPrisma.session.deleteMany();
+  await testPrisma.user.deleteMany();
   await testPrisma.workspace.deleteMany();
+}
+
+/**
+ * Test helper: Create a test user
+ */
+export async function createTestUser(overrides: Partial<{
+  email: string;
+  name: string;
+  passwordHash: string;
+}> = {}) {
+  return testPrisma.user.create({
+    data: {
+      email: overrides.email ?? `test-${Date.now()}@example.com`,
+      name: overrides.name ?? 'Test User',
+      passwordHash: overrides.passwordHash ?? 'test-password-hash',
+    },
+  });
+}
+
+/**
+ * Test helper: Create a workspace membership
+ */
+export async function createTestWorkspaceMember(
+  userId: string,
+  workspaceId: string,
+  role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' = 'OWNER'
+) {
+  return testPrisma.workspaceMember.create({
+    data: {
+      userId,
+      workspaceId,
+      role,
+    },
+  });
 }

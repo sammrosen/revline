@@ -61,7 +61,7 @@ if (last 3 events all failed) {
 
 **NOT stored in database** - calculated on-demand when viewing clients list
 
-**Calculated in:** `GET /api/admin/clients` endpoint
+**Calculated in:** `GET /api/workspaces` endpoint
 
 ### Logic:
 
@@ -284,7 +284,7 @@ curl http://localhost:3000/api/v1/cron/health-check \
 
 **Updated by:** Cron job every 15 minutes (integration health only)
 
-**Viewed at:** `/admin/clients` (both integration & client health)
+**Viewed at:** `/workspaces` (both integration & client health)
 
 
 

@@ -1,5 +1,5 @@
 // RevOps MVP Database Schema
-// Source of truth for workspaces, integrations, leads, events, and admin auth
+// Source of truth for workspaces, integrations, leads, events, and user auth
 
 generator client {
   provider = "prisma-client-js"
@@ -15,13 +15,15 @@ datasource db {
 // =============================================================================
 
 model Workspace {
-  id        String          @id @default(uuid())
-  name      String
-  slug      String          @unique // Used for ?source= routing (e.g., "sam", "demo")
-  status    WorkspaceStatus @default(ACTIVE)
-  timezone  String          @default("America/New_York") // IANA timezone for health check business hours
-  createdAt DateTime        @default(now()) @map("created_at")
+  id          String          @id @default(uuid())
+  name        String
+  slug        String          @unique // Used for ?source= routing (e.g., "sam", "demo")
+  status      WorkspaceStatus @default(ACTIVE)
+  timezone    String          @default("America/New_York") // IANA timezone for health check business hours
+  createdById String?         @map("created_by_id") // User who created this workspace
+  createdAt   DateTime        @default(now()) @map("created_at")
 
+  members            WorkspaceMember[]
   integrations       WorkspaceIntegration[]
   leads              Lead[]
   events             Event[]
@@ -46,8 +48,8 @@ model WorkspaceIntegration {
   id           String          @id @default(uuid())
   workspaceId  String          @map("workspace_id")
   integration  IntegrationType
-  secrets      Json?           // Array of { id: string, name: string, encryptedValue: string, keyVersion: number }
-  meta         Json?           // Non-sensitive config: groups, routing, product_map, etc.
+  secrets      Json? // Array of { id: string, name: string, encryptedValue: string, keyVersion: number }
+  meta         Json? // Non-sensitive config: groups, routing, product_map, etc.
   healthStatus HealthStatus    @default(GREEN) @map("health_status")
   lastSeenAt   DateTime?       @map("last_seen_at")
   createdAt    DateTime        @default(now()) @map("created_at")
@@ -137,11 +139,13 @@ enum EventSystem {
 }
 
 // =============================================================================
-// ADMIN AUTHENTICATION (Single admin, internal only)
+// USER AUTHENTICATION & WORKSPACE MEMBERSHIP
 // =============================================================================
 
-model Admin {
+model User {
   id             String   @id @default(uuid())
+  email          String   @unique // User identity for login
+  name           String? // Display name
   passwordHash   String   @map("password_hash")
   totpSecret     String?  @map("totp_secret") // Encrypted with AES-256-GCM, null if 2FA not set up
   totpKeyVersion Int      @default(0) @map("totp_key_version") // Key version used to encrypt totpSecret
@@ -149,21 +153,45 @@ model Admin {
   recoveryCodes  Json?    @map("recovery_codes") // Array of {hash: string, used: boolean}
   createdAt      DateTime @default(now()) @map("created_at")
 
-  sessions AdminSession[]
+  sessions    Session[]
+  memberships WorkspaceMember[]
 
-  @@map("admins")
+  @@map("users")
 }
 
-model AdminSession {
+model Session {
   id        String   @id @default(uuid())
-  adminId   String   @map("admin_id")
+  userId    String   @map("user_id")
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
 
-  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([expiresAt])
-  @@map("admin_sessions")
+  @@map("sessions")
+}
+
+// Join table for user-workspace access with roles
+model WorkspaceMember {
+  id          String        @id @default(uuid())
+  userId      String        @map("user_id")
+  workspaceId String        @map("workspace_id")
+  role        WorkspaceRole @default(ADMIN)
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+  @@map("workspace_members")
+}
+
+enum WorkspaceRole {
+  OWNER // Full control, can delete workspace, manage other owners
+  ADMIN // Can manage integrations, workflows, view all data
+  MEMBER // Can view and edit most things, no secret management
+  VIEWER // Read-only access
 }
 
 // =============================================================================
@@ -248,7 +276,7 @@ model WebhookEvent {
   id                  String             @id @default(uuid())
   workspaceId         String             @map("workspace_id")
   correlationId       String             @map("correlation_id") @db.Uuid
-  provider            String             // 'stripe', 'calendly', 'revline'
+  provider            String // 'stripe', 'calendly', 'revline'
   providerEventId     String             @map("provider_event_id") // Stripe event ID, Calendly URI, etc.
   rawBody             String             @map("raw_body") @db.Text // Exact bytes for signature verification
   rawHeaders          Json?              @map("raw_headers") // Headers needed for verification
@@ -277,7 +305,7 @@ enum WebhookEventStatus {
 model IdempotencyKey {
   id          String               @id @default(uuid())
   workspaceId String               @map("workspace_id")
-  key         String               // Hash of (action + params)
+  key         String // Hash of (action + params)
   status      IdempotencyKeyStatus @default(PENDING)
   result      Json?
   error       String?
