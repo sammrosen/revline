@@ -5,18 +5,18 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { testPrisma, createTestClient } from '../setup';
+import { testPrisma, createTestWorkspace } from '../setup';
 
 // Import service after mocks are set up
 const { RetentionService } = await import('@/app/_lib/retention');
 
 describe('RetentionService', () => {
-  let clientId: string;
+  let workspaceId: string;
 
   beforeEach(async () => {
     // afterEach in setup.ts handles cleanup, but we need a fresh client each test
-    const client = await createTestClient();
-    clientId = client.id;
+    const client = await createTestWorkspace();
+    workspaceId = client.id;
   });
 
   describe('cleanup', () => {
@@ -35,7 +35,7 @@ describe('RetentionService', () => {
       const oldDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
       await testPrisma.event.create({
         data: {
-          clientId,
+          workspaceId,
           system: 'BACKEND',
           eventType: 'old_event',
           success: true,
@@ -46,7 +46,7 @@ describe('RetentionService', () => {
       // Create a recent event (should not be deleted)
       await testPrisma.event.create({
         data: {
-          clientId,
+          workspaceId,
           system: 'BACKEND',
           eventType: 'recent_event',
           success: true,
@@ -58,7 +58,7 @@ describe('RetentionService', () => {
       expect(result.eventsDeleted).toBe(1);
 
       // Verify recent event still exists
-      const remainingEvents = await testPrisma.event.count({ where: { clientId } });
+      const remainingEvents = await testPrisma.event.count({ where: { workspaceId } });
       expect(remainingEvents).toBe(1);
     });
 
@@ -67,7 +67,7 @@ describe('RetentionService', () => {
       const oldDate = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
       await testPrisma.webhookEvent.create({
         data: {
-          clientId,
+          workspaceId,
           correlationId: crypto.randomUUID(),
           provider: 'stripe',
           providerEventId: 'evt_old',
@@ -80,7 +80,7 @@ describe('RetentionService', () => {
       // Create a recent webhook event (should not be deleted)
       await testPrisma.webhookEvent.create({
         data: {
-          clientId,
+          workspaceId,
           correlationId: crypto.randomUUID(),
           provider: 'stripe',
           providerEventId: 'evt_recent',
@@ -94,7 +94,7 @@ describe('RetentionService', () => {
       expect(result.webhookEventsDeleted).toBe(1);
 
       // Verify recent webhook still exists
-      const remaining = await testPrisma.webhookEvent.count({ where: { clientId } });
+      const remaining = await testPrisma.webhookEvent.count({ where: { workspaceId } });
       expect(remaining).toBe(1);
     });
 
@@ -103,7 +103,7 @@ describe('RetentionService', () => {
       const expiredDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24h ago
       await testPrisma.idempotencyKey.create({
         data: {
-          clientId,
+          workspaceId,
           key: 'expired_key',
           status: 'COMPLETED',
           expiresAt: expiredDate,
@@ -114,7 +114,7 @@ describe('RetentionService', () => {
       const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h from now
       await testPrisma.idempotencyKey.create({
         data: {
-          clientId,
+          workspaceId,
           key: 'active_key',
           status: 'COMPLETED',
           expiresAt: futureDate,
@@ -126,7 +126,7 @@ describe('RetentionService', () => {
       expect(result.idempotencyKeysDeleted).toBe(1);
 
       // Verify active key still exists
-      const remaining = await testPrisma.idempotencyKey.count({ where: { clientId } });
+      const remaining = await testPrisma.idempotencyKey.count({ where: { workspaceId } });
       expect(remaining).toBe(1);
     });
 
@@ -135,7 +135,7 @@ describe('RetentionService', () => {
       const oldDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
       await testPrisma.event.create({
         data: {
-          clientId,
+          workspaceId,
           system: 'BACKEND',
           eventType: 'old_event',
           success: true,
@@ -149,7 +149,7 @@ describe('RetentionService', () => {
       expect(result.dryRun).toBe(true);
 
       // Verify event was NOT deleted
-      const remaining = await testPrisma.event.count({ where: { clientId } });
+      const remaining = await testPrisma.event.count({ where: { workspaceId } });
       expect(remaining).toBe(1);
     });
 
@@ -158,7 +158,7 @@ describe('RetentionService', () => {
       const fiftyDaysAgo = new Date(Date.now() - 50 * 24 * 60 * 60 * 1000);
       await testPrisma.event.create({
         data: {
-          clientId,
+          workspaceId,
           system: 'BACKEND',
           eventType: 'medium_old_event',
           success: true,
@@ -232,8 +232,8 @@ describe('RetentionService', () => {
       // Create some data
       await testPrisma.event.createMany({
         data: [
-          { clientId, system: 'BACKEND', eventType: 'test1', success: true },
-          { clientId, system: 'BACKEND', eventType: 'test2', success: true },
+          { workspaceId, system: 'BACKEND', eventType: 'test1', success: true },
+          { workspaceId, system: 'BACKEND', eventType: 'test2', success: true },
         ],
       });
 

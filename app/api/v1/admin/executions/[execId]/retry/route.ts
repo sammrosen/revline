@@ -57,7 +57,7 @@ export async function POST(
       logStructured({
         correlationId,
         event: 'execution_retry_skipped',
-        clientId: execution.clientId,
+        workspaceId: execution.workspaceId,
         metadata: { 
           execId, 
           reason: 'already_completed',
@@ -104,7 +104,7 @@ export async function POST(
 
     // 7. Audit log the retry attempt
     await emitEvent({
-      clientId: execution.clientId,
+      workspaceId: execution.workspaceId,
       system: EventSystem.WORKFLOW,
       eventType: 'execution_retry_requested',
       success: true,
@@ -114,7 +114,7 @@ export async function POST(
     logStructured({
       correlationId,
       event: 'execution_retry_started',
-      clientId: execution.clientId,
+      workspaceId: execution.workspaceId,
       metadata: { 
         execId, 
         workflowId: execution.workflowId,
@@ -138,7 +138,7 @@ export async function POST(
     // Add a new correlationId for this retry attempt
     const triggerPayload = execution.triggerPayload as Record<string, unknown>;
     const result = await emitTrigger(
-      execution.clientId,
+      execution.workspaceId,
       { 
         adapter: execution.triggerAdapter, 
         operation: execution.triggerOperation,
@@ -160,7 +160,7 @@ export async function POST(
     logStructured({
       correlationId,
       event: succeeded ? 'execution_retry_succeeded' : 'execution_retry_failed',
-      clientId: execution.clientId,
+      workspaceId: execution.workspaceId,
       success: succeeded,
       error: errors.length > 0 ? errors.join('; ') : undefined,
       metadata: { 

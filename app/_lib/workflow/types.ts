@@ -113,7 +113,10 @@ export interface WorkflowContext {
   /** Normalized name (optional) */
   name?: string;
 
-  /** Client ID this workflow is running for */
+  /** Workspace ID this workflow is running for */
+  workspaceId: string;
+
+  /** @deprecated Use workspaceId instead */
   clientId: string;
 
   /** Lead ID if a lead was created/found */

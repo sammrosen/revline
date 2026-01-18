@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify client exists
-    const client = await prisma.client.findUnique({
+    const client = await prisma.workspace.findUnique({
       where: { id: clientId },
     });
     if (!client) {
@@ -105,10 +105,10 @@ export async function POST(request: NextRequest) {
       : [];
 
     // Upsert the integration (update if exists, create if not)
-    const clientIntegration = await prisma.clientIntegration.upsert({
+    const workspaceIntegration = await prisma.workspaceIntegration.upsert({
       where: {
-        clientId_integration: {
-          clientId,
+        workspaceId_integration: {
+          workspaceId: clientId,
           integration,
         },
       },
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
         meta: meta || undefined,
       },
       create: {
-        clientId,
+        workspaceId: clientId,
         integration,
         secrets: encryptedSecrets as unknown as Prisma.InputJsonValue,
         meta: meta || undefined,
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
 
     // Emit event
     await emitEvent({
-      clientId,
+      workspaceId: clientId,
       system: EventSystem.BACKEND,
       eventType: 'integration_added',
       success: true,
@@ -134,11 +134,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        id: clientIntegration.id,
-        integration: clientIntegration.integration,
+        id: workspaceIntegration.id,
+        integration: workspaceIntegration.integration,
         // Return secret summaries (names only, never values)
         secrets: encryptedSecrets.map(s => ({ id: s.id, name: s.name })),
-        createdAt: clientIntegration.createdAt,
+        createdAt: workspaceIntegration.createdAt,
       },
       { status: 201 }
     );

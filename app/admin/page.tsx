@@ -4,6 +4,6 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminPage() {
   // Middleware handles auth - if we reach here, user is authenticated
-  redirect('/admin/clients');
+  redirect('/admin/workspaces');
 }
 

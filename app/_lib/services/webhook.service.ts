@@ -18,7 +18,7 @@ import { IntegrationResult, WebhookResult } from '@/app/_lib/types';
  * Input parameters for processing Stripe checkout
  */
 export interface ProcessCheckoutParams {
-  clientId: string;
+  workspaceId: string;
   checkoutData: CheckoutData;
 }
 
@@ -26,7 +26,7 @@ export interface ProcessCheckoutParams {
  * Input parameters for processing Calendly booking
  */
 export interface ProcessBookingParams {
-  clientId: string;
+  workspaceId: string;
   email: string;
   name?: string;
   eventType?: string;
@@ -43,7 +43,7 @@ export class WebhookService {
    * @deprecated Use emitTrigger() instead:
    * 
    * ```typescript
-   * await emitTrigger(clientId, {
+   * await emitTrigger(workspaceId, {
    *   adapter: 'stripe',
    *   operation: 'payment_succeeded',
    * }, { email, name, amount, product });
@@ -52,21 +52,21 @@ export class WebhookService {
   static async processStripeCheckout(
     params: ProcessCheckoutParams
   ): Promise<IntegrationResult<WebhookResult>> {
-    const { clientId, checkoutData } = params;
+    const { workspaceId, checkoutData } = params;
     const { email, name, program, amountTotal } = checkoutData;
 
     // Step 1: Create/update lead and mark as paid
     let leadId: string;
     try {
       leadId = await upsertLead({
-        clientId,
+        workspaceId,
         email,
         source: 'stripe',
       });
       await updateLeadStage(leadId, 'PAID');
     } catch (error) {
       console.error('Failed to upsert lead:', {
-        clientId,
+        workspaceId,
         email,
         error: error instanceof Error ? error.message : 'Unknown',
       });
@@ -78,7 +78,7 @@ export class WebhookService {
 
     // Step 2: Emit payment success event
     await emitEvent({
-      clientId,
+      workspaceId,
       leadId,
       system: EventSystem.STRIPE,
       eventType: 'stripe_payment_succeeded',
@@ -87,7 +87,7 @@ export class WebhookService {
 
     // Step 3: Emit trigger to workflow engine
     const result = await emitTrigger(
-      clientId,
+      workspaceId,
       { adapter: 'stripe', operation: 'payment_succeeded' },
       {
         email,
@@ -105,7 +105,7 @@ export class WebhookService {
       warning = failedResults.map(e => e.error).join('; ');
       
       console.warn('Some workflows failed for stripe payment:', {
-        clientId,
+        workspaceId,
         leadId,
         failures: failedResults,
       });
@@ -129,20 +129,20 @@ export class WebhookService {
   static async processCalendlyBooking(
     params: ProcessBookingParams
   ): Promise<IntegrationResult<WebhookResult>> {
-    const { clientId, email, name, eventType } = params;
+    const { workspaceId, email, name, eventType } = params;
 
     // Step 1: Create/update lead and mark as booked
     let leadId: string;
     try {
       leadId = await upsertLead({
-        clientId,
+        workspaceId,
         email,
         source: 'calendly',
       });
       await updateLeadStage(leadId, 'BOOKED');
     } catch (error) {
       console.error('Failed to upsert lead:', {
-        clientId,
+        workspaceId,
         email,
         error: error instanceof Error ? error.message : 'Unknown',
       });
@@ -154,7 +154,7 @@ export class WebhookService {
 
     // Step 2: Emit booking created event
     await emitEvent({
-      clientId,
+      workspaceId,
       leadId,
       system: EventSystem.CALENDLY,
       eventType: 'calendly_booking_created',
@@ -163,7 +163,7 @@ export class WebhookService {
 
     // Step 3: Emit trigger to workflow engine
     const result = await emitTrigger(
-      clientId,
+      workspaceId,
       { adapter: 'calendly', operation: 'booking_created' },
       { email, name, eventType }
     );
@@ -194,20 +194,20 @@ export class WebhookService {
   static async processCalendlyCancellation(
     params: ProcessBookingParams
   ): Promise<IntegrationResult<WebhookResult>> {
-    const { clientId, email, name } = params;
+    const { workspaceId, email, name } = params;
 
     // Step 1: Find lead and revert to captured
     let leadId: string;
     try {
       leadId = await upsertLead({
-        clientId,
+        workspaceId,
         email,
         source: 'calendly',
       });
       await updateLeadStage(leadId, 'CAPTURED');
     } catch (error) {
       console.error('Failed to update lead:', {
-        clientId,
+        workspaceId,
         email,
         error: error instanceof Error ? error.message : 'Unknown',
       });
@@ -219,7 +219,7 @@ export class WebhookService {
 
     // Step 2: Emit booking canceled event
     await emitEvent({
-      clientId,
+      workspaceId,
       leadId,
       system: EventSystem.CALENDLY,
       eventType: 'calendly_booking_canceled',
@@ -228,7 +228,7 @@ export class WebhookService {
 
     // Step 3: Emit trigger to workflow engine
     const result = await emitTrigger(
-      clientId,
+      workspaceId,
       { adapter: 'calendly', operation: 'booking_canceled' },
       { email, name }
     );
@@ -256,11 +256,11 @@ export class WebhookService {
   /**
    * Check if webhook processing is properly configured for a client
    */
-  static async isConfigured(clientId: string): Promise<{
+  static async isConfigured(workspaceId: string): Promise<{
     stripe: boolean;
     mailerlite: boolean;
   }> {
-    const mailerliteAdapter = await MailerLiteAdapter.forClient(clientId);
+    const mailerliteAdapter = await MailerLiteAdapter.forClient(workspaceId);
 
     return {
       stripe: true, // If we get here, Stripe is configured

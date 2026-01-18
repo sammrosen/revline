@@ -14,7 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   testPrisma,
-  createTestClient,
+  createTestWorkspace,
   createTestIntegration,
   createTestWorkflow,
 } from '../setup';
@@ -29,7 +29,7 @@ describe('Workflow Validation', () => {
   describe('validateCanEnable', () => {
     it('should allow enabling a workflow when all integrations are configured', async () => {
       // Create client with MailerLite configured
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       await createTestIntegration(
         client.id, 
         'MAILERLITE', 
@@ -57,7 +57,7 @@ describe('Workflow Validation', () => {
 
     it('should block enabling a workflow when required integration is not configured', async () => {
       // Create client without any integrations
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       
       // Create a workflow that requires MailerLite
       const workflow = await createTestWorkflow(client.id, {
@@ -79,7 +79,7 @@ describe('Workflow Validation', () => {
 
     it('should block enabling when action param references missing group', async () => {
       // Create client with MailerLite but missing the referenced group
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       await createTestIntegration(
         client.id, 
         'MAILERLITE', 
@@ -108,7 +108,7 @@ describe('Workflow Validation', () => {
 
     it('should allow revline-only workflows without any external integrations', async () => {
       // Create client with no integrations
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       
       // Create a workflow that only uses revline (internal adapter)
       const workflow = await createTestWorkflow(client.id, {
@@ -131,7 +131,7 @@ describe('Workflow Validation', () => {
 
   describe('getWorkflowsUsingIntegration', () => {
     it('should return all workflows using an integration by default', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       
       // Create enabled and disabled workflows
       await createTestWorkflow(client.id, {
@@ -156,7 +156,7 @@ describe('Workflow Validation', () => {
     });
 
     it('should filter to enabled-only when enabledOnly option is true', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       
       // Create enabled and disabled workflows
       await createTestWorkflow(client.id, {
@@ -183,7 +183,7 @@ describe('Workflow Validation', () => {
     });
 
     it('should find workflows using integration in actions', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       
       await createTestWorkflow(client.id, {
         name: 'Action Uses MailerLite',
@@ -204,7 +204,7 @@ describe('Workflow Validation', () => {
 
   describe('validateCanDeleteIntegration', () => {
     it('should allow deletion when no workflows use the integration', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       await createTestIntegration(client.id, 'MAILERLITE', 'test-api-key');
       
       const result = await validateCanDeleteIntegration(client.id, 'MAILERLITE');
@@ -214,7 +214,7 @@ describe('Workflow Validation', () => {
     });
 
     it('should block deletion when enabled workflows use the integration', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       await createTestIntegration(client.id, 'MAILERLITE', 'test-api-key');
       
       // Create an enabled workflow that uses the integration
@@ -237,7 +237,7 @@ describe('Workflow Validation', () => {
     });
 
     it('should allow deletion when only disabled workflows use the integration', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       await createTestIntegration(client.id, 'MAILERLITE', 'test-api-key');
       
       // Create a DISABLED workflow that uses the integration
@@ -259,7 +259,7 @@ describe('Workflow Validation', () => {
     });
 
     it('should block deletion when trigger uses the integration', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       await createTestIntegration(
         client.id, 
         'CALENDLY', 
@@ -286,12 +286,12 @@ describe('Workflow Validation', () => {
 
   describe('Workflow Creation Defaults', () => {
     it('should create workflows with enabled: false by default', async () => {
-      const client = await createTestClient();
+      const client = await createTestWorkspace();
       
       // Create workflow without specifying enabled
       const workflow = await testPrisma.workflow.create({
         data: {
-          clientId: client.id,
+          workspaceId: client.id,
           name: 'Default Test',
           triggerAdapter: 'revline',
           triggerOperation: 'email_captured',

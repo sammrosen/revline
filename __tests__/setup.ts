@@ -154,37 +154,40 @@ afterEach(async () => {
   await testPrisma.workflow.deleteMany();
   await testPrisma.event.deleteMany();
   await testPrisma.lead.deleteMany();
-  await testPrisma.clientIntegration.deleteMany();
+  await testPrisma.workspaceIntegration.deleteMany();
   await testPrisma.adminSession.deleteMany();
   await testPrisma.admin.deleteMany();
-  await testPrisma.client.deleteMany();
+  await testPrisma.workspace.deleteMany();
   
   // Reset all mocks
   vi.clearAllMocks();
 });
 
 /**
- * Test helper: Create a test client
+ * Test helper: Create a test workspace
  */
-export async function createTestClient(overrides: Partial<{
+export async function createTestWorkspace(overrides: Partial<{
   name: string;
   slug: string;
   status: 'ACTIVE' | 'PAUSED';
 }> = {}) {
-  return testPrisma.client.create({
+  return testPrisma.workspace.create({
     data: {
-      name: overrides.name ?? 'Test Client',
-      slug: overrides.slug ?? `test-client-${Date.now()}`,
+      name: overrides.name ?? 'Test Workspace',
+      slug: overrides.slug ?? `test-workspace-${Date.now()}`,
       status: overrides.status ?? 'ACTIVE',
     },
   });
 }
 
+/** @deprecated Use createTestWorkspace instead */
+export const createTestClient = createTestWorkspace;
+
 /**
  * Test helper: Create a test integration
  */
 export async function createTestIntegration(
-  clientId: string,
+  workspaceId: string,
   integration: 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE',
   secret: string,
   meta?: Record<string, unknown>
@@ -202,12 +205,12 @@ export async function createTestIntegration(
     keyVersion,
   }];
   
-  return testPrisma.clientIntegration.create({
+  return testPrisma.workspaceIntegration.create({
     data: {
-      clientId,
+      workspaceId,
       integration,
-      secrets: secrets as Parameters<typeof testPrisma.clientIntegration.create>[0]['data']['secrets'],
-      meta: meta as Parameters<typeof testPrisma.clientIntegration.create>[0]['data']['meta'],
+      secrets: secrets as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['secrets'],
+      meta: meta as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['meta'],
     },
   });
 }
@@ -217,7 +220,7 @@ export async function createTestIntegration(
  * ABC Ignite requires both App ID and App Key secrets
  */
 export async function createAbcIgniteIntegration(
-  clientId: string,
+  workspaceId: string,
   appId: string,
   appKey: string,
   meta?: {
@@ -248,12 +251,12 @@ export async function createAbcIgniteIntegration(
     },
   ];
   
-  return testPrisma.clientIntegration.create({
+  return testPrisma.workspaceIntegration.create({
     data: {
-      clientId,
+      workspaceId,
       integration: 'ABC_IGNITE',
-      secrets: secrets as Parameters<typeof testPrisma.clientIntegration.create>[0]['data']['secrets'],
-      meta: meta as Parameters<typeof testPrisma.clientIntegration.create>[0]['data']['meta'],
+      secrets: secrets as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['secrets'],
+      meta: meta as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['meta'],
     },
   });
 }
@@ -262,7 +265,7 @@ export async function createAbcIgniteIntegration(
  * Test helper: Create a test lead
  */
 export async function createTestLead(
-  clientId: string,
+  workspaceId: string,
   overrides: Partial<{
     email: string;
     source: string;
@@ -271,7 +274,7 @@ export async function createTestLead(
 ) {
   return testPrisma.lead.create({
     data: {
-      clientId,
+      workspaceId,
       email: overrides.email ?? `test-${Date.now()}@example.com`,
       source: overrides.source ?? 'test',
       stage: overrides.stage ?? 'CAPTURED',
@@ -280,14 +283,17 @@ export async function createTestLead(
 }
 
 /**
- * Test helper: Get events for a client
+ * Test helper: Get events for a workspace
  */
-export async function getEventsForClient(clientId: string) {
+export async function getEventsForWorkspace(workspaceId: string) {
   return testPrisma.event.findMany({
-    where: { clientId },
+    where: { workspaceId },
     orderBy: { createdAt: 'desc' },
   });
 }
+
+/** @deprecated Use getEventsForWorkspace instead */
+export const getEventsForClient = getEventsForWorkspace;
 
 /**
  * Test helper: Create a test workflow
@@ -295,7 +301,7 @@ export async function getEventsForClient(clientId: string) {
  * (workflows start disabled and must be explicitly enabled)
  */
 export async function createTestWorkflow(
-  clientId: string,
+  workspaceId: string,
   overrides: Partial<{
     name: string;
     enabled: boolean;
@@ -306,7 +312,7 @@ export async function createTestWorkflow(
 ) {
   return testPrisma.workflow.create({
     data: {
-      clientId,
+      workspaceId,
       name: overrides.name ?? 'Test Workflow',
       enabled: overrides.enabled ?? false, // Default to disabled - must be explicitly enabled
       triggerAdapter: overrides.triggerAdapter ?? 'revline',
@@ -320,7 +326,7 @@ export async function createTestWorkflow(
  * Test helper: Create a test webhook event
  */
 export async function createTestWebhookEvent(
-  clientId: string,
+  workspaceId: string,
   overrides: Partial<{
     provider: 'stripe' | 'calendly' | 'revline';
     providerEventId: string;
@@ -335,7 +341,7 @@ export async function createTestWebhookEvent(
   
   return testPrisma.webhookEvent.create({
     data: {
-      clientId,
+      workspaceId,
       correlationId: randomUUID(),
       provider: overrides.provider ?? 'stripe',
       providerEventId: overrides.providerEventId ?? `evt_test_${Date.now()}`,
@@ -352,7 +358,7 @@ export async function createTestWebhookEvent(
  * Test helper: Create a test idempotency key
  */
 export async function createTestIdempotencyKey(
-  clientId: string,
+  workspaceId: string,
   overrides: Partial<{
     key: string;
     status: 'PENDING' | 'COMPLETED' | 'FAILED';
@@ -363,7 +369,7 @@ export async function createTestIdempotencyKey(
 ) {
   return testPrisma.idempotencyKey.create({
     data: {
-      clientId,
+      workspaceId,
       key: overrides.key ?? `test-key-${Date.now()}`,
       status: overrides.status ?? 'PENDING',
       result: overrides.result as Parameters<typeof testPrisma.idempotencyKey.create>[0]['data']['result'],
@@ -387,8 +393,8 @@ export async function cleanupTestData() {
   await testPrisma.workflow.deleteMany();
   await testPrisma.event.deleteMany();
   await testPrisma.lead.deleteMany();
-  await testPrisma.clientIntegration.deleteMany();
+  await testPrisma.workspaceIntegration.deleteMany();
   await testPrisma.adminSession.deleteMany();
   await testPrisma.admin.deleteMany();
-  await testPrisma.client.deleteMany();
+  await testPrisma.workspace.deleteMany();
 }

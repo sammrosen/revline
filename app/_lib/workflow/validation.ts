@@ -67,7 +67,7 @@ export async function validateCanEnable(workflowId: string): Promise<ValidationR
   const workflow = await prisma.workflow.findUnique({
     where: { id: workflowId },
     select: {
-      clientId: true,
+      workspaceId: true,
       triggerAdapter: true,
       triggerOperation: true,
       actions: true,
@@ -83,7 +83,7 @@ export async function validateCanEnable(workflowId: string): Promise<ValidationR
 
   // Validate trigger adapter requirements
   const triggerResult = await validateAdapterRequirements(
-    workflow.clientId,
+    workflow.workspaceId,
     workflow.triggerAdapter,
     'trigger'
   );
@@ -92,7 +92,7 @@ export async function validateCanEnable(workflowId: string): Promise<ValidationR
   const actions = workflow.actions as unknown as WorkflowAction[];
   const actionResults = await Promise.all(
     actions.map((action, index) =>
-      validateActionRequirements(workflow.clientId, action, index)
+      validateActionRequirements(workflow.workspaceId, action, index)
     )
   );
 
@@ -125,14 +125,14 @@ export function validateCanEdit(workflow: { enabled: boolean }): ValidationResul
  * @returns Validation result
  */
 export async function validateWorkflowConfig(
-  clientId: string,
+  workspaceId: string,
   config: WorkflowConfig
 ): Promise<ValidationResult> {
   const results: ValidationResult[] = [];
 
   // Validate trigger adapter
   const triggerResult = await validateAdapterRequirements(
-    clientId,
+    workspaceId,
     config.triggerAdapter,
     'trigger'
   );
@@ -141,7 +141,7 @@ export async function validateWorkflowConfig(
   // Validate each action
   for (let i = 0; i < config.actions.length; i++) {
     const actionResult = await validateActionRequirements(
-      clientId,
+      workspaceId,
       config.actions[i],
       i
     );
@@ -164,12 +164,12 @@ export async function validateWorkflowConfig(
  * @returns Validation result with dependent workflow info
  */
 export async function validateCanDeleteIntegration(
-  clientId: string,
+  workspaceId: string,
   integrationType: string
 ): Promise<ValidationResult> {
   // Only check enabled workflows - disabled workflows can reference anything
   const dependentWorkflows = await getWorkflowsUsingIntegration(
-    clientId,
+    workspaceId,
     integrationType.toLowerCase(),
     { enabledOnly: true }
   );
@@ -194,7 +194,7 @@ export async function validateCanDeleteIntegration(
  * Validate an adapter's requirements are met by client config
  */
 async function validateAdapterRequirements(
-  clientId: string,
+  workspaceId: string,
   adapterId: string,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _context: 'trigger' | 'action' // Reserved for future trigger vs action differentiation
@@ -227,10 +227,10 @@ async function validateAdapterRequirements(
   }
 
   // Check if integration exists
-  const integration = await prisma.clientIntegration.findUnique({
+  const integration = await prisma.workspaceIntegration.findUnique({
     where: {
-      clientId_integration: {
-        clientId,
+      workspaceId_integration: {
+        workspaceId,
         integration: integrationType,
       },
     },
@@ -304,7 +304,7 @@ async function validateAdapterRequirements(
  * Validate a single action's requirements
  */
 async function validateActionRequirements(
-  clientId: string,
+  workspaceId: string,
   action: WorkflowAction,
   actionIndex: number
 ): Promise<ValidationResult> {
@@ -313,7 +313,7 @@ async function validateActionRequirements(
 
   // First validate the adapter requirements
   const adapterResult = await validateAdapterRequirements(
-    clientId,
+    workspaceId,
     action.adapter,
     'action'
   );
@@ -339,10 +339,10 @@ async function validateActionRequirements(
       return success(warnings);
     }
 
-    const integration = await prisma.clientIntegration.findUnique({
+    const integration = await prisma.workspaceIntegration.findUnique({
       where: {
-        clientId_integration: {
-          clientId,
+        workspaceId_integration: {
+          workspaceId,
           integration: integrationType,
         },
       },
@@ -396,7 +396,7 @@ async function validateActionRequirements(
   const customValidator = getValidator(action.adapter);
   if (customValidator) {
     const customResult = await customValidator.validate(
-      clientId,
+      workspaceId,
       action.operation,
       action.params
     );
@@ -419,13 +419,13 @@ async function validateActionRequirements(
  * @param options.enabledOnly - If true, only return enabled workflows
  */
 export async function getWorkflowsUsingIntegration(
-  clientId: string,
+  workspaceId: string,
   adapterId: string,
   options: { enabledOnly?: boolean } = {}
 ): Promise<Array<{ id: string; name: string; enabled: boolean }>> {
   const workflows = await prisma.workflow.findMany({
     where: { 
-      clientId,
+      workspaceId,
       ...(options.enabledOnly && { enabled: true }),
     },
     select: {
@@ -473,10 +473,10 @@ export function getWorkflowDependencies(workflow: {
  * Validate all workflows for a client (for dependency graph)
  */
 export async function validateAllWorkflows(
-  clientId: string
+  workspaceId: string
 ): Promise<Record<string, ValidationResult>> {
   const workflows = await prisma.workflow.findMany({
-    where: { clientId },
+    where: { workspaceId },
     select: { id: true },
   });
 
@@ -532,7 +532,7 @@ function getValueByPath(obj: Record<string, unknown>, path: string): unknown {
  * Get available integrations for a client
  */
 export async function getClientIntegrations(
-  clientId: string
+  workspaceId: string
 ): Promise<Array<{
   type: IntegrationType;
   healthStatus: HealthStatus;
@@ -540,8 +540,8 @@ export async function getClientIntegrations(
   secretNames: string[];
   metaKeys: string[];
 }>> {
-  const integrations = await prisma.clientIntegration.findMany({
-    where: { clientId },
+  const integrations = await prisma.workspaceIntegration.findMany({
+    where: { workspaceId },
     select: {
       integration: true,
       healthStatus: true,
@@ -569,7 +569,7 @@ export async function getClientIntegrations(
  * Useful for UI to show warnings before creating workflows
  */
 export async function checkAdapterAvailability(
-  clientId: string,
+  workspaceId: string,
   adapterId: string
 ): Promise<{
   available: boolean;
@@ -601,10 +601,10 @@ export async function checkAdapterAvailability(
     };
   }
 
-  const integration = await prisma.clientIntegration.findUnique({
+  const integration = await prisma.workspaceIntegration.findUnique({
     where: {
-      clientId_integration: {
-        clientId,
+      workspaceId_integration: {
+        workspaceId,
         integration: integrationType,
       },
     },

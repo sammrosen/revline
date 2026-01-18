@@ -23,7 +23,7 @@ export default function DocsPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <Link
-              href="/admin/clients"
+              href="/admin/workspaces"
               className="text-zinc-400 hover:text-white text-sm mb-2 inline-block"
             >
               ← Back to Admin
@@ -47,13 +47,13 @@ export default function DocsPage() {
         <div className="mt-12 pt-6 border-t border-zinc-800">
           <div className="flex flex-wrap gap-4 text-sm">
             <Link
-              href="/admin/clients/new"
+              href="/admin/workspaces/new"
               className="px-4 py-2 bg-white text-black rounded font-medium hover:bg-zinc-200 transition-colors"
             >
               + New Client
             </Link>
             <Link
-              href="/admin/clients"
+              href="/admin/workspaces"
               className="px-4 py-2 border border-zinc-700 text-white rounded hover:border-zinc-600 transition-colors"
             >
               View Clients

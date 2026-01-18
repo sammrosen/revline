@@ -228,7 +228,7 @@ export default function AdminSettingsPage() {
         <div className="flex justify-between items-start mb-8">
           <div>
             <Link
-              href="/admin/clients"
+              href="/admin/workspaces"
               className="text-zinc-400 hover:text-white text-sm mb-4 inline-block"
             >
               ← Back to Clients
@@ -516,7 +516,7 @@ export default function AdminSettingsPage() {
         {/* Navigation */}
         <div className="flex gap-4 mt-8">
           <Link
-            href="/admin/clients"
+            href="/admin/workspaces"
             className="px-4 py-2 border border-zinc-700 text-zinc-300 rounded-lg hover:border-zinc-600 transition-colors"
           >
             Back to Clients

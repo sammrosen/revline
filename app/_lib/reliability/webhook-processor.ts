@@ -39,7 +39,7 @@ export class WebhookProcessor {
     registration: WebhookRegistration
   ): Promise<WebhookRegistrationResult> {
     const correlationId = crypto.randomUUID();
-    const { clientId, provider, providerEventId, rawBody, rawHeaders } = registration;
+    const { workspaceId, provider, providerEventId, rawBody, rawHeaders } = registration;
 
     // Parse payload for convenience querying (but keep raw for verification)
     let parsedPayload: Prisma.InputJsonValue | null = null;
@@ -53,7 +53,7 @@ export class WebhookProcessor {
       // Attempt to create the webhook event
       const record = await prisma.webhookEvent.create({
         data: {
-          clientId,
+          workspaceId,
           correlationId,
           provider,
           providerEventId,
@@ -67,7 +67,7 @@ export class WebhookProcessor {
       logStructured({
         correlationId: record.correlationId,
         event: 'webhook_received',
-        clientId,
+        workspaceId,
         provider,
         metadata: { providerEventId },
       });
@@ -87,7 +87,7 @@ export class WebhookProcessor {
         // Duplicate - fetch the existing record
         const existing = await prisma.webhookEvent.findFirst({
           where: {
-            clientId,
+            workspaceId,
             provider,
             providerEventId,
           },
@@ -101,7 +101,7 @@ export class WebhookProcessor {
         logStructured({
           correlationId: existing.correlationId,
           event: 'webhook_duplicate',
-          clientId,
+          workspaceId,
           provider,
           metadata: { providerEventId },
         });
@@ -172,7 +172,7 @@ export class WebhookProcessor {
       error.slice(0, 500),
       {
         provider: event.provider,
-        clientId: event.clientId,
+        workspaceId: event.workspaceId,
         eventId: event.providerEventId,
         correlationId: event.correlationId,
       }

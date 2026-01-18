@@ -1,7 +1,7 @@
 /**
  * RevLine Integration Adapter
  * 
- * Handles RevLine internal configuration for a specific client.
+ * Handles RevLine internal configuration for a specific workspace.
  * Unlike other adapters, RevLine has no external API - it manages
  * internal configuration like forms and settings.
  * 
@@ -9,48 +9,46 @@
  * 
  * STANDARDS:
  * - Returns structured IntegrationResult for all operations
- * - Used to check form enablement and get trigger operations
+ * - Used to check form enablement for workflow triggers
+ * - Each enabled form becomes a workflow trigger (formId = trigger operation)
  */
 
 import { IntegrationType } from '@prisma/client';
 import { BaseIntegrationAdapter } from './base';
 import { RevlineMeta, IntegrationResult } from '@/app/_lib/types';
 
-/** Default trigger operation for forms */
-const DEFAULT_TRIGGER_OPERATION = 'form_submitted';
-
 /**
  * Form configuration from RevLine meta
+ * Note: formId IS the workflow trigger operation
  */
 export interface FormConfig {
   formId: string;
   enabled: boolean;
-  triggerOperation: string;
 }
 
 /**
- * RevLine adapter for client-scoped configuration
+ * RevLine adapter for workspace-scoped configuration
  * 
  * @example
- * const adapter = await RevlineAdapter.forClient(clientId);
+ * const adapter = await RevlineAdapter.forClient(workspaceId);
  * if (!adapter) {
- *   // RevLine not configured for this client
+ *   // RevLine not configured for this workspace
  * }
  * 
+ * // Check if form is enabled (form submission will use formId as trigger)
  * if (adapter.isFormEnabled('prospect-intake')) {
- *   const trigger = adapter.getFormTrigger('prospect-intake');
- *   // Use trigger for workflow
+ *   // Workflow triggers on { adapter: 'revline', operation: 'prospect-intake' }
  * }
  */
 export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
   readonly type = IntegrationType.REVLINE;
 
   /**
-   * Load RevLine adapter for a client
+   * Load RevLine adapter for a workspace
    */
-  static async forClient(clientId: string): Promise<RevlineAdapter | null> {
+  static async forClient(workspaceId: string): Promise<RevlineAdapter | null> {
     const data = await BaseIntegrationAdapter.loadAdapter<RevlineMeta>(
-      clientId,
+      workspaceId,
       IntegrationType.REVLINE
     );
     
@@ -58,7 +56,7 @@ export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
       return null;
     }
     
-    return new RevlineAdapter(clientId, data.secrets, data.meta);
+    return new RevlineAdapter(workspaceId, data.secrets, data.meta);
   }
 
   // ===========================================================================
@@ -86,15 +84,8 @@ export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
   }
 
   /**
-   * Get the trigger operation for a form
-   * Returns 'form_submitted' as default if not specified
-   */
-  getFormTrigger(formId: string): string {
-    return this.meta?.forms?.[formId]?.triggerOperation ?? DEFAULT_TRIGGER_OPERATION;
-  }
-
-  /**
    * Get full form configuration
+   * Note: The formId IS the workflow trigger operation
    */
   getFormConfig(formId: string): FormConfig | null {
     const formMeta = this.meta?.forms?.[formId];
@@ -105,7 +96,6 @@ export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
     return {
       formId,
       enabled: formMeta.enabled,
-      triggerOperation: formMeta.triggerOperation ?? DEFAULT_TRIGGER_OPERATION,
     };
   }
 
@@ -120,7 +110,6 @@ export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
     return Object.entries(this.meta.forms).map(([formId, config]) => ({
       formId,
       enabled: config.enabled,
-      triggerOperation: config.triggerOperation ?? DEFAULT_TRIGGER_OPERATION,
     }));
   }
 
@@ -129,7 +118,7 @@ export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
   // ===========================================================================
 
   /**
-   * Get the default source identifier for this client
+   * Get the default source identifier for this workspace
    */
   getDefaultSource(): string | undefined {
     return this.meta?.settings?.defaultSource;

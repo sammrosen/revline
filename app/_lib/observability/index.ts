@@ -106,19 +106,19 @@ export const ObservabilityService = {
       await AlertService.critical(
         `System Alert: ${violations.length} issue(s)`,
         alertMessage,
-        { clientId, source: 'observability' }
+        { workspaceId: clientId, source: 'observability' }
       );
     } else {
       await AlertService.warning(
         `System Warning: ${violations.length} issue(s)`,
         alertMessage,
-        { clientId, source: 'observability' }
+        { workspaceId: clientId, source: 'observability' }
       );
     }
 
     // Emit event for audit trail
     await emitEvent({
-      clientId: clientId ?? 'system',
+      workspaceId: clientId ?? 'system',
       system: EventSystem.CRON,
       eventType: 'observability_threshold_exceeded',
       success: false,

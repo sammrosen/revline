@@ -2,7 +2,7 @@
  * Base Integration Adapter
  * 
  * Abstract class that all integration adapters must extend.
- * Provides common functionality for client binding, health tracking, and configuration.
+ * Provides common functionality for workspace binding, health tracking, and configuration.
  * 
  * STANDARDS:
  * - All integrations MUST extend this class
@@ -34,29 +34,34 @@ export abstract class BaseIntegrationAdapter<TMeta extends IntegrationMeta = Int
 
   /**
    * Create a new adapter instance
-   * Use the static forClient() method instead of calling directly
+   * Use the static forWorkspace() method instead of calling directly
    */
   constructor(
-    protected readonly clientId: string,
+    protected readonly workspaceId: string,
     protected readonly secrets: IntegrationSecret[],
     protected readonly meta: TMeta | null
   ) {}
 
+  // Legacy alias for backwards compatibility
+  protected get clientId(): string {
+    return this.workspaceId;
+  }
+
   /**
-   * Load an adapter for a specific client
+   * Load an adapter for a specific workspace
    * Returns null if the integration is not configured
    * 
-   * Note: Subclasses should implement their own static forClient() method
+   * Note: Subclasses should implement their own static forWorkspace() method
    * that calls loadAdapter() with the appropriate type.
    */
   protected static async loadAdapter<TMeta extends IntegrationMeta>(
-    clientId: string,
+    workspaceId: string,
     type: IntegrationType
   ): Promise<{ secrets: IntegrationSecret[]; meta: TMeta | null } | null> {
-    const row = await prisma.clientIntegration.findUnique({
+    const row = await prisma.workspaceIntegration.findUnique({
       where: {
-        clientId_integration: {
-          clientId,
+        workspaceId_integration: {
+          workspaceId,
           integration: type,
         },
       },
@@ -146,10 +151,10 @@ export abstract class BaseIntegrationAdapter<TMeta extends IntegrationMeta = Int
    * Call this after every successful API operation
    */
   protected async touch(): Promise<void> {
-    await prisma.clientIntegration.update({
+    await prisma.workspaceIntegration.update({
       where: {
-        clientId_integration: {
-          clientId: this.clientId,
+        workspaceId_integration: {
+          workspaceId: this.workspaceId,
           integration: this.type,
         },
       },
@@ -165,10 +170,10 @@ export abstract class BaseIntegrationAdapter<TMeta extends IntegrationMeta = Int
    * Call this after failures
    */
   protected async markUnhealthy(status: HealthStatus = HealthStatus.RED): Promise<void> {
-    await prisma.clientIntegration.update({
+    await prisma.workspaceIntegration.update({
       where: {
-        clientId_integration: {
-          clientId: this.clientId,
+        workspaceId_integration: {
+          workspaceId: this.workspaceId,
           integration: this.type,
         },
       },
@@ -193,10 +198,15 @@ export abstract class BaseIntegrationAdapter<TMeta extends IntegrationMeta = Int
   }
 
   /**
-   * Get the client ID (for event logging)
+   * Get the workspace ID (for event logging)
    */
+  getWorkspaceId(): string {
+    return this.workspaceId;
+  }
+
+  // Legacy alias
   getClientId(): string {
-    return this.clientId;
+    return this.workspaceId;
   }
 }
 
@@ -206,4 +216,4 @@ export abstract class BaseIntegrationAdapter<TMeta extends IntegrationMeta = Int
 export type AdapterConstructor<
   TMeta extends IntegrationMeta,
   T extends BaseIntegrationAdapter<TMeta>
-> = new (clientId: string, secrets: IntegrationSecret[], meta: TMeta | null) => T;
+> = new (workspaceId: string, secrets: IntegrationSecret[], meta: TMeta | null) => T;

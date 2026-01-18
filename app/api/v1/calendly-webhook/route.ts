@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     // 4. Register webhook with deduplication
     const registration = await WebhookProcessor.register({
-      clientId: client.id,
+      workspaceId: client.id,
       provider: 'calendly',
       providerEventId,
       rawBody,
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       logStructured({
         correlationId: registration.correlationId,
         event: 'calendly_webhook_duplicate',
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'calendly',
         metadata: { providerEventId },
       });
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
     if (client.status !== 'ACTIVE') {
       await WebhookProcessor.markFailed(registration.id, 'Client is paused');
       await emitEvent({
-        clientId: client.id,
+        workspaceId: client.id,
         system: EventSystem.CALENDLY,
         eventType: 'execution_blocked',
         success: false,
@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
     if (!verifyCalendlySignature(rawBody, signature, signingKey)) {
       await WebhookProcessor.markFailed(registration.id, 'Invalid webhook signature');
       await emitEvent({
-        clientId: client.id,
+        workspaceId: client.id,
         system: EventSystem.CALENDLY,
         eventType: 'calendly_signature_invalid',
         success: false,
@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
     logStructured({
       correlationId: registration.correlationId,
       event: 'calendly_signature_verified',
-      clientId: client.id,
+      workspaceId: client.id,
       provider: 'calendly',
     });
 
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
       logStructured({
         correlationId: registration.correlationId,
         event: 'calendly_unhandled_event_type',
-        clientId: client.id,
+        workspaceId: client.id,
         provider: 'calendly',
         metadata: { eventType },
       });
@@ -242,7 +242,7 @@ export async function POST(request: NextRequest) {
     logStructured({
       correlationId: registration.correlationId,
       event: 'calendly_webhook_processed',
-      clientId: client.id,
+      workspaceId: client.id,
       provider: 'calendly',
       success: true,
       metadata: { email, eventType },

@@ -57,7 +57,7 @@ const lookupMember: ActionExecutor = {
       return { success: false, error: 'Missing barcode in payload or params' };
     }
 
-    const adapter = await AbcIgniteAdapter.forClient(ctx.clientId);
+    const adapter = await AbcIgniteAdapter.forClient(ctx.workspaceId);
     if (!adapter) {
       return { success: false, error: 'ABC Ignite not configured for this client' };
     }
@@ -65,7 +65,7 @@ const lookupMember: ActionExecutor = {
     const result = await adapter.getMemberByBarcode(barcode);
 
     await emitEvent({
-      clientId: ctx.clientId,
+      workspaceId: ctx.workspaceId,
       leadId: ctx.leadId,
       system: EventSystem.ABC_IGNITE,
       eventType: result.success && result.data
@@ -106,7 +106,7 @@ const checkAvailability: ActionExecutor = {
     ctx: WorkflowContext,
     params: Record<string, unknown>
   ): Promise<ActionResult> {
-    const adapter = await AbcIgniteAdapter.forClient(ctx.clientId);
+    const adapter = await AbcIgniteAdapter.forClient(ctx.workspaceId);
     if (!adapter) {
       return { success: false, error: 'ABC Ignite not configured for this client' };
     }
@@ -131,7 +131,7 @@ const checkAvailability: ActionExecutor = {
     const result = await adapter.getEmployeeAvailability(employeeId, eventTypeId, dateRange);
 
     await emitEvent({
-      clientId: ctx.clientId,
+      workspaceId: ctx.workspaceId,
       leadId: ctx.leadId,
       system: EventSystem.ABC_IGNITE,
       eventType: result.success
@@ -177,7 +177,7 @@ const enrollMember: ActionExecutor = {
       return { success: false, error: 'Missing eventId parameter' };
     }
 
-    const adapter = await AbcIgniteAdapter.forClient(ctx.clientId);
+    const adapter = await AbcIgniteAdapter.forClient(ctx.workspaceId);
     if (!adapter) {
       return { success: false, error: 'ABC Ignite not configured for this client' };
     }
@@ -198,7 +198,7 @@ const enrollMember: ActionExecutor = {
     });
 
     await emitEvent({
-      clientId: ctx.clientId,
+      workspaceId: ctx.workspaceId,
       leadId: ctx.leadId,
       system: EventSystem.ABC_IGNITE,
       eventType: result.success
@@ -236,7 +236,7 @@ const unenrollMember: ActionExecutor = {
       return { success: false, error: 'Missing eventId parameter' };
     }
 
-    const adapter = await AbcIgniteAdapter.forClient(ctx.clientId);
+    const adapter = await AbcIgniteAdapter.forClient(ctx.workspaceId);
     if (!adapter) {
       return { success: false, error: 'ABC Ignite not configured for this client' };
     }
@@ -250,7 +250,7 @@ const unenrollMember: ActionExecutor = {
     const result = await adapter.unenrollMember(eventId, memberIdentifier);
 
     await emitEvent({
-      clientId: ctx.clientId,
+      workspaceId: ctx.workspaceId,
       leadId: ctx.leadId,
       system: EventSystem.ABC_IGNITE,
       eventType: result.success
@@ -292,7 +292,7 @@ const addToWaitlist: ActionExecutor = {
       return { success: false, error: 'Missing eventId parameter' };
     }
 
-    const adapter = await AbcIgniteAdapter.forClient(ctx.clientId);
+    const adapter = await AbcIgniteAdapter.forClient(ctx.workspaceId);
     if (!adapter) {
       return { success: false, error: 'ABC Ignite not configured for this client' };
     }
@@ -306,7 +306,7 @@ const addToWaitlist: ActionExecutor = {
     const result = await adapter.addToWaitlist(eventId, memberIdentifier);
 
     await emitEvent({
-      clientId: ctx.clientId,
+      workspaceId: ctx.workspaceId,
       leadId: ctx.leadId,
       system: EventSystem.ABC_IGNITE,
       eventType: result.success
@@ -345,7 +345,7 @@ const removeFromWaitlist: ActionExecutor = {
       return { success: false, error: 'Missing eventId parameter' };
     }
 
-    const adapter = await AbcIgniteAdapter.forClient(ctx.clientId);
+    const adapter = await AbcIgniteAdapter.forClient(ctx.workspaceId);
     if (!adapter) {
       return { success: false, error: 'ABC Ignite not configured for this client' };
     }
@@ -359,7 +359,7 @@ const removeFromWaitlist: ActionExecutor = {
     const result = await adapter.removeFromWaitlist(eventId, memberIdentifier);
 
     await emitEvent({
-      clientId: ctx.clientId,
+      workspaceId: ctx.workspaceId,
       leadId: ctx.leadId,
       system: EventSystem.ABC_IGNITE,
       eventType: result.success

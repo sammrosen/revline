@@ -48,7 +48,7 @@ export default function AdminLoginPage() {
       }
 
       // No 2FA - login complete
-      router.push('/admin/clients');
+      router.push('/admin/workspaces');
       router.refresh();
     } catch {
       setError('Network error');
@@ -87,7 +87,7 @@ export default function AdminLoginPage() {
       }
 
       // Success - redirect to clients page
-      router.push('/admin/clients');
+      router.push('/admin/workspaces');
       router.refresh();
     } catch {
       setError('Network error');
