@@ -392,4 +392,3 @@ export async function cleanupTestData() {
   await testPrisma.admin.deleteMany();
   await testPrisma.client.deleteMany();
 }
-
