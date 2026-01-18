@@ -96,14 +96,14 @@ Open browser console (F12) at http://localhost:3000 and run:
 
 ```javascript
 // Create admin account
-await fetch('http://localhost:3000/api/v1/admin/setup', {
+await fetch('http://localhost:3000/api/v1/setup', {
   method: 'POST',
   headers: {'Content-Type': 'application/json'},
   body: JSON.stringify({password: 'YourSecurePassword'})
 }).then(r => r.json()).then(console.log)
 
 // Migrate your client data
-await fetch('http://localhost:3000/api/admin/seed', {
+await fetch('http://localhost:3000/api/v1/auth/seed', {
   method: 'POST',
   headers: {'Content-Type': 'application/json'},
   body: JSON.stringify({
@@ -116,15 +116,15 @@ await fetch('http://localhost:3000/api/admin/seed', {
 
 **Important:** Delete the temporary seed endpoints after use:
 ```bash
-rm app/api/v1/admin/setup/route.ts
-rm app/api/v1/admin/seed/route.ts
+rm app/api/v1/setup/route.ts
+rm app/api/v1/seed/route.ts
 ```
 
 ---
 
 ### Step 5: Access Admin Dashboard
 
-1. Go to http://localhost:3000/admin/login
+1. Go to http://localhost:3000/login
 2. Enter your password
 3. You should see your client with MailerLite + Stripe integrations already configured
 

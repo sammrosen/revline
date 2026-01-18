@@ -279,8 +279,8 @@ export const integrations = {
 
 **Critical:** The frontend requires updates in **multiple files**:
 - `app/_lib/integrations/config.ts` - Integration metadata
-- `app/admin/clients/[id]/add-integration-form.tsx` - Add form
-- `app/admin/clients/[id]/integration-actions.tsx` - Edit/Configure modal
+- `app/workspaces/[id]/add-integration-form.tsx` - Add form
+- `app/workspaces/[id]/integration-actions.tsx` - Edit/Configure modal
 - Custom config editor components
 
 Missing any wire-up causes **runtime errors** (e.g., `ReferenceError: isYourIntegration is not defined`).

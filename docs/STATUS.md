@@ -106,9 +106,9 @@ All core features implemented and tested. Ready for production deployment.
 **Files:**
 - `app/_lib/auth.ts` - Argon2 password hashing + session management
 - `app/_lib/totp.ts` - TOTP 2FA support
-- `app/api/admin/login/route.ts` - Login endpoint
-- `app/api/admin/logout/route.ts` - Logout endpoint
-- `app/api/admin/2fa/*` - 2FA management endpoints
+- `app/api/login/route.ts` - Login endpoint
+- `app/api/v1/auth/logout/route.ts` - Logout endpoint
+- `app/api/v1/auth/2fa/*` - 2FA management endpoints
 
 **Features:**
 - ✅ Argon2id hashing (64MB memory, 3 iterations, 4 threads)
@@ -125,16 +125,16 @@ All core features implemented and tested. Ready for production deployment.
 
 **Status:** Complete  
 **Files:**
-- `app/admin/layout.tsx` - Admin layout wrapper
-- `app/admin/login/page.tsx` - Password-only login
-- `app/admin/clients/page.tsx` - Client list with health indicators
-- `app/admin/clients/[id]/page.tsx` - Client detail with events
-- `app/admin/clients/new/page.tsx` - Create new client
-- `app/admin/clients/client-actions.tsx` - Pause/unpause buttons
-- `app/admin/clients/[id]/add-integration-form.tsx` - Add integrations
-- `app/api/admin/clients/route.ts` - Client CRUD API
-- `app/api/admin/clients/[id]/route.ts` - Client detail + pause/unpause API
-- `app/api/admin/integrations/route.ts` - Add integration API
+- `app/(dashboard)/layout.tsx` - Admin layout wrapper
+- `app/login/page.tsx` - Password-only login
+- `app/workspaces/page.tsx` - Client list with health indicators
+- `app/workspaces/[id]/page.tsx` - Client detail with events
+- `app/workspaces/new/page.tsx` - Create new client
+- `app/workspaces/client-actions.tsx` - Pause/unpause buttons
+- `app/workspaces/[id]/add-integration-form.tsx` - Add integrations
+- `app/api/workspaces/route.ts` - Client CRUD API
+- `app/api/workspaces/[id]/route.ts` - Client detail + pause/unpause API
+- `app/api/v1/integrations/route.ts` - Add integration API
 
 **Features:**
 - ✅ Login page (password only, no username)
@@ -180,7 +180,7 @@ All core features implemented and tested. Ready for production deployment.
 - `app/_lib/workflow/registry.ts` - Adapter definitions
 - `app/_lib/workflow/engine.ts` - Execution engine
 - `app/_lib/workflow/executors/` - Action executors
-- `app/api/admin/workflows/` - Workflow CRUD APIs
+- `app/api/v1/workflows/` - Workflow CRUD APIs
 - `prisma/schema.prisma` - Workflow and WorkflowExecution models
 
 **Features:**

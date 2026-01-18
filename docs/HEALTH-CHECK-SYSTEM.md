@@ -141,7 +141,7 @@ Each test shows:
 
 ### API Route
 
-**Endpoint:** `GET /api/admin/clients/[id]/health-check`
+**Endpoint:** `GET /api/workspaces/[id]/health-check`
 
 **Authentication:** Requires admin session
 
@@ -233,13 +233,13 @@ This is used for testing landing pages and webhook endpoints.
 
 ## Files Created
 
-- `app/api/v1/admin/clients/[id]/health-check/route.ts` - API endpoint
-- `app/admin/clients/[id]/health-check-button.tsx` - UI component
+- `app/api/v1/workspaces/[id]/health-check/route.ts` - API endpoint
+- `app/workspaces/[id]/health-check-button.tsx` - UI component
 - `docs/HEALTH-CHECK-SYSTEM.md` - This documentation
 
 ## Files Modified
 
-- `app/admin/clients/[id]/page.tsx` - Added health check button
+- `app/workspaces/[id]/page.tsx` - Added health check button
 
 ## Future Enhancements
 
@@ -258,7 +258,7 @@ Potential additions (not in current MVP):
 
 **Check:**
 1. Are you logged in as admin?
-2. Are you on a client detail page (`/admin/clients/[id]`)?
+2. Are you on a client detail page (`/workspaces/[id]`)?
 3. Check browser console for errors
 
 ### Tests Taking Too Long

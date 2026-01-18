@@ -2,15 +2,15 @@
  * Next.js Proxy
  * 
  * Handles two main responsibilities:
- * 1. Protects all /admin/* routes (except /admin/login and /admin/setup) with authentication.
+ * 1. Protects app routes (workspaces, settings, etc.) with authentication.
  *    Checks session cookie and redirects to login if not authenticated.
  * 2. Routes custom domains to specific pages.
  * 
  * STANDARDS:
- * - All admin routes protected automatically
+ * - All app routes protected automatically
  * - No manual auth checks needed in pages
- * - Passes adminId via headers for server components
- * - /admin/setup only accessible when no admin exists (checked in the route itself)
+ * - Passes userId via x-user-id header for server components
+ * - /setup only accessible when no users exist (checked in the route itself)
  */
 
 import { NextResponse } from 'next/server';
@@ -28,85 +28,104 @@ const DOMAIN_ROUTES: Record<string, string> = {
   // Add more domain mappings here
 };
 
+// Protected page routes (require authentication)
+const PROTECTED_PAGE_PREFIXES = [
+  '/workspaces',
+  '/settings',
+  '/docs',
+  '/onboarding',
+];
+
+// Protected API routes (require authentication)
+const PROTECTED_API_PREFIXES = [
+  '/api/v1/workspaces',
+  '/api/v1/integrations',
+  '/api/v1/workflows',
+  '/api/v1/forms',
+  '/api/v1/executions',
+  '/api/v1/check-form-id',
+  '/api/v1/workflow-registry',
+  '/api/v1/auth/2fa',
+];
+
+// Public auth routes (no authentication required)
+const PUBLIC_AUTH_PATHS = [
+  '/login',
+  '/setup',
+  '/api/v1/auth/login',
+  '/api/v1/auth/login/verify-2fa',
+  '/api/v1/auth/setup',
+  '/api/v1/auth/logout',
+];
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 1. Handle admin authentication first
-  // Protect /admin routes (except /admin/login)
-  const isAdminPage = pathname.startsWith('/admin');
-  // Protect /api/admin and /api/v1/admin routes
-  const isAdminApi = pathname.startsWith('/api/admin') || pathname.startsWith('/api/v1/admin');
+  // Check if this is a protected page
+  const isProtectedPage = PROTECTED_PAGE_PREFIXES.some(prefix => 
+    pathname.startsWith(prefix)
+  );
+  
+  // Check if this is a protected API route
+  const isProtectedApi = PROTECTED_API_PREFIXES.some(prefix => 
+    pathname.startsWith(prefix)
+  );
 
-  if (isAdminPage || isAdminApi) {
-    // Allow access to login, setup, and logout pages without authentication
-    const publicAdminPaths = [
-      '/admin/login',
-      '/api/admin/login',
-      '/api/v1/admin/login',
-      '/api/admin/login/verify-2fa',
-      '/api/v1/admin/login/verify-2fa',
-      '/admin/setup',
-      '/api/admin/setup',
-      '/api/v1/admin/setup',
-      '/api/admin/logout',
-      '/api/v1/admin/logout',
-    ];
-    
-    if (publicAdminPaths.includes(pathname)) {
-      // Continue to domain routing check below
-    } else {
-      // Get session cookie
-      const sessionId = request.cookies.get('revline_admin_session')?.value;
+  // Check if this is a public auth path
+  const isPublicAuthPath = PUBLIC_AUTH_PATHS.includes(pathname);
 
-      if (!sessionId) {
-        // No session
-        if (isAdminApi) {
-          // API routes return 401
-          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        } else {
-          // Page routes redirect to login
-          const loginUrl = new URL('/admin/login', request.url);
-          loginUrl.searchParams.set('redirect', pathname);
-          return NextResponse.redirect(loginUrl);
-        }
+  if ((isProtectedPage || isProtectedApi) && !isPublicAuthPath) {
+    // Get session cookie
+    const sessionId = request.cookies.get('revline_session')?.value;
+
+    if (!sessionId) {
+      // No session
+      if (isProtectedApi) {
+        // API routes return 401
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      } else {
+        // Page routes redirect to login
+        const loginUrl = new URL('/login', request.url);
+        loginUrl.searchParams.set('redirect', pathname);
+        return NextResponse.redirect(loginUrl);
       }
-
-      // Validate session
-      const adminId = await validateSession(sessionId);
-
-      if (!adminId) {
-        // Invalid or expired session
-        if (isAdminApi) {
-          // API routes return 401
-          const response = NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-          response.cookies.delete('revline_admin_session');
-          return response;
-        } else {
-          // Page routes redirect to login
-          const loginUrl = new URL('/admin/login', request.url);
-          loginUrl.searchParams.set('redirect', pathname);
-          const response = NextResponse.redirect(loginUrl);
-          response.cookies.delete('revline_admin_session');
-          return response;
-        }
-      }
-
-      // Valid session - add adminId to headers for server components and API routes
-      const response = NextResponse.next();
-      response.headers.set('x-admin-id', adminId);
-      
-      // Check domain routing for admin routes too (in case admin is accessed via custom domain)
-      const hostname = request.headers.get('host') || '';
-      const targetPath = DOMAIN_ROUTES[hostname];
-      
-      if (targetPath) {
-        const url = request.nextUrl.clone();
-        url.pathname = targetPath;
-        return NextResponse.rewrite(url);
-      }
-      
-      return response;
     }
+
+    // Validate session
+    const userId = await validateSession(sessionId);
+
+    if (!userId) {
+      // Invalid or expired session
+      if (isProtectedApi) {
+        // API routes return 401
+        const response = NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        response.cookies.delete('revline_session');
+        return response;
+      } else {
+        // Page routes redirect to login
+        const loginUrl = new URL('/login', request.url);
+        loginUrl.searchParams.set('redirect', pathname);
+        const response = NextResponse.redirect(loginUrl);
+        response.cookies.delete('revline_session');
+        return response;
+      }
+    }
+
+    // Valid session - add userId to headers for server components and API routes
+    const response = NextResponse.next();
+    response.headers.set('x-user-id', userId);
+    
+    // Check domain routing for app routes too (in case accessed via custom domain)
+    const hostname = request.headers.get('host') || '';
+    const targetPath = DOMAIN_ROUTES[hostname];
+    
+    if (targetPath) {
+      const url = request.nextUrl.clone();
+      url.pathname = targetPath;
+      return NextResponse.rewrite(url);
+    }
+    
+    return response;
   }
 
   // 2. Handle domain routing
@@ -139,4 +158,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
-

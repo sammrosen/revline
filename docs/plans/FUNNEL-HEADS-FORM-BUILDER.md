@@ -1516,7 +1516,7 @@ export const abcIgniteExecutors: Record<string, ActionExecutor> = {
 
 ### 9.1 RevLine Config Editor
 
-Create `app/admin/clients/[id]/revline-config-editor.tsx`:
+Create `app/workspaces/[id]/revline-config-editor.tsx`:
 
 This is a tabbed interface with:
 - **Forms Tab**: List forms, create/edit/delete forms, field editor
@@ -1586,7 +1586,7 @@ When editing a field:
 
 ### 9.4 Wire Into Add Integration Form
 
-Update `app/admin/clients/[id]/add-integration-form.tsx`:
+Update `app/workspaces/[id]/add-integration-form.tsx`:
 
 ```typescript
 import { RevlineConfigEditor } from './revline-config-editor';

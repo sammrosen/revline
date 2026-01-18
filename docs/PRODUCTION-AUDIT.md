@@ -96,7 +96,7 @@ RevLine is **93% production-ready**. All critical security and reliability issue
 **Location:**
 - Auth helpers: `app/_lib/auth.ts`
 - TOTP helpers: `app/_lib/totp.ts`
-- Admin pages: All files in `app/admin/**` and `app/api/admin/**`
+- Admin pages: All files in `app/(dashboard)/**` and `app/api/v1/**`
 
 **Result:** All admin routes are protected. 2FA available for enhanced security.
 

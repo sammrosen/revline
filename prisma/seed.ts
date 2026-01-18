@@ -92,14 +92,20 @@ async function main() {
     process.exit(1);
   }
 
-  // 1. Create Admin Account
-  console.log('📦 Step 1: Admin Account');
-  const existingAdmin = await prisma.admin.findFirst();
+  // 1. Create User Account
+  console.log('📦 Step 1: User Account');
+  const existingUser = await prisma.user.findFirst();
 
-  if (existingAdmin) {
-    console.log('   ✓ Admin account already exists\n');
+  if (existingUser) {
+    console.log('   ✓ User account already exists\n');
   } else {
-    const password = await prompt('   Enter admin password: ');
+    const email = await prompt('   Enter user email: ');
+    if (!email || !email.includes('@')) {
+      console.log('   ✗ Valid email is required');
+      process.exit(1);
+    }
+    
+    const password = await prompt('   Enter user password: ');
     if (!password || password.length < 8) {
       console.log('   ✗ Password must be at least 8 characters');
       process.exit(1);
@@ -112,10 +118,13 @@ async function main() {
       parallelism: 4,
     });
 
-    await prisma.admin.create({
-      data: { passwordHash },
+    await prisma.user.create({
+      data: { 
+        email: email.toLowerCase(),
+        passwordHash,
+      },
     });
-    console.log('   ✓ Admin account created\n');
+    console.log('   ✓ User account created\n');
   }
 
   // 2. Create Your Client Record
@@ -240,7 +249,7 @@ async function main() {
   console.log('Next steps:');
   console.log('1. Run migrations: npx prisma migrate dev');
   console.log('2. Start the app: npm run dev');
-  console.log('3. Login at: /admin/login');
+  console.log('3. Login at: /login');
   console.log('4. Add more integrations via the admin UI\n');
 }
 

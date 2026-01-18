@@ -43,7 +43,7 @@ Decouple the **source** (how a trigger arrives) from the **type** (what it means
 ### Implementation Path
 
 1. Add `source` field to WorkflowExecution: `{ source: 'webhook' | 'manual' | 'replay' | 'import' }`
-2. Create admin endpoint: `POST /api/admin/workflows/[id]/trigger` for manual execution
+2. Create admin endpoint: `POST /api/v1/workflows/[id]/trigger` for manual execution
 3. Add replay button to execution history UI
 
 ---
@@ -192,7 +192,7 @@ Requires: Cron job or external scheduler to poll and execute.
 
 ```typescript
 // Admin endpoint
-POST /api/admin/workflows/[id]/batch
+POST /api/v1/workflows/[id]/batch
 {
   "filter": { "stage": "CAPTURED", "createdBefore": "2024-01-01" },
   "limit": 100

@@ -124,7 +124,7 @@ grep -rn "return.*error\|ApiResponse.error" --include="*.ts" app/api/
 
 ### Authentication
 
-- [ ] **Admin routes protected** - All `/admin/*` and `/api/admin/*` routes require authentication
+- [ ] **Admin routes protected** - All protected app and API routes require authentication
 - [ ] **Session handling correct** - HTTP-only cookies, secure in production
 - [ ] **No auth bypass paths** - Review new routes for authentication
 - [ ] **Use `getAdminIdFromHeaders()`** - All admin API routes must validate session
@@ -196,9 +196,9 @@ Backend:
 - [ ] prisma/schema.prisma - Add to enums
 
 Frontend:
-- [ ] app/admin/clients/[id]/add-integration-form.tsx - Add support
-- [ ] app/admin/clients/[id]/integration-actions.tsx - Edit support
-- [ ] app/admin/clients/[id]/{name}-config-editor.tsx - Custom editor (optional)
+- [ ] app/workspaces/[id]/add-integration-form.tsx - Add support
+- [ ] app/workspaces/[id]/integration-actions.tsx - Edit support
+- [ ] app/workspaces/[id]/{name}-config-editor.tsx - Custom editor (optional)
 
 Tests:
 - [ ] __tests__/unit/{name}.test.ts - Unit tests

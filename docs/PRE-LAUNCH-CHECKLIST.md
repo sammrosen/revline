@@ -40,9 +40,9 @@ Complete all items before going live with client data.
 - [ ] **HTTPS enforced** (Railway handles this)
 - [ ] **Database SSL enabled** (`?sslmode=require` in DATABASE_URL)
 - [ ] **No debug endpoints in production**
-  - Remove `/api/v1/admin/setup` if exists
-  - Remove `/api/v1/admin/seed` if exists
-  - Remove `/api/v1/admin/debug-login` if exists
+  - Remove `/api/v1/setup` if exists
+  - Remove `/api/v1/auth/seed` if exists
+  - Remove `/api/v1/auth/debug-login` if exists
 
 ---
 
@@ -155,7 +155,7 @@ Complete all items before going live with client data.
 
 - [ ] **App starts without errors** (check Railway logs)
 - [ ] **Home page loads** (if public landing pages exist)
-- [ ] **Admin login works** (`/admin/login`)
+- [ ] **Admin login works** (`/login`)
 - [ ] **API endpoints respond** (`/api/v1/subscribe` returns 503 without valid source)
 - [ ] **Health check passes** (call with Authorization header)
 

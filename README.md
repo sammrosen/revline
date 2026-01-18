@@ -33,7 +33,7 @@ npm run db:seed
 npm run dev
 ```
 
-Open [http://localhost:3000/admin](http://localhost:3000/admin) to access the dashboard.
+Open [http://localhost:3000/workspaces](http://localhost:3000/workspaces) to access the dashboard.
 
 ## Documentation
 
@@ -111,12 +111,12 @@ GitHub Actions workflow is configured in `.github/workflows/ci.yml`.
 
 ```
 app/
-├── admin/                 # Admin dashboard (protected)
-│   ├── clients/          # Client management
-│   ├── login/            # Admin authentication
+├── (dashboard)/           # App dashboard (protected)
+│   ├── workspaces/       # Workspace management
+│   ├── login/            # User authentication
 │   └── onboarding/       # Client setup wizard
 ├── api/
-│   ├── admin/            # Admin API routes
+│   ├── v1/               # API routes (auth, workspaces, integrations, etc.)
 │   ├── subscribe/        # Email capture endpoint
 │   ├── stripe-webhook/   # Stripe webhook handler
 │   ├── calendly-webhook/ # Calendly webhook handler

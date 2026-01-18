@@ -1033,17 +1033,17 @@ Display all workflows for a client:
 ### Admin Endpoints
 
 ```
-GET  /api/admin/workflows                    # List workflows for client
-POST /api/admin/workflows                    # Create workflow
-GET  /api/admin/workflows/[id]               # Get workflow details
-PUT  /api/admin/workflows/[id]               # Update workflow
-DELETE /api/admin/workflows/[id]             # Delete workflow
-PATCH /api/admin/workflows/[id]/toggle       # Enable/disable workflow
+GET  /api/v1/workflows                    # List workflows for client
+POST /api/v1/workflows                    # Create workflow
+GET  /api/v1/workflows/[id]               # Get workflow details
+PUT  /api/v1/workflows/[id]               # Update workflow
+DELETE /api/v1/workflows/[id]             # Delete workflow
+PATCH /api/v1/workflows/[id]/toggle       # Enable/disable workflow
 
-GET  /api/admin/workflows/[id]/executions    # Execution history
-GET  /api/admin/workflows/executions/[id]    # Single execution details
+GET  /api/v1/workflows/[id]/executions    # Execution history
+GET  /api/v1/workflows/executions/[id]    # Single execution details
 
-GET  /api/admin/workflow-registry            # Get available triggers/actions
+GET  /api/v1/workflow-registry            # Get available triggers/actions
 ```
 
 ### Registry Endpoint Response

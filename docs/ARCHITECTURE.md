@@ -19,7 +19,7 @@ flowchart TB
         Subscribe["/api/v1/subscribe"]
         StripeWH["/api/v1/stripe-webhook"]
         CalendlyWH["/api/v1/calendly-webhook"]
-        Admin["/admin/*"]
+        Dashboard["/workspaces/*"]
         Cron["/api/v1/cron/health-check"]
     end
 
@@ -406,98 +406,98 @@ Note: App ID and App Key are stored in the encrypted secrets field. Use the "Syn
 
 ### Admin Routes (Internal Only)
 
-**`POST /api/v1/admin/login`**
+**`POST /api/v1/login`**
 - Verify password against Argon2 hash
 - Create session in `admin_sessions`
 - Set httpOnly cookie with session ID
 
-**`POST /api/v1/admin/logout`**
+**`POST /api/v1/auth/logout`**
 - Delete session from `admin_sessions`
 - Clear cookie
 
-**`GET /api/admin/clients`**
+**`GET /api/workspaces`**
 - List all clients with health indicators
 - Client health = worst health among all integrations
 
-**`GET /api/v1/admin/clients/[id]`**
+**`GET /api/v1/workspaces/[id]`**
 - Client details
 - Last 50 events
 - Per-integration health
 - Stuck leads (captured >24h ago, no progress)
 
-**`PATCH /api/admin/clients/[id]`**
+**`PATCH /api/workspaces/[id]`**
 - Actions: `pause`, `unpause`
 - Emits `client_paused/unpaused` event
 
-**`POST /api/v1/admin/integrations`**
+**`POST /api/v1/integrations`**
 - Add new integration for a client
 - Encrypts secret before storing
 - Emits `integration_added` event
 
-**`GET /api/admin/clients/[id]/health-check`**
+**`GET /api/workspaces/[id]/health-check`**
 - Run comprehensive health check for a client
 - Tests configuration and API connectivity
 - Returns pass/warn/fail status for each test
 
-**`GET /api/v1/admin/clients/[id]/mailerlite-insights`**
+**`GET /api/v1/workspaces/[id]/mailerlite-insights`**
 - Fetch MailerLite subscriber stats for client
 - Shows group membership counts
 
 ### Workflow Routes
 
-**`GET /api/v1/admin/workflows?clientId={clientId}`**
+**`GET /api/v1/workflows?clientId={clientId}`**
 - List all workflows for a client
 - Returns workflow definitions with enabled status
 
-**`POST /api/admin/workflows`**
+**`POST /api/v1/workflows`**
 - Create a new workflow
 - Body: `{ clientId, name, triggerAdapter, triggerOperation, triggerFilter?, actions }`
 
-**`GET /api/v1/admin/workflows/{id}`**
+**`GET /api/v1/workflows/{id}`**
 - Get a single workflow by ID
 
-**`PATCH /api/admin/workflows/{id}`**
+**`PATCH /api/v1/workflows/{id}`**
 - Update a workflow
 - Body: Any subset of workflow fields
 
-**`DELETE /api/v1/admin/workflows/{id}`**
+**`DELETE /api/v1/workflows/{id}`**
 - Delete a workflow and its execution history
 
-**`PATCH /api/admin/workflows/{id}/toggle`**
+**`PATCH /api/v1/workflows/{id}/toggle`**
 - Enable or disable a workflow
 - Body: `{ enabled: boolean }`
 
-**`GET /api/v1/admin/workflows/{id}/executions`**
+**`GET /api/v1/workflows/{id}/executions`**
 - Get execution history for a workflow
 - Returns last 50 executions with status and results
 
-**`GET /api/v1/admin/workflow-registry`**
+**`GET /api/v1/workflow-registry`**
 - Get all available adapters with their triggers and actions
 - Used by admin UI for building workflow forms
 
 ### 2FA Routes
 
-**`POST /api/v1/admin/2fa/setup`**
+**`POST /api/v1/auth/2fa/setup`**
 - Generate new TOTP secret for 2FA setup
 - Returns secret and QR code URI
 - Does not enable 2FA until verified
 
-**`POST /api/admin/2fa/verify`**
+**`POST /api/v1/auth/2fa/verify`**
 - Verify TOTP code and enable 2FA
 - Generates and returns recovery codes
 
-**`POST /api/v1/admin/2fa/disable`**
+**`POST /api/v1/auth/2fa/disable`**
 - Disable 2FA for admin account
 - Requires current password
 
-**`GET /api/admin/2fa/status`**
+**`GET /api/v1/auth/2fa/status`**
 - Check if 2FA is enabled
 
-**`POST /api/v1/admin/2fa/regenerate`**
+**`POST /api/v1/auth/2fa/regenerate`**
 - Regenerate recovery codes
 - Requires valid TOTP code
 
-**`POST /api/admin/login/verify-2fa`**
+**`POST /api/login/verify-2fa`**
 - Verify TOTP code during login
 - Called after password verification if 2FA is enabled
 
@@ -521,10 +521,10 @@ Note: App ID and App Key are stored in the encrypted secrets field. Use the "Syn
 
 ### Authentication Model
 
-All `/admin/*` routes and `/api/admin/*` routes require authentication via session cookies.
+All protected app routes and API routes require authentication via session cookies.
 
 **How it works:**
-1. User submits password to `/api/admin/login`
+1. User submits password to `/api/login`
 2. Password verified against Argon2id hash
 3. If 2FA enabled: returns `requires2FA: true`, user must verify TOTP
 4. On success: session created in `admin_sessions` table
@@ -555,7 +555,7 @@ All `/admin/*` routes and `/api/admin/*` routes require authentication via sessi
 **TOTP-based 2FA** is fully implemented:
 
 **Setup flow:**
-1. Admin calls `/api/admin/2fa/setup` to get TOTP secret
+1. Admin calls `/api/v1/auth/2fa/setup` to get TOTP secret
 2. Secret displayed as QR code for authenticator app
 3. Admin enters TOTP code to verify
 4. 2FA enabled, recovery codes generated

@@ -2,7 +2,7 @@ import * as argon2 from 'argon2';
 import { cookies } from 'next/headers';
 import { prisma } from './db';
 
-const SESSION_COOKIE_NAME = 'revline_admin_session';
+const SESSION_COOKIE_NAME = 'revline_session';
 const SESSION_DURATION_DAYS = 14;
 
 /**
@@ -32,15 +32,15 @@ export async function verifyPassword(
 }
 
 /**
- * Create a new admin session and return the session ID
+ * Create a new user session and return the session ID
  */
-export async function createSession(adminId: string): Promise<string> {
+export async function createSession(userId: string): Promise<string> {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + SESSION_DURATION_DAYS);
 
-  const session = await prisma.adminSession.create({
+  const session = await prisma.session.create({
     data: {
-      adminId,
+      userId,
       expiresAt,
     },
   });
@@ -49,16 +49,16 @@ export async function createSession(adminId: string): Promise<string> {
 }
 
 /**
- * Validate a session ID and return the admin ID if valid
+ * Validate a session ID and return the user ID if valid
  * Returns null if session doesn't exist or is expired
  */
 export async function validateSession(
   sessionId: string
 ): Promise<string | null> {
-  const session = await prisma.adminSession.findUnique({
+  const session = await prisma.session.findUnique({
     where: { id: sessionId },
     select: {
-      adminId: true,
+      userId: true,
       expiresAt: true,
     },
   });
@@ -69,18 +69,18 @@ export async function validateSession(
 
   if (session.expiresAt < new Date()) {
     // Session expired - delete it
-    await prisma.adminSession.delete({ where: { id: sessionId } }).catch(() => {});
+    await prisma.session.delete({ where: { id: sessionId } }).catch(() => {});
     return null;
   }
 
-  return session.adminId;
+  return session.userId;
 }
 
 /**
  * Delete a session
  */
 export async function destroySession(sessionId: string): Promise<void> {
-  await prisma.adminSession.delete({ where: { id: sessionId } }).catch(() => {});
+  await prisma.session.delete({ where: { id: sessionId } }).catch(() => {});
 }
 
 /**
@@ -115,9 +115,9 @@ export async function getSessionFromCookie(): Promise<string | null> {
 
 /**
  * Validate the current request's session
- * Returns the admin ID if authenticated, null otherwise
+ * Returns the user ID if authenticated, null otherwise
  */
-export async function getAuthenticatedAdmin(): Promise<string | null> {
+export async function getAuthenticatedUser(): Promise<string | null> {
   const sessionId = await getSessionFromCookie();
   if (!sessionId) {
     return null;
@@ -126,42 +126,108 @@ export async function getAuthenticatedAdmin(): Promise<string | null> {
 }
 
 /**
- * Get the single admin account (for login)
+ * Get a user by email (for login)
  */
-export async function getAdmin(): Promise<{
+export async function getUserByEmail(email: string): Promise<{
   id: string;
+  email: string;
+  name: string | null;
   passwordHash: string;
+  totpEnabled: boolean;
 } | null> {
-  return prisma.admin.findFirst({
+  return prisma.user.findUnique({
+    where: { email: email.toLowerCase() },
     select: {
       id: true,
+      email: true,
+      name: true,
       passwordHash: true,
+      totpEnabled: true,
     },
   });
 }
 
 /**
- * Create the initial admin account (for setup)
+ * Get the first user (for legacy single-user login flow)
+ * TODO: Remove once email-based login UI is implemented
  */
-export async function createAdmin(password: string): Promise<string> {
-  const passwordHash = await hashPassword(password);
-  const admin = await prisma.admin.create({
-    data: { passwordHash },
+export async function getUser(): Promise<{
+  id: string;
+  email: string;
+  passwordHash: string;
+  totpEnabled: boolean;
+} | null> {
+  return prisma.user.findFirst({
+    select: {
+      id: true,
+      email: true,
+      passwordHash: true,
+      totpEnabled: true,
+    },
   });
-  return admin.id;
 }
 
 /**
- * Get admin ID from middleware headers
+ * Create a new user account (for setup)
+ */
+export async function createUser(
+  email: string,
+  password: string,
+  name?: string
+): Promise<string> {
+  const passwordHash = await hashPassword(password);
+  const user = await prisma.user.create({
+    data: { 
+      email: email.toLowerCase(),
+      name,
+      passwordHash,
+    },
+  });
+  return user.id;
+}
+
+/**
+ * Check if any users exist (for setup page gate)
+ */
+export async function hasUsers(): Promise<boolean> {
+  const count = await prisma.user.count();
+  return count > 0;
+}
+
+/**
+ * Get user ID from middleware headers
  * Used in server components after middleware has validated the session
  * Returns null if not set (should not happen if middleware is working correctly)
  */
-export async function getAdminIdFromHeaders(): Promise<string | null> {
+export async function getUserIdFromHeaders(): Promise<string | null> {
   const { headers } = await import('next/headers');
   const headersList = await headers();
-  return headersList.get('x-admin-id');
+  return headersList.get('x-user-id');
 }
 
+// =============================================================================
+// LEGACY ALIASES (for backward compatibility during migration)
+// TODO: Remove these once all code is updated
+// =============================================================================
 
+/** @deprecated Use getAuthenticatedUser instead */
+export const getAuthenticatedAdmin = getAuthenticatedUser;
 
+/** @deprecated Use getUser instead */
+export const getAdmin = getUser;
 
+/** @deprecated Use createUser instead */
+export async function createAdmin(password: string): Promise<string> {
+  // Legacy function - creates user with placeholder email
+  const passwordHash = await hashPassword(password);
+  const user = await prisma.user.create({
+    data: { 
+      email: `admin-${Date.now()}@placeholder.local`,
+      passwordHash,
+    },
+  });
+  return user.id;
+}
+
+/** @deprecated Use getUserIdFromHeaders instead */
+export const getAdminIdFromHeaders = getUserIdFromHeaders;

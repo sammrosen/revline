@@ -23,8 +23,8 @@ Comprehensive improvements to make integrations fully configurable, modular, and
   - Webhook event types
 
 **Files to Update**:
-- `app/admin/clients/[id]/stripe-config-editor.tsx` - Already has structured UI, ensure no JSON mode by default
-- `app/admin/clients/[id]/workflows/workflow-editor.tsx` - Already has dropdown, verify it works correctly
+- `app/workspaces/[id]/stripe-config-editor.tsx` - Already has structured UI, ensure no JSON mode by default
+- `app/workspaces/[id]/workflows/workflow-editor.tsx` - Already has dropdown, verify it works correctly
 - `app/_lib/workflow/registry.ts` - Ensure product validation is correct
 - Test suite files (TBD)
 
@@ -44,8 +44,8 @@ Comprehensive improvements to make integrations fully configurable, modular, and
   - Validation that URLs are valid
 
 **Files to Create/Update**:
-- `app/admin/clients/[id]/calendly-config-editor.tsx` - New structured config editor
-- `app/admin/clients/[id]/workflows/workflow-editor.tsx` - Add event type dropdown
+- `app/workspaces/[id]/calendly-config-editor.tsx` - New structured config editor
+- `app/workspaces/[id]/workflows/workflow-editor.tsx` - Add event type dropdown
 - `app/_lib/workflow/registry.ts` - Add event type param requirements
 - Test suite files (TBD)
 
@@ -65,8 +65,8 @@ Comprehensive improvements to make integrations fully configurable, modular, and
   - Test suite support
 
 **Files to Update**:
-- `app/admin/clients/[id]/mailerlite-config-editor.tsx` - Verify structured UI
-- `app/admin/clients/[id]/workflows/workflow-editor.tsx` - Verify group dropdowns work
+- `app/workspaces/[id]/mailerlite-config-editor.tsx` - Verify structured UI
+- `app/workspaces/[id]/workflows/workflow-editor.tsx` - Verify group dropdowns work
 - Test suite files (TBD)
 
 ### 1.4 ManyChat Sub-Configurations
@@ -84,8 +84,8 @@ Comprehensive improvements to make integrations fully configurable, modular, and
   - Test suite support
 
 **Files to Create/Update**:
-- `app/admin/clients/[id]/manychat-config-editor.tsx` - New structured config editor
-- `app/admin/clients/[id]/workflows/workflow-editor.tsx` - Add flow/tag dropdowns
+- `app/workspaces/[id]/manychat-config-editor.tsx` - New structured config editor
+- `app/workspaces/[id]/workflows/workflow-editor.tsx` - Add flow/tag dropdowns
 - Test suite files (TBD)
 
 ---
@@ -102,8 +102,8 @@ Comprehensive improvements to make integrations fully configurable, modular, and
   - No raw JSON visible unless user explicitly enables it
 
 **Files to Update**:
-- `app/admin/clients/[id]/stripe-config-editor.tsx` - Remove JSON mode default
-- `app/admin/clients/[id]/mailerlite-config-editor.tsx` - Ensure structured UI
+- `app/workspaces/[id]/stripe-config-editor.tsx` - Remove JSON mode default
+- `app/workspaces/[id]/mailerlite-config-editor.tsx` - Ensure structured UI
 - Any other config editors
 
 ### 2.2 Integration Title Colors
@@ -116,8 +116,8 @@ Comprehensive improvements to make integrations fully configurable, modular, and
   - Match the visual style from workflow visualization
 
 **Files to Update**:
-- `app/admin/clients/[id]/integration-actions.tsx` - Apply color to integration title
-- `app/admin/clients/[id]/client-tabs.tsx` - Integration list styling
+- `app/workspaces/[id]/integration-actions.tsx` - Apply color to integration title
+- `app/workspaces/[id]/client-tabs.tsx` - Integration list styling
 - Any other integration list/display components
 
 **Implementation**:
@@ -143,7 +143,7 @@ const style = getIntegrationStyle(integration.integration.toLowerCase());
   - Show order numbers/indicators
 
 **Files to Update**:
-- `app/admin/clients/[id]/workflows/workflow-editor.tsx` - Add drag-and-drop
+- `app/workspaces/[id]/workflows/workflow-editor.tsx` - Add drag-and-drop
 - Consider using `react-beautiful-dnd` or `@dnd-kit/core`
 
 **Implementation Notes**:
@@ -162,7 +162,7 @@ const style = getIntegrationStyle(integration.integration.toLowerCase());
   - ManyChat: Flow/tag dropdowns (needs implementation)
 
 **Files to Update**:
-- `app/admin/clients/[id]/workflows/workflow-editor.tsx` - Add missing dropdowns
+- `app/workspaces/[id]/workflows/workflow-editor.tsx` - Add missing dropdowns
 - Ensure all sub-configs are passed as props
 - Validate selections against available configs
 
@@ -300,19 +300,19 @@ Colors are defined in `app/_lib/workflow/integration-config.ts`:
 ## 9. Related Files Reference
 
 ### Config Editors
-- `app/admin/clients/[id]/stripe-config-editor.tsx`
-- `app/admin/clients/[id]/mailerlite-config-editor.tsx`
-- `app/admin/clients/[id]/calendly-config-editor.tsx` (may need creation)
-- `app/admin/clients/[id]/manychat-config-editor.tsx` (may need creation)
+- `app/workspaces/[id]/stripe-config-editor.tsx`
+- `app/workspaces/[id]/mailerlite-config-editor.tsx`
+- `app/workspaces/[id]/calendly-config-editor.tsx` (may need creation)
+- `app/workspaces/[id]/manychat-config-editor.tsx` (may need creation)
 
 ### Workflow Editor
-- `app/admin/clients/[id]/workflows/workflow-editor.tsx`
-- `app/admin/clients/[id]/workflows/workflow-list.tsx`
+- `app/workspaces/[id]/workflows/workflow-editor.tsx`
+- `app/workspaces/[id]/workflows/workflow-list.tsx`
 
 ### Integration Display
-- `app/admin/clients/[id]/integration-actions.tsx`
-- `app/admin/clients/[id]/client-tabs.tsx`
-- `app/admin/clients/[id]/_components/dependency-tree.tsx`
+- `app/workspaces/[id]/integration-actions.tsx`
+- `app/workspaces/[id]/client-tabs.tsx`
+- `app/workspaces/[id]/_components/dependency-tree.tsx`
 
 ### Core Integration Files
 - `app/_lib/workflow/registry.ts` - Adapter definitions

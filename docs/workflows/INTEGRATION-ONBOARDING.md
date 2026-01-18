@@ -14,8 +14,8 @@ Complete guide for adding new integrations to RevLine. Follow this checklist to 
 | 4. Adapter Implementation | `app/_lib/integrations/{name}.adapter.ts` | 30 min |
 | 5. Workflow Registry | `app/_lib/workflow/registry.ts` | 15 min |
 | 6. Action Executors | `app/_lib/workflow/executors/{name}.ts` | 30 min |
-| 7. **Config Editor (UI)** | `app/admin/clients/[id]/{name}-config-editor.tsx` | 45 min |
-| 8. Wire Config Editor | `app/admin/clients/[id]/add-integration-form.tsx` | 10 min |
+| 7. **Config Editor (UI)** | `app/workspaces/[id]/{name}-config-editor.tsx` | 45 min |
+| 8. Wire Config Editor | `app/workspaces/[id]/add-integration-form.tsx` | 10 min |
 | 9. Migration | Run prisma migrate | 5 min |
 | 10. Testing | Manual + integration tests | 30 min |
 
@@ -377,7 +377,7 @@ const EXECUTORS: Record<string, Record<string, ActionExecutor>> = {
 
 ### Step 7a: Add Config Component (Simple)
 
-**File:** `app/admin/clients/[id]/your-integration-add-config.tsx`
+**File:** `app/workspaces/[id]/your-integration-add-config.tsx`
 
 ```typescript
 'use client';
@@ -435,7 +435,7 @@ export function YourIntegrationAddConfig({ value, onChange }: Props) {
 
 ### Step 7b: Edit Config Component (Full Featured)
 
-**File:** `app/admin/clients/[id]/your-integration-config-editor.tsx`
+**File:** `app/workspaces/[id]/your-integration-config-editor.tsx`
 
 ```typescript
 'use client';
@@ -465,7 +465,7 @@ export function YourIntegrationConfigEditor({
   async function handleSync() {
     if (!integrationId) return;
     setIsSyncing(true);
-    const res = await fetch(`/api/admin/integrations/${integrationId}/sync-data`);
+    const res = await fetch(`/api/v1/integrations/${integrationId}/sync-data`);
     // ... handle response, show selection dialog, etc.
     setIsSyncing(false);
   }
@@ -504,7 +504,7 @@ You need to wire **both** components into their respective forms.
 
 ### 8a: Wire Add Config
 
-**File:** `app/admin/clients/[id]/add-integration-form.tsx`
+**File:** `app/workspaces/[id]/add-integration-form.tsx`
 
 ```typescript
 // 1. Import the ADD config (simple version)
@@ -526,7 +526,7 @@ const isYourIntegration = integration === 'YOUR_NEW_INTEGRATION';
 
 ### 8b: Wire Edit Config
 
-**File:** `app/admin/clients/[id]/integration-actions.tsx`
+**File:** `app/workspaces/[id]/integration-actions.tsx`
 
 ```typescript
 // 1. Import the EDIT config (full version)
