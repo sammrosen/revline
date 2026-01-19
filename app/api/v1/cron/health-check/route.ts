@@ -23,6 +23,25 @@ import { AlertService } from '@/app/_lib/alerts';
 import { ObservabilityService } from '@/app/_lib/observability';
 
 // =============================================================================
+// INTEGRATION TO EVENTSYSTEM MAPPING
+// =============================================================================
+
+/**
+ * Map integration name to EventSystem enum
+ * Returns null for integrations without a matching EventSystem (e.g., revline)
+ */
+function getEventSystemForIntegration(integrationName: string): EventSystem | null {
+  const mapping: Record<string, EventSystem> = {
+    mailerlite: EventSystem.MAILERLITE,
+    stripe: EventSystem.STRIPE,
+    calendly: EventSystem.CALENDLY,
+    manychat: EventSystem.MANYCHAT,
+    abc_ignite: EventSystem.ABC_IGNITE,
+  };
+  return mapping[integrationName] ?? null;
+}
+
+// =============================================================================
 // AUTHENTICATION
 // =============================================================================
 
@@ -80,26 +99,29 @@ export async function GET(request: NextRequest) {
           );
         }
 
-        // Check 2: Consecutive failures
-        const recentEvents = await prisma.event.findMany({
-          where: {
-            workspaceId: client.id,
-            system: integration.integration as unknown as EventSystem,
-            createdAt: { gte: fourHoursAgo },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-        });
+        // Check 2: Consecutive failures (only if we can map to EventSystem)
+        const eventSystem = getEventSystemForIntegration(integration.integration);
+        if (eventSystem) {
+          const recentEvents = await prisma.event.findMany({
+            where: {
+              workspaceId: client.id,
+              system: eventSystem,
+              createdAt: { gte: fourHoursAgo },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 5,
+          });
 
-        const consecutiveFailures = recentEvents
-          .slice(0, 3)
-          .filter((e) => !e.success).length;
+          const consecutiveFailures = recentEvents
+            .slice(0, 3)
+            .filter((e) => !e.success).length;
 
-        if (consecutiveFailures >= 3) {
-          newStatus = HealthStatus.RED;
-          issues.push(
-            `${client.name}: ${integration.integration} has 3+ consecutive failures`
-          );
+          if (consecutiveFailures >= 3) {
+            newStatus = HealthStatus.RED;
+            issues.push(
+              `${client.name}: ${integration.integration} has 3+ consecutive failures`
+            );
+          }
         }
 
         // Update health status if changed
