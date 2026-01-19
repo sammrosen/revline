@@ -20,10 +20,10 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { id: clientId } = await params;
+  const { id: workspaceId } = await params;
 
   // Verify user has ADMIN or higher access
-  const access = await getWorkspaceAccess(userId, clientId);
+  const access = await getWorkspaceAccess(userId, workspaceId);
   if (!access) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   }
@@ -44,26 +44,26 @@ export async function POST(
   }
 
   // Get workspace info
-  const client = await prisma.workspace.findUnique({
-    where: { id: clientId },
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
     select: { id: true, name: true, slug: true },
   });
 
-  if (!client) {
+  if (!workspace) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   }
 
   // Send test notification
   const result = await sendPushoverNotification({
     title: 'RevLine Test',
-    message: `Test notification received for ${client.name}`,
+    message: `Test notification received for ${workspace.name}`,
     sound: 'pushover',
   });
 
   if (result.success) {
     return NextResponse.json({
       success: true,
-      message: `Test notification sent for ${client.name}`,
+      message: `Test notification sent for ${workspace.name}`,
       requestId: result.requestId,
     });
   }

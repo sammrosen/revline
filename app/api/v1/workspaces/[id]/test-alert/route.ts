@@ -77,8 +77,8 @@ async function runCronHealthCheckTest(): Promise<{ sent: boolean; error?: string
   const startTime = Date.now();
 
   try {
-    // CLIENT-SPECIFIC CHECKS (same as cron)
-    const clients = await prisma.workspace.findMany({
+    // WORKSPACE-SPECIFIC CHECKS (same as cron)
+    const workspaces = await prisma.workspace.findMany({
       where: { status: WorkspaceStatus.ACTIVE },
       include: { integrations: true },
     });
@@ -87,17 +87,17 @@ async function runCronHealthCheckTest(): Promise<{ sent: boolean; error?: string
     const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
     const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    for (const client of clients) {
-      for (const integration of client.integrations) {
+    for (const ws of workspaces) {
+      for (const integration of ws.integrations) {
         // Check 1: Integration silence
         if (integration.lastSeenAt && integration.lastSeenAt < fourHoursAgo) {
-          issues.push(`${client.name}: ${integration.integration} silent for 4+ hours`);
+          issues.push(`${ws.name}: ${integration.integration} silent for 4+ hours`);
         }
 
         // Check 2: Consecutive failures
         const recentEvents = await prisma.event.findMany({
           where: {
-            workspaceId: client.id,
+            workspaceId: ws.id,
             system: integration.integration as unknown as EventSystem,
             createdAt: { gte: fourHoursAgo },
           },
@@ -107,21 +107,21 @@ async function runCronHealthCheckTest(): Promise<{ sent: boolean; error?: string
 
         const consecutiveFailures = recentEvents.slice(0, 3).filter((e) => !e.success).length;
         if (consecutiveFailures >= 3) {
-          issues.push(`${client.name}: ${integration.integration} has 3+ consecutive failures`);
+          issues.push(`${ws.name}: ${integration.integration} has 3+ consecutive failures`);
         }
       }
 
       // Check 3: Stuck leads
       const stuckLeads = await prisma.lead.count({
         where: {
-          workspaceId: client.id,
+          workspaceId: ws.id,
           stage: 'CAPTURED',
           lastEventAt: { lt: twentyFourHoursAgo },
         },
       });
 
       if (stuckLeads > 0) {
-        issues.push(`${client.name}: ${stuckLeads} leads stuck for 24+ hours`);
+        issues.push(`${ws.name}: ${stuckLeads} leads stuck for 24+ hours`);
       }
     }
 
@@ -162,7 +162,7 @@ async function runCronHealthCheckTest(): Promise<{ sent: boolean; error?: string
 
     // Build test notification message
     let message = `[TEST] Cron Health Check Results\n\n`;
-    message += `Clients checked: ${clients.length}\n`;
+    message += `Workspaces checked: ${workspaces.length}\n`;
     message += `Duration: ${durationMs}ms\n\n`;
 
     if (issues.length > 0) {
@@ -217,10 +217,10 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { id: clientId } = await params;
+  const { id: workspaceId } = await params;
 
   // Verify user has ADMIN or higher access
-  const access = await getWorkspaceAccess(userId, clientId);
+  const access = await getWorkspaceAccess(userId, workspaceId);
   if (!access) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   }
@@ -240,12 +240,12 @@ export async function POST(
   }
 
   // Get workspace info
-  const client = await prisma.workspace.findUnique({
-    where: { id: clientId },
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
     select: { id: true, name: true, slug: true },
   });
 
-  if (!client) {
+  if (!workspace) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   }
 
@@ -279,7 +279,7 @@ export async function POST(
         // Simple test - bypass AlertService for basic connectivity
         const basicResult = await sendPushoverNotification({
           title: '✅ RevLine Test',
-          message: `Test notification received for ${client.name}\n\nPushover is configured correctly!`,
+          message: `Test notification received for ${workspace.name}\n\nPushover is configured correctly!`,
           sound: 'pushover',
         });
         result = { sent: basicResult.success, error: basicResult.error };
@@ -296,7 +296,7 @@ export async function POST(
           'Webhook Failed: stripe',
           `[TEST] Signature verification failed for checkout.session.completed\n\nEvent ID: evt_test_${correlationId}`,
           {
-            workspaceId: client.id,
+            workspaceId: workspace.id,
             provider: 'stripe',
             eventId: `evt_test_${correlationId}`,
             correlationId,
@@ -309,7 +309,7 @@ export async function POST(
           'Webhook Failed: calendly',
           `[TEST] Failed to process invitee.created webhook\n\nEvent URI: https://calendly.com/events/${correlationId}`,
           {
-            workspaceId: client.id,
+            workspaceId: workspace.id,
             provider: 'calendly',
             eventId: `cal_${correlationId}`,
             correlationId,
@@ -322,7 +322,7 @@ export async function POST(
           'Workflow Failed: Welcome Sequence',
           `[TEST] mailerlite.add_to_group: API returned 401 Unauthorized\n\nExecution ID: exec_${correlationId}`,
           {
-            workspaceId: client.id,
+            workspaceId: workspace.id,
             workflowId: `wf_test_${correlationId}`,
             workflowName: 'Welcome Sequence',
             correlationId,
@@ -335,7 +335,7 @@ export async function POST(
           'Integration Error: mailerlite',
           `[TEST] Failed to add subscriber test@example.com\n\nError: Connection timeout after 10000ms`,
           {
-            workspaceId: client.id,
+            workspaceId: workspace.id,
             provider: 'mailerlite',
             correlationId,
           }
@@ -357,7 +357,7 @@ export async function POST(
           'Rate Limit Warning',
           `[TEST] MailerLite API rate limit approaching\n\n85/100 requests used in current window`,
           {
-            workspaceId: client.id,
+            workspaceId: workspace.id,
             provider: 'mailerlite',
             correlationId,
           }
@@ -369,7 +369,7 @@ export async function POST(
           'Health Check Degraded',
           `[TEST] Integration health check degraded\n\nstripe: OK\nmailerlite: SLOW (2.5s)\ncalendly: OK`,
           {
-            workspaceId: client.id,
+            workspaceId: workspace.id,
             correlationId,
           }
         );
@@ -425,20 +425,20 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { id: clientId } = await params;
+  const { id: workspaceId } = await params;
 
   // Verify user has access to this workspace
-  const access = await getWorkspaceAccess(userId, clientId);
+  const access = await getWorkspaceAccess(userId, workspaceId);
   if (!access) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   }
 
-  const client = await prisma.workspace.findUnique({
-    where: { id: clientId },
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
     select: { id: true, name: true },
   });
 
-  if (!client) {
+  if (!workspace) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   }
 
@@ -448,8 +448,8 @@ export async function GET(
   }));
 
   return NextResponse.json({
-    workspaceId: client.id,
-    clientName: client.name,
+    workspaceId: workspace.id,
+    workspaceName: workspace.name,
     configured: isPushoverConfigured(),
     rateLimitStatus: AlertService.getRateLimitStatus(),
     scenarios,

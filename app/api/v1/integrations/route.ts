@@ -34,18 +34,18 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { clientId, integration, secrets: secretInputs, meta } = body;
+    const { workspaceId, integration, secrets: secretInputs, meta } = body;
 
     // Validate required fields
-    if (!clientId || !integration) {
+    if (!workspaceId || !integration) {
       return NextResponse.json(
-        { error: 'clientId and integration are required' },
+        { error: 'workspaceId and integration are required' },
         { status: 400 }
       );
     }
 
     // Verify user has ADMIN or higher access to manage integrations
-    const access = await getWorkspaceAccess(userId, clientId);
+    const access = await getWorkspaceAccess(userId, workspaceId);
     if (!access) {
       return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
     }
@@ -99,13 +99,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Verify client exists
-    const client = await prisma.workspace.findUnique({
-      where: { id: clientId },
+    // Verify workspace exists
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
     });
-    if (!client) {
+    if (!workspace) {
       return NextResponse.json(
-        { error: 'Client not found' },
+        { error: 'Workspace not found' },
         { status: 404 }
       );
     }
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
     const workspaceIntegration = await prisma.workspaceIntegration.upsert({
       where: {
         workspaceId_integration: {
-          workspaceId: clientId,
+          workspaceId,
           integration,
         },
       },
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
         meta: meta || undefined,
       },
       create: {
-        workspaceId: clientId,
+        workspaceId,
         integration,
         secrets: encryptedSecrets as unknown as Prisma.InputJsonValue,
         meta: meta || undefined,
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
 
     // Emit event
     await emitEvent({
-      workspaceId: clientId,
+      workspaceId,
       system: EventSystem.BACKEND,
       eventType: 'integration_added',
       success: true,
