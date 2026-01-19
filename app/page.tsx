@@ -188,6 +188,14 @@ function ManyChatIcon({ className }: { className?: string }) {
   );
 }
 
+function FunnelIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
+    </svg>
+  );
+}
+
 // Section badge component
 function SectionBadge({ children }: { children: React.ReactNode }) {
   return (
@@ -477,6 +485,133 @@ export default function Home() {
                   </li>
                 ))}
               </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============== FUNNEL HEADS SECTION ============== */}
+      <section className="relative px-6 py-32 bg-zinc-900/30">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <SectionBadge>Funnel Heads</SectionBadge>
+            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
+              Capture at the{' '}
+              <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
+                Top
+              </span>
+              , Route{' '}
+              <span className="bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">
+                Everywhere
+              </span>
+            </h2>
+            <p className="text-xl text-zinc-400 mt-6 max-w-2xl mx-auto">
+              RevLine handles top-of-funnel intake—forms, email capture, phone routing—then automatically routes data to all your downstream systems.
+            </p>
+          </div>
+
+          {/* Visual Flow Diagram */}
+          <div className="mb-12 p-8 bg-zinc-900/50 border border-zinc-800 rounded-2xl">
+            <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-6">
+              {/* Funnel Head */}
+              <div className="flex flex-col items-center gap-2">
+                <div className="px-6 py-3 bg-amber-500/20 border border-amber-500/30 rounded-lg">
+                  <p className="text-amber-400 font-semibold">Funnel Head</p>
+                </div>
+                <p className="text-xs text-zinc-500 text-center max-w-[120px]">Forms, Email Capture, Intake</p>
+              </div>
+
+              <ArrowRightIcon className="w-6 h-6 text-zinc-600 rotate-90 md:rotate-0" />
+
+              {/* RevLine Processing */}
+              <div className="flex flex-col items-center gap-2">
+                <div className="px-6 py-3 bg-purple-500/20 border border-purple-500/30 rounded-lg">
+                  <p className="text-purple-400 font-semibold">RevLine</p>
+                </div>
+                <p className="text-xs text-zinc-500 text-center max-w-[120px]">Validate, Dedupe, Trigger</p>
+              </div>
+
+              <ArrowRightIcon className="w-6 h-6 text-zinc-600 rotate-90 md:rotate-0" />
+
+              {/* Workflow Engine */}
+              <div className="flex flex-col items-center gap-2">
+                <div className="px-6 py-3 bg-violet-500/20 border border-violet-500/30 rounded-lg">
+                  <p className="text-violet-400 font-semibold">Workflow Engine</p>
+                </div>
+                <p className="text-xs text-zinc-500 text-center max-w-[120px]">Match & Execute</p>
+              </div>
+
+              <ArrowRightIcon className="w-6 h-6 text-zinc-600 rotate-90 md:rotate-0" />
+
+              {/* Downstream Systems */}
+              <div className="flex flex-col items-center gap-2">
+                <div className="px-6 py-3 bg-green-500/20 border border-green-500/30 rounded-lg">
+                  <p className="text-green-400 font-semibold">Downstream</p>
+                </div>
+                <p className="text-xs text-zinc-500 text-center max-w-[120px]">ABC Ignite, MailerLite, Stripe</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Three Key Points Cards */}
+          <div className="grid md:grid-cols-3 gap-6">
+            {[
+              {
+                icon: FunnelIcon,
+                title: 'Build Forms in UI',
+                description: 'Create custom forms per client—intake forms, waivers, contact forms—without code. Forms trigger workflows automatically.',
+                color: 'amber',
+              },
+              {
+                icon: GitBranchIcon,
+                title: 'One Submission, Many Actions',
+                description: 'A single form submission can create a lead, add to ABC Ignite, subscribe to MailerLite, and more—all automatically.',
+                color: 'purple',
+              },
+              {
+                icon: ZapIcon,
+                title: 'Smart Routing',
+                description: 'Route data to the right systems based on form type, client config, or conditional logic. No manual routing needed.',
+                color: 'violet',
+              },
+            ].map((item, i) => {
+              const colorClasses: Record<string, { bg: string; text: string; border: string }> = {
+                amber: { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30' },
+                purple: { bg: 'bg-purple-500/20', text: 'text-purple-400', border: 'border-purple-500/30' },
+                violet: { bg: 'bg-violet-500/20', text: 'text-violet-400', border: 'border-violet-500/30' },
+              };
+              const colors = colorClasses[item.color];
+              
+              return (
+                <div 
+                  key={i}
+                  className="p-6 bg-zinc-900/50 border border-zinc-800 rounded-2xl"
+                >
+                  <div className={`w-12 h-12 rounded-xl ${colors.bg} ${colors.border} border flex items-center justify-center mb-4`}>
+                    <item.icon className={`w-6 h-6 ${colors.text}`} />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
+                  <p className="text-zinc-400 text-sm leading-relaxed">{item.description}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Example Flow */}
+          <div className="mt-12 p-6 bg-zinc-900/50 border border-zinc-800 rounded-xl">
+            <p className="text-sm text-zinc-500 mb-4 font-medium">Example Flow:</p>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="px-3 py-1.5 bg-zinc-800 rounded text-zinc-400">Prospect fills form</span>
+              <ArrowRightIcon className="w-4 h-4 text-zinc-600 hidden sm:block" />
+              <span className="px-3 py-1.5 bg-purple-500/20 border border-purple-500/30 rounded text-purple-400">RevLine validates</span>
+              <ArrowRightIcon className="w-4 h-4 text-zinc-600 hidden sm:block" />
+              <span className="px-3 py-1.5 bg-violet-500/20 border border-violet-500/30 rounded text-violet-400">Workflow triggers</span>
+              <ArrowRightIcon className="w-4 h-4 text-zinc-600 hidden sm:block" />
+              <span className="px-3 py-1.5 bg-amber-500/20 border border-amber-500/30 rounded text-amber-400">Creates lead</span>
+              <ArrowRightIcon className="w-4 h-4 text-zinc-600 hidden sm:block" />
+              <span className="px-3 py-1.5 bg-orange-500/20 border border-orange-500/30 rounded text-orange-400">Adds to ABC Ignite</span>
+              <ArrowRightIcon className="w-4 h-4 text-zinc-600 hidden sm:block" />
+              <span className="px-3 py-1.5 bg-green-500/20 border border-green-500/30 rounded text-green-400">Subscribes to MailerLite</span>
             </div>
           </div>
         </div>
