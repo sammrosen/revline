@@ -20,8 +20,18 @@ import {
   getTriggersForUI,
   getActionsForUI,
 } from '@/app/_lib/workflow';
+import { TestField } from '@/app/_lib/workflow/types';
 import { RevlineAdapter } from '@/app/_lib/integrations/revline.adapter';
 import { getFormById, getFormTriggers } from '@/app/_lib/forms/registry';
+
+/**
+ * Default test fields for RevLine triggers (forms)
+ * These are used when a form doesn't specify custom test fields
+ */
+const DEFAULT_REVLINE_TEST_FIELDS: TestField[] = [
+  { name: 'email', label: 'Email', type: 'email', required: true },
+  { name: 'name', label: 'Name', type: 'text', required: false },
+];
 
 /**
  * Format a formId into a display label
@@ -94,7 +104,7 @@ async function buildTriggersWithDynamic(
   staticTriggers: Array<{
     adapterId: string;
     adapterName: string;
-    triggers: Array<{ name: string; label: string; description?: string }>;
+    triggers: Array<{ name: string; label: string; description?: string; testFields?: TestField[] }>;
   }>,
   workspaceId: string | null
 ): Promise<typeof staticTriggers> {
@@ -102,7 +112,7 @@ async function buildTriggersWithDynamic(
   const nonRevlineTriggers = staticTriggers.filter(t => t.adapterId !== 'revline');
   
   // Build dynamic RevLine triggers based on workspace config
-  let revlineTriggers: Array<{ name: string; label: string; description?: string }> = [];
+  let revlineTriggers: Array<{ name: string; label: string; description?: string; testFields: TestField[] }> = [];
   
   if (workspaceId) {
     const revlineAdapter = await RevlineAdapter.forClient(workspaceId);
@@ -118,6 +128,7 @@ async function buildTriggersWithDynamic(
           name: t.id, // Trigger ID is the workflow operation
           label: t.label,
           description: t.description || `Fires from ${formLabel}`,
+          testFields: DEFAULT_REVLINE_TEST_FIELDS, // Default fields for all RevLine triggers
         }));
       });
     }

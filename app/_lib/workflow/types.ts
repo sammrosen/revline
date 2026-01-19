@@ -31,6 +31,11 @@ export interface OperationDefinition {
    * e.g., { group: 'meta.groups' } means params.group must be a key in integration.meta.groups
    */
   paramRequirements?: Record<string, string>;
+  /**
+   * Test field definitions for the test suite
+   * Defines what fields to render when testing this trigger
+   */
+  testFields?: TestField[];
 }
 
 /**
@@ -239,6 +244,31 @@ export const CapturePayloadSchema = z.object({
 
 /** Lead stage values */
 export const LeadStageSchema = z.enum(['CAPTURED', 'BOOKED', 'PAID', 'DEAD']);
+
+// =============================================================================
+// TEST FIELD DEFINITIONS
+// =============================================================================
+
+/**
+ * Definition for a test field in the test suite
+ * These are defined per-trigger and rendered dynamically
+ */
+export interface TestField {
+  /** Field name in the payload (e.g., 'email', 'amount') */
+  name: string;
+  /** Display label for the field */
+  label: string;
+  /** Field input type */
+  type: 'email' | 'text' | 'number' | 'select' | 'datetime';
+  /** Whether the field is required */
+  required: boolean;
+  /** Default value for the field */
+  default?: string | number;
+  /** Placeholder text */
+  placeholder?: string;
+  /** Options for select type */
+  options?: Array<{ value: string; label: string }>;
+}
 
 // =============================================================================
 // VALIDATION TYPES
