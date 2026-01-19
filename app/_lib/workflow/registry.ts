@@ -36,6 +36,12 @@ export const CALENDLY_ADAPTER: AdapterDefinition = {
       label: 'Booking Created',
       description: 'Fires when someone books a call',
       payloadSchema: BookingPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'name', label: 'Name', type: 'text', required: false },
+        { name: 'eventType', label: 'Event Type', type: 'text', required: false, placeholder: 'discovery-call' },
+        { name: 'scheduledAt', label: 'Scheduled At', type: 'datetime', required: false },
+      ],
     },
     booking_canceled: {
       name: 'booking_canceled',
@@ -46,6 +52,11 @@ export const CALENDLY_ADAPTER: AdapterDefinition = {
         name: z.string().optional(),
         reason: z.string().optional(),
       }),
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'name', label: 'Name', type: 'text', required: false },
+        { name: 'reason', label: 'Cancellation Reason', type: 'text', required: false, placeholder: 'Schedule conflict' },
+      ],
     },
   },
   actions: {},
@@ -68,6 +79,13 @@ export const STRIPE_ADAPTER: AdapterDefinition = {
       label: 'Payment Succeeded',
       description: 'Fires when a one-time payment completes',
       payloadSchema: PaymentPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'name', label: 'Name', type: 'text', required: false },
+        { name: 'amount', label: 'Amount (cents)', type: 'number', required: true, default: 9900 },
+        { name: 'currency', label: 'Currency', type: 'text', required: true, default: 'usd' },
+        { name: 'product', label: 'Product', type: 'text', required: false, placeholder: 'fit1' },
+      ],
     },
     subscription_created: {
       name: 'subscription_created',
@@ -81,6 +99,17 @@ export const STRIPE_ADAPTER: AdapterDefinition = {
         product: z.string().optional(),
         interval: z.enum(['month', 'year']),
       }),
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'name', label: 'Name', type: 'text', required: false },
+        { name: 'amount', label: 'Amount (cents)', type: 'number', required: true, default: 4900 },
+        { name: 'currency', label: 'Currency', type: 'text', required: true, default: 'usd' },
+        { name: 'product', label: 'Product', type: 'text', required: false, placeholder: 'membership' },
+        { name: 'interval', label: 'Interval', type: 'select', required: true, default: 'month', options: [
+          { value: 'month', label: 'Monthly' },
+          { value: 'year', label: 'Yearly' },
+        ]},
+      ],
     },
     subscription_canceled: {
       name: 'subscription_canceled',
@@ -91,6 +120,11 @@ export const STRIPE_ADAPTER: AdapterDefinition = {
         product: z.string().optional(),
         canceledAt: z.string(),
       }),
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'product', label: 'Product', type: 'text', required: false, placeholder: 'membership' },
+        { name: 'canceledAt', label: 'Canceled At', type: 'datetime', required: true },
+      ],
     },
   },
   actions: {},
@@ -218,6 +252,11 @@ export const MANYCHAT_ADAPTER: AdapterDefinition = {
         email: z.string().email().optional(),
         keyword: z.string(),
       }),
+      testFields: [
+        { name: 'igUsername', label: 'IG Username', type: 'text', required: true, placeholder: '@username' },
+        { name: 'email', label: 'Email', type: 'email', required: false },
+        { name: 'keyword', label: 'Keyword', type: 'text', required: true, default: 'START' },
+      ],
     },
   },
   actions: {
@@ -445,7 +484,7 @@ export function getAllActions(): Array<{
 export function getTriggersForUI(): Array<{
   adapterId: string;
   adapterName: string;
-  triggers: Array<{ name: string; label: string; description?: string }>;
+  triggers: Array<{ name: string; label: string; description?: string; testFields?: OperationDefinition['testFields'] }>;
 }> {
   return Object.values(ADAPTER_REGISTRY)
     .filter((adapter) => Object.keys(adapter.triggers).length > 0)
@@ -456,6 +495,7 @@ export function getTriggersForUI(): Array<{
         name: t.name,
         label: t.label,
         description: t.description,
+        testFields: t.testFields,
       })),
     }));
 }

@@ -1,36 +1,31 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { lockScroll, unlockScroll } from '@/app/_lib/utils/scroll-lock';
+import { AppApi } from '@/app/_lib/api-paths';
 
 /**
- * Available workflow triggers for testing
- * These match the workflow registry adapters and operations
+ * Test field definition from workflow registry
  */
-const AVAILABLE_TRIGGERS = [
-  {
-    trigger: 'revline.email_captured',
-    label: 'Email Captured',
-    description: 'Simulates a lead submitting their email',
-  },
-  {
-    trigger: 'calendly.booking_created',
-    label: 'Calendly Booking Created',
-    description: 'Simulates a Calendly booking',
-  },
-  {
-    trigger: 'calendly.booking_canceled',
-    label: 'Calendly Booking Canceled',
-    description: 'Simulates a Calendly cancellation',
-  },
-  {
-    trigger: 'stripe.payment_succeeded',
-    label: 'Stripe Payment Succeeded',
-    description: 'Simulates a successful payment',
-  },
-] as const;
+interface TestField {
+  name: string;
+  label: string;
+  type: 'email' | 'text' | 'number' | 'select' | 'datetime';
+  required: boolean;
+  default?: string | number;
+  placeholder?: string;
+  options?: Array<{ value: string; label: string }>;
+}
 
-type TriggerValue = typeof AVAILABLE_TRIGGERS[number]['trigger'];
+/**
+ * Trigger option fetched from workflow registry
+ */
+interface TriggerOption {
+  trigger: string;
+  label: string;
+  description?: string;
+  testFields: TestField[];
+}
 
 interface ActionExecutionResult {
   action: string;
@@ -73,12 +68,89 @@ function TestSuiteDialog({
   workspaceId: string;
   onClose: () => void;
 }) {
-  const [trigger, setTrigger] = useState<TriggerValue>('revline.email_captured');
-  const [email, setEmail] = useState(`test-${Date.now()}@revline.test`);
-  const [name, setName] = useState('Test User');
+  // Dynamic triggers from registry
+  const [availableTriggers, setAvailableTriggers] = useState<TriggerOption[]>([]);
+  const [loadingTriggers, setLoadingTriggers] = useState(true);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
+  
+  // Form state
+  const [trigger, setTrigger] = useState<string>('');
+  const [fieldValues, setFieldValues] = useState<Record<string, string | number>>({});
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<TestTriggerResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Get current trigger's test fields
+  const currentTrigger = availableTriggers.find(t => t.trigger === trigger);
+  const testFields = currentTrigger?.testFields || [];
+
+  // Initialize field values from testFields defaults
+  const initializeFieldValues = useCallback((fields: TestField[]) => {
+    const defaults: Record<string, string | number> = {};
+    fields.forEach(field => {
+      if (field.default !== undefined) {
+        defaults[field.name] = field.default;
+      } else if (field.type === 'email') {
+        defaults[field.name] = `test-${Date.now()}@revline.test`;
+      } else if (field.type === 'number') {
+        defaults[field.name] = 0;
+      } else {
+        defaults[field.name] = '';
+      }
+    });
+    setFieldValues(defaults);
+  }, []);
+
+  // Fetch triggers from workflow registry on mount
+  useEffect(() => {
+    async function loadTriggers() {
+      try {
+        const url = `${AppApi.workflowRegistry}?workspaceId=${encodeURIComponent(workspaceId)}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          // Transform API response into flat list for dropdown
+          const triggers: TriggerOption[] = (data.data?.triggers || []).flatMap(
+            (adapter: { adapterId: string; adapterName: string; triggers: Array<{ name: string; label: string; description?: string; testFields?: TestField[] }> }) =>
+              adapter.triggers.map((t) => ({
+                trigger: `${adapter.adapterId}.${t.name}`,
+                label: `${adapter.adapterName}: ${t.label}`,
+                description: t.description,
+                testFields: t.testFields || [],
+              }))
+          );
+          setAvailableTriggers(triggers);
+          // Set default selection to first trigger if available
+          if (triggers.length > 0) {
+            setTrigger(triggers[0].trigger);
+            initializeFieldValues(triggers[0].testFields);
+          }
+        } else {
+          setTriggerError('Failed to load triggers');
+        }
+      } catch (err) {
+        console.error('Failed to load triggers:', err);
+        setTriggerError('Failed to load triggers');
+      } finally {
+        setLoadingTriggers(false);
+      }
+    }
+    loadTriggers();
+  }, [workspaceId, initializeFieldValues]);
+
+  // Reset field values when trigger changes
+  const handleTriggerChange = (newTrigger: string) => {
+    setTrigger(newTrigger);
+    const newTriggerOption = availableTriggers.find(t => t.trigger === newTrigger);
+    if (newTriggerOption) {
+      initializeFieldValues(newTriggerOption.testFields);
+    }
+  };
+
+  // Update a single field value
+  const updateFieldValue = (name: string, value: string | number) => {
+    setFieldValues(prev => ({ ...prev, [name]: value }));
+  };
 
   async function fireTrigger() {
     setLoading(true);
@@ -86,10 +158,20 @@ function TestSuiteDialog({
     setResults(null);
 
     try {
+      // Build payload from field values, filtering out empty optional fields
+      const payload: Record<string, unknown> = {};
+      testFields.forEach(field => {
+        const value = fieldValues[field.name];
+        // Include if required, or if optional but has a value
+        if (field.required || (value !== '' && value !== undefined)) {
+          payload[field.name] = field.type === 'number' ? Number(value) : value;
+        }
+      });
+
       const res = await fetch(`/api/v1/workspaces/${workspaceId}/test-action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trigger, email, name: name || undefined }),
+        body: JSON.stringify({ trigger, ...payload }),
       });
 
       if (!res.ok) {
@@ -106,6 +188,13 @@ function TestSuiteDialog({
       setLoading(false);
     }
   }
+
+  // Check if all required fields have values
+  const hasRequiredFields = testFields.every(field => {
+    if (!field.required) return true;
+    const value = fieldValues[field.name];
+    return value !== '' && value !== undefined;
+  });
 
   return (
     <div
@@ -152,53 +241,106 @@ function TestSuiteDialog({
             <label className="block text-sm font-medium text-zinc-300 mb-2">
               Trigger
             </label>
-            <select
-              value={trigger}
-              onChange={(e) => setTrigger(e.target.value as TriggerValue)}
-              className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-            >
-              {AVAILABLE_TRIGGERS.map((t) => (
-                <option key={t.trigger} value={t.trigger}>
-                  {t.label} — {t.description}
-                </option>
-              ))}
-            </select>
+            {loadingTriggers ? (
+              <div className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-zinc-500 flex items-center gap-2">
+                <svg
+                  className="animate-spin h-4 w-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                Loading triggers...
+              </div>
+            ) : triggerError ? (
+              <div className="w-full bg-red-500/10 border border-red-500/50 rounded px-3 py-2 text-red-400 text-sm">
+                {triggerError}
+              </div>
+            ) : availableTriggers.length === 0 ? (
+              <div className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-zinc-500 text-sm">
+                No triggers available. Configure integrations or enable forms first.
+              </div>
+            ) : (
+              <select
+                value={trigger}
+                onChange={(e) => handleTriggerChange(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+              >
+                {availableTriggers.map((t) => (
+                  <option key={t.trigger} value={t.trigger}>
+                    {t.label}{t.description ? ` — ${t.description}` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
-          {/* Email Input */}
-          <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-2">
-              Test Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="test@example.com"
-              className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
-            />
-          </div>
-
-          {/* Name Input (Optional) */}
-          <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-2">
-              Name <span className="text-zinc-500">(optional)</span>
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Test User"
-              className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
-            />
-          </div>
+          {/* Dynamic Test Fields */}
+          {testFields.map((field) => (
+            <div key={field.name}>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                {field.label}
+                {!field.required && <span className="text-zinc-500 ml-1">(optional)</span>}
+              </label>
+              
+              {field.type === 'select' && field.options ? (
+                <select
+                  value={fieldValues[field.name] ?? ''}
+                  onChange={(e) => updateFieldValue(field.name, e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                >
+                  {field.options.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              ) : field.type === 'number' ? (
+                <input
+                  type="number"
+                  value={fieldValues[field.name] ?? ''}
+                  onChange={(e) => updateFieldValue(field.name, e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder={field.placeholder}
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                />
+              ) : field.type === 'datetime' ? (
+                <input
+                  type="datetime-local"
+                  value={fieldValues[field.name] ?? ''}
+                  onChange={(e) => updateFieldValue(field.name, e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                />
+              ) : (
+                <input
+                  type={field.type === 'email' ? 'email' : 'text'}
+                  value={fieldValues[field.name] ?? ''}
+                  onChange={(e) => updateFieldValue(field.name, e.target.value)}
+                  placeholder={field.placeholder}
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                />
+              )}
+            </div>
+          ))}
 
           {/* Fire Button */}
           <button
             onClick={fireTrigger}
-            disabled={loading || !email}
+            disabled={loading || !hasRequiredFields || !trigger || loadingTriggers}
             className={`w-full py-3 rounded font-medium transition-colors ${
-              loading || !email
+              loading || !hasRequiredFields || !trigger || loadingTriggers
                 ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed'
                 : 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700'
             }`}
