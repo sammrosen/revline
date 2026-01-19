@@ -87,20 +87,12 @@ vi.mock('next/headers', () => ({
       if (key === 'x-user-id') {
         return 'test-user-id';
       }
-      // Legacy support
-      if (key === 'x-admin-id') {
-        return 'test-user-id';
-      }
       return null;
     },
   })),
   cookies: vi.fn(async () => ({
     get: (name: string) => {
       if (name === 'revline_session') {
-        return { value: 'test-session-id' };
-      }
-      // Legacy support
-      if (name === 'revline_admin_session') {
         return { value: 'test-session-id' };
       }
       return undefined;
@@ -163,8 +155,8 @@ afterEach(async () => {
   await testPrisma.event.deleteMany();
   await testPrisma.lead.deleteMany();
   await testPrisma.workspaceIntegration.deleteMany();
-  await testPrisma.workspaceMember.deleteMany();
   await testPrisma.session.deleteMany();
+  await testPrisma.workspaceMember.deleteMany();
   await testPrisma.user.deleteMany();
   await testPrisma.workspace.deleteMany();
   
@@ -189,7 +181,9 @@ export async function createTestWorkspace(overrides: Partial<{
   });
 }
 
-/** @deprecated Use createTestWorkspace instead */
+/**
+ * Legacy alias for backwards compatibility
+ */
 export const createTestClient = createTestWorkspace;
 
 /**
@@ -197,7 +191,7 @@ export const createTestClient = createTestWorkspace;
  */
 export async function createTestIntegration(
   workspaceId: string,
-  integration: 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE',
+  integration: 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE',
   secret: string,
   meta?: Record<string, unknown>
 ) {
@@ -301,7 +295,9 @@ export async function getEventsForWorkspace(workspaceId: string) {
   });
 }
 
-/** @deprecated Use getEventsForWorkspace instead */
+/**
+ * Legacy alias for backwards compatibility
+ */
 export const getEventsForClient = getEventsForWorkspace;
 
 /**
@@ -403,42 +399,9 @@ export async function cleanupTestData() {
   await testPrisma.event.deleteMany();
   await testPrisma.lead.deleteMany();
   await testPrisma.workspaceIntegration.deleteMany();
-  await testPrisma.workspaceMember.deleteMany();
   await testPrisma.session.deleteMany();
+  await testPrisma.workspaceMember.deleteMany();
   await testPrisma.user.deleteMany();
   await testPrisma.workspace.deleteMany();
 }
 
-/**
- * Test helper: Create a test user
- */
-export async function createTestUser(overrides: Partial<{
-  email: string;
-  name: string;
-  passwordHash: string;
-}> = {}) {
-  return testPrisma.user.create({
-    data: {
-      email: overrides.email ?? `test-${Date.now()}@example.com`,
-      name: overrides.name ?? 'Test User',
-      passwordHash: overrides.passwordHash ?? 'test-password-hash',
-    },
-  });
-}
-
-/**
- * Test helper: Create a workspace membership
- */
-export async function createTestWorkspaceMember(
-  userId: string,
-  workspaceId: string,
-  role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' = 'OWNER'
-) {
-  return testPrisma.workspaceMember.create({
-    data: {
-      userId,
-      workspaceId,
-      role,
-    },
-  });
-}

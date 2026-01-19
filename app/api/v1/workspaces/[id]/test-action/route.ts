@@ -22,10 +22,10 @@ export async function POST(
   }
 
   const startTime = Date.now();
-  const { id: clientId } = await params;
+  const { id: workspaceId } = await params;
 
   // Verify user has ADMIN or higher access (test actions can trigger workflows)
-  const access = await getWorkspaceAccess(userId, clientId);
+  const access = await getWorkspaceAccess(userId, workspaceId);
   if (!access) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   }
@@ -63,14 +63,14 @@ export async function POST(
       );
     }
 
-    // Validate client exists
-    const client = await prisma.workspace.findUnique({
-      where: { id: clientId },
+    // Validate workspace exists
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
       select: { id: true, name: true },
     });
 
-    if (!client) {
-      return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    if (!workspace) {
+      return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
     }
 
     // Build trigger payload
@@ -83,7 +83,7 @@ export async function POST(
 
     // Emit the trigger
     const result = await emitTrigger(
-      clientId,
+      workspaceId,
       { adapter, operation },
       triggerPayload
     );

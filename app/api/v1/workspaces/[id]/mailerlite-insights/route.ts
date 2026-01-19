@@ -42,28 +42,28 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { id: clientId } = await params;
+  const { id: workspaceId } = await params;
 
   // Verify user has access to this workspace
-  const access = await getWorkspaceAccess(userId, clientId);
+  const access = await getWorkspaceAccess(userId, workspaceId);
   if (!access) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   }
 
   // Get workspace
-  const client = await prisma.workspace.findUnique({
-    where: { id: clientId },
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
     select: { id: true, name: true, slug: true },
   });
 
-  if (!client) {
+  if (!workspace) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   }
 
   // Get MailerLite integration
   const mlIntegration = await prisma.workspaceIntegration.findFirst({
     where: {
-      workspaceId: clientId,
+      workspaceId,
       integration: IntegrationType.MAILERLITE,
     },
     select: {
@@ -74,7 +74,7 @@ export async function GET(
 
   if (!mlIntegration) {
     return NextResponse.json(
-      { error: 'MailerLite integration not configured for this client' },
+      { error: 'MailerLite integration not configured for this workspace' },
       { status: 404 }
     );
   }

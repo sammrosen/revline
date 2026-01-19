@@ -101,28 +101,28 @@ export async function GET(
     return ApiResponse.unauthorized();
   }
 
-  const { id: clientId } = await params;
+  const { id: workspaceId } = await params;
 
   // Verify user has access to this workspace
-  const access = await getWorkspaceAccess(userId, clientId);
+  const access = await getWorkspaceAccess(userId, workspaceId);
   if (!access) {
     return ApiResponse.error('Workspace not found', 404, ErrorCodes.NOT_FOUND);
   }
 
   try {
     // Verify workspace exists
-    const client = await prisma.workspace.findUnique({
-      where: { id: clientId },
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
       select: { id: true, name: true },
     });
 
-    if (!client) {
+    if (!workspace) {
       return ApiResponse.error('Workspace not found', 404, ErrorCodes.NOT_FOUND);
     }
 
     // Get all integrations for workspace
     const integrations = await prisma.workspaceIntegration.findMany({
-      where: { workspaceId: clientId },
+      where: { workspaceId },
       select: {
         integration: true,
         healthStatus: true,
@@ -133,7 +133,7 @@ export async function GET(
 
     // Get all workflows for workspace
     const workflows = await prisma.workflow.findMany({
-      where: { workspaceId: clientId },
+      where: { workspaceId },
       select: {
         id: true,
         name: true,
@@ -146,7 +146,7 @@ export async function GET(
     });
 
     // Validate all workflows
-    const validationResults = await validateAllWorkflows(clientId);
+    const validationResults = await validateAllWorkflows(workspaceId);
 
     // Build integration nodes
     const integrationNodes: Record<string, IntegrationNode> = {};

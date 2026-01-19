@@ -109,7 +109,7 @@ describe('Capture Service Integration', () => {
       });
       
       const events = await getEventsForWorkspace(client.id);
-      const captureEvent = events.find(e => e.eventType === 'email_captured');
+      const captureEvent = events.find((e: { eventType: string }) => e.eventType === 'email_captured');
       
       expect(captureEvent).toBeDefined();
       expect(captureEvent?.success).toBe(true);
@@ -148,7 +148,7 @@ describe('Capture Service Integration', () => {
       });
       
       const events = await getEventsForWorkspace(client.id);
-      const subscribeEvent = events.find(e => e.eventType === 'mailerlite_subscribe_success');
+      const subscribeEvent = events.find((e: { eventType: string }) => e.eventType === 'mailerlite_subscribe_success');
       
       expect(subscribeEvent).toBeDefined();
       expect(subscribeEvent?.success).toBe(true);

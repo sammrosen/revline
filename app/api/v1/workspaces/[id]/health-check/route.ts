@@ -19,8 +19,8 @@ interface TestResult {
 
 interface HealthCheckResponse {
   workspaceId: string;
-  clientName: string;
-  clientSlug: string;
+  workspaceName: string;
+  workspaceSlug: string;
   timestamp: string;
   overallStatus: TestStatus;
   duration: number;
@@ -727,21 +727,21 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   
-  const { id: clientId } = await params;
+  const { id: workspaceId } = await params;
 
   // Verify user has access to this workspace
-  const access = await getWorkspaceAccess(userId, clientId);
+  const access = await getWorkspaceAccess(userId, workspaceId);
   if (!access) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   }
   
-  // Get client info
-  const client = await prisma.workspace.findUnique({
-    where: { id: clientId },
+  // Get workspace info
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
     select: { id: true, name: true, slug: true },
   });
   
-  if (!client) {
+  if (!workspace) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   }
   
@@ -749,27 +749,27 @@ export async function GET(
   const tests: TestResult[] = [];
   
   // Configuration tests (fast)
-  tests.push(await testClientExists(clientId));
-  tests.push(await testClientActive(clientId));
-  tests.push(await testMailerLiteIntegrationExists(clientId));
-  tests.push(await testMailerLiteMetaValid(clientId));
-  tests.push(await testStripeIntegrationExists(clientId));
-  tests.push(await testRecentActivity(clientId));
+  tests.push(await testClientExists(workspaceId));
+  tests.push(await testClientActive(workspaceId));
+  tests.push(await testMailerLiteIntegrationExists(workspaceId));
+  tests.push(await testMailerLiteMetaValid(workspaceId));
+  tests.push(await testStripeIntegrationExists(workspaceId));
+  tests.push(await testRecentActivity(workspaceId));
   
   // API connectivity tests (slower)
-  tests.push(await testMailerLiteAPI(clientId));
-  tests.push(await testLandingPage(client.slug));
-  tests.push(await testStripeWebhook(client.slug));
+  tests.push(await testMailerLiteAPI(workspaceId));
+  tests.push(await testLandingPage(workspace.slug));
+  tests.push(await testStripeWebhook(workspace.slug));
   
-  // System metrics tests (client-scoped)
-  tests.push(await testEventRate(clientId));
-  tests.push(await testWebhookBacklog(clientId));
-  tests.push(await testWorkflowHealth(clientId));
+  // System metrics tests (workspace-scoped)
+  tests.push(await testEventRate(workspaceId));
+  tests.push(await testWebhookBacklog(workspaceId));
+  tests.push(await testWorkflowHealth(workspaceId));
   
   // Get full metrics for response
   let metrics: SystemMetrics | undefined;
   try {
-    metrics = await ObservabilityService.getMetrics(clientId);
+    metrics = await ObservabilityService.getMetrics(workspaceId);
   } catch {
     // Metrics fetch failed, but don't fail the whole health check
   }
@@ -780,9 +780,9 @@ export async function GET(
   const overallStatus: TestStatus = hasFails ? 'FAIL' : hasWarns ? 'WARN' : 'PASS';
   
   const response: HealthCheckResponse = {
-    workspaceId: client.id,
-    clientName: client.name,
-    clientSlug: client.slug,
+    workspaceId: workspace.id,
+    workspaceName: workspace.name,
+    workspaceSlug: workspace.slug,
     timestamp: new Date().toISOString(),
     overallStatus,
     duration: Date.now() - overallStart,

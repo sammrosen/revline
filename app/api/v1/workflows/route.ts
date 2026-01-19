@@ -1,7 +1,7 @@
 /**
  * Workflows Admin API
  *
- * GET /api/v1/workflows?clientId=xxx - List workflows for a workspace
+ * GET /api/v1/workflows?workspaceId=xxx - List workflows for a workspace
  * POST /api/v1/workflows - Create a new workflow
  */
 
@@ -64,25 +64,25 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const clientId = searchParams.get('clientId');
+  const workspaceId = searchParams.get('workspaceId');
 
-  if (!clientId) {
+  if (!workspaceId) {
     return ApiResponse.error(
-      'Missing clientId parameter',
+      'Missing workspaceId parameter',
       400,
       ErrorCodes.MISSING_REQUIRED
     );
   }
 
   // Verify user has access to this workspace
-  const access = await getWorkspaceAccess(userId, clientId);
+  const access = await getWorkspaceAccess(userId, workspaceId);
   if (!access) {
     return ApiResponse.error('Workspace not found', 404, ErrorCodes.NOT_FOUND);
   }
 
   try {
     const workflows = await prisma.workflow.findMany({
-      where: { workspaceId: clientId },
+      where: { workspaceId },
       orderBy: { createdAt: 'desc' },
       include: {
         _count: {

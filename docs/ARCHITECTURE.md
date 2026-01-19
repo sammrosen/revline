@@ -284,10 +284,10 @@ The workflow engine is the central automation layer that connects triggers to ac
 ### 5. Integration Manager (`app/_lib/integrations.ts`)
 
 **Functions:**
-- `getClientSecret(clientId, integration)` - Fetch + decrypt secret
-- `getClientIntegration(clientId, integration)` - Get secret + meta
-- `touchIntegration(clientId, integration)` - Update `last_seen_at` and set health to GREEN
-- `markIntegrationUnhealthy(clientId, integration, status)` - Set YELLOW or RED
+- `getWorkspaceSecret(workspaceId, integration)` - Fetch + decrypt secret
+- `getWorkspaceIntegration(workspaceId, integration)` - Get secret + meta
+- `touchIntegration(workspaceId, integration)` - Update `last_seen_at` and set health to GREEN
+- `markIntegrationUnhealthy(workspaceId, integration, status)` - Set YELLOW or RED
 
 **Meta examples:**
 
@@ -445,13 +445,13 @@ Note: App ID and App Key are stored in the encrypted secrets field. Use the "Syn
 
 ### Workflow Routes
 
-**`GET /api/v1/workflows?clientId={clientId}`**
-- List all workflows for a client
+**`GET /api/v1/workflows?workspaceId={workspaceId}`**
+- List all workflows for a workspace
 - Returns workflow definitions with enabled status
 
 **`POST /api/v1/workflows`**
 - Create a new workflow
-- Body: `{ clientId, name, triggerAdapter, triggerOperation, triggerFilter?, actions }`
+- Body: `{ workspaceId, name, triggerAdapter, triggerOperation, triggerFilter?, actions }`
 
 **`GET /api/v1/workflows/{id}`**
 - Get a single workflow by ID
