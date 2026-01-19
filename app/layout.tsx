@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -13,8 +13,28 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sam Rosen | Business Automation Systems",
-  description: "Turn warm attention into booked appointments, payments, and onboarded clients — without lifting a finger. ManyChat + email + booking + payment automation for small businesses.",
+  title: "RevLine | Reliability-first Revenue Infrastructure",
+  description: "Private orchestration and monitoring platform for revenue-critical workflows.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "RevLine",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/web-app-manifest-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/web-app-manifest-512x512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#7c3aed",
 };
 
 export default function RootLayout({
@@ -24,6 +44,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js')}`,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
