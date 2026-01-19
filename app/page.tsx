@@ -490,11 +490,11 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ============== FUNNEL HEADS SECTION ============== */}
-      <section className="relative px-6 py-32 bg-zinc-900/30">
+      {/* ============== HOW IT WORKS SECTION ============== */}
+      <section className="relative px-6 py-32">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <SectionBadge>Funnel Heads</SectionBadge>
+            <SectionBadge>How It Works</SectionBadge>
             <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
               Capture at the{' '}
               <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
@@ -510,46 +510,85 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Visual Flow Diagram */}
-          <div className="mb-12 p-8 bg-zinc-900/50 border border-zinc-800 rounded-2xl">
-            <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-6">
-              {/* Funnel Head */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="px-6 py-3 bg-amber-500/20 border border-amber-500/30 rounded-lg">
-                  <p className="text-amber-400 font-semibold">Funnel Head</p>
-                </div>
-                <p className="text-xs text-zinc-500 text-center max-w-[120px]">Forms, Email Capture, Intake</p>
+          {/* Visual Flow Diagram - Converging/Diverging Routing */}
+          <div className="mb-12 p-8 bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
+            <div className="flex flex-col items-center">
+              
+              {/* Inbound Sources with individual arrows */}
+              <p className="text-xs text-zinc-500 text-center mb-4 uppercase tracking-wider">Inbound</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl mx-auto w-full">
+                {[
+                  { label: 'Forms' },
+                  { label: 'Phone Calls' },
+                  { label: 'Emails' },
+                  { label: 'Social Media' },
+                ].map((source, i) => (
+                  <div key={i} className="flex flex-col items-center">
+                    <div className="px-4 py-2.5 bg-amber-500/20 border border-amber-500/30 rounded-lg text-center w-full">
+                      <p className="text-amber-400 font-medium text-sm">{source.label}</p>
+                    </div>
+                    {/* Individual arrow from each source */}
+                    <div className="flex flex-col items-center mt-2">
+                      <div className="w-px h-6 bg-gradient-to-b from-amber-500/50 to-zinc-600" />
+                      <div className="w-2 h-2 border-r border-b border-zinc-600 rotate-45 -mt-1" />
+                    </div>
+                  </div>
+                ))}
               </div>
 
-              <ArrowRightIcon className="w-6 h-6 text-zinc-600 rotate-90 md:rotate-0" />
-
-              {/* RevLine Processing */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="px-6 py-3 bg-purple-500/20 border border-purple-500/30 rounded-lg">
-                  <p className="text-purple-400 font-semibold">RevLine</p>
-                </div>
-                <p className="text-xs text-zinc-500 text-center max-w-[120px]">Validate, Dedupe, Trigger</p>
+              {/* Converging lines visual */}
+              <div className="relative w-full max-w-2xl h-8 my-2">
+                {/* SVG for converging lines on desktop */}
+                <svg className="absolute inset-0 w-full h-full hidden md:block" preserveAspectRatio="none">
+                  <line x1="12.5%" y1="0" x2="50%" y2="100%" stroke="rgb(82 82 91)" strokeWidth="1" />
+                  <line x1="37.5%" y1="0" x2="50%" y2="100%" stroke="rgb(82 82 91)" strokeWidth="1" />
+                  <line x1="62.5%" y1="0" x2="50%" y2="100%" stroke="rgb(82 82 91)" strokeWidth="1" />
+                  <line x1="87.5%" y1="0" x2="50%" y2="100%" stroke="rgb(82 82 91)" strokeWidth="1" />
+                </svg>
+                {/* Single line for mobile */}
+                <div className="md:hidden w-px h-full bg-zinc-600 mx-auto" />
               </div>
 
-              <ArrowRightIcon className="w-6 h-6 text-zinc-600 rotate-90 md:rotate-0" />
-
-              {/* Workflow Engine */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="px-6 py-3 bg-violet-500/20 border border-violet-500/30 rounded-lg">
-                  <p className="text-violet-400 font-semibold">Workflow Engine</p>
-                </div>
-                <p className="text-xs text-zinc-500 text-center max-w-[120px]">Match & Execute</p>
+              {/* RevLine Hub - Center */}
+              <div className="px-12 py-5 bg-purple-500/20 border-2 border-purple-500/40 rounded-xl relative z-10">
+                <p className="text-purple-400 font-bold text-xl text-center">RevLine</p>
+                <p className="text-purple-400/70 text-xs mt-1 text-center">Validate • Dedupe • Route</p>
               </div>
 
-              <ArrowRightIcon className="w-6 h-6 text-zinc-600 rotate-90 md:rotate-0" />
-
-              {/* Downstream Systems */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="px-6 py-3 bg-green-500/20 border border-green-500/30 rounded-lg">
-                  <p className="text-green-400 font-semibold">Downstream</p>
-                </div>
-                <p className="text-xs text-zinc-500 text-center max-w-[120px]">ABC Ignite, MailerLite, Stripe</p>
+              {/* Diverging lines visual */}
+              <div className="relative w-full max-w-2xl h-8 my-2">
+                {/* SVG for diverging lines on desktop */}
+                <svg className="absolute inset-0 w-full h-full hidden md:block" preserveAspectRatio="none">
+                  <line x1="50%" y1="0" x2="12.5%" y2="100%" stroke="rgb(82 82 91)" strokeWidth="1" />
+                  <line x1="50%" y1="0" x2="37.5%" y2="100%" stroke="rgb(82 82 91)" strokeWidth="1" />
+                  <line x1="50%" y1="0" x2="62.5%" y2="100%" stroke="rgb(82 82 91)" strokeWidth="1" />
+                  <line x1="50%" y1="0" x2="87.5%" y2="100%" stroke="rgb(82 82 91)" strokeWidth="1" />
+                </svg>
+                {/* Single line for mobile */}
+                <div className="md:hidden w-px h-full bg-zinc-600 mx-auto" />
               </div>
+
+              {/* Outcomes with individual arrows pointing in */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl mx-auto w-full">
+                {[
+                  { label: 'Email Marketing' },
+                  { label: 'Booking' },
+                  { label: 'Payments' },
+                  { label: 'CRM' },
+                ].map((outcome, i) => (
+                  <div key={i} className="flex flex-col items-center">
+                    {/* Individual arrow to each outcome */}
+                    <div className="flex flex-col items-center mb-2">
+                      <div className="w-2 h-2 border-r border-b border-zinc-600 rotate-45" />
+                      <div className="w-px h-6 bg-gradient-to-b from-zinc-600 to-green-500/50 -mt-1" />
+                    </div>
+                    <div className="px-4 py-2.5 bg-green-500/20 border border-green-500/30 rounded-lg text-center w-full">
+                      <p className="text-green-400 font-medium text-sm">{outcome.label}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-zinc-500 text-center mt-4 uppercase tracking-wider">Outcomes</p>
             </div>
           </div>
 
@@ -565,7 +604,7 @@ export default function Home() {
               {
                 icon: GitBranchIcon,
                 title: 'One Submission, Many Actions',
-                description: 'A single form submission can create a lead, add to ABC Ignite, subscribe to MailerLite, and more—all automatically.',
+                description: 'A single form submission can create a lead, add to your CRM, subscribe to email marketing, and more—all automatically.',
                 color: 'purple',
               },
               {
@@ -597,31 +636,14 @@ export default function Home() {
             })}
           </div>
 
-          {/* Example Flow */}
-          <div className="mt-12 p-6 bg-zinc-900/50 border border-zinc-800 rounded-xl">
-            <p className="text-sm text-zinc-500 mb-4 font-medium">Example Flow:</p>
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="px-3 py-1.5 bg-zinc-800 rounded text-zinc-400">Prospect fills form</span>
-              <ArrowRightIcon className="w-4 h-4 text-zinc-600 hidden sm:block" />
-              <span className="px-3 py-1.5 bg-purple-500/20 border border-purple-500/30 rounded text-purple-400">RevLine validates</span>
-              <ArrowRightIcon className="w-4 h-4 text-zinc-600 hidden sm:block" />
-              <span className="px-3 py-1.5 bg-violet-500/20 border border-violet-500/30 rounded text-violet-400">Workflow triggers</span>
-              <ArrowRightIcon className="w-4 h-4 text-zinc-600 hidden sm:block" />
-              <span className="px-3 py-1.5 bg-amber-500/20 border border-amber-500/30 rounded text-amber-400">Creates lead</span>
-              <ArrowRightIcon className="w-4 h-4 text-zinc-600 hidden sm:block" />
-              <span className="px-3 py-1.5 bg-orange-500/20 border border-orange-500/30 rounded text-orange-400">Adds to ABC Ignite</span>
-              <ArrowRightIcon className="w-4 h-4 text-zinc-600 hidden sm:block" />
-              <span className="px-3 py-1.5 bg-green-500/20 border border-green-500/30 rounded text-green-400">Subscribes to MailerLite</span>
-            </div>
-          </div>
         </div>
       </section>
 
-      {/* ============== EXTENSIBILITY SECTION ============== */}
+      {/* ============== UNDER THE HOOD SECTION ============== */}
       <section className="relative px-6 py-32">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <SectionBadge>Architecture</SectionBadge>
+            <SectionBadge>Under the Hood</SectionBadge>
             <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
               Anything Talking to{' '}
               <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
@@ -633,8 +655,8 @@ export default function Home() {
             </p>
           </div>
           
-          {/* Flow visualization */}
-          <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-2 mb-16">
+          {/* Technical Flow - zooms into RevLine */}
+          <div className="flex flex-col md:flex-row items-center justify-center gap-3 md:gap-2 mb-16">
             {[
               { label: 'Webhook', color: 'zinc' },
               { label: 'Adapter', color: 'blue' },
@@ -643,7 +665,7 @@ export default function Home() {
               { label: 'Action', color: 'green' },
               { label: 'External API', color: 'cyan' },
             ].map((step, i, arr) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={i} className="flex flex-col md:flex-row items-center gap-2">
                 <div className={`px-4 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-sm font-medium ${
                   step.color === 'blue' ? 'text-blue-400' :
                   step.color === 'purple' ? 'text-purple-400' :
@@ -655,7 +677,7 @@ export default function Home() {
                   {step.label}
                 </div>
                 {i < arr.length - 1 && (
-                  <ArrowRightIcon className="w-4 h-4 text-zinc-600 hidden md:block" />
+                  <ArrowRightIcon className="w-4 h-4 text-zinc-600 rotate-90 md:rotate-0" />
                 )}
               </div>
             ))}
