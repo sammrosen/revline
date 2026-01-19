@@ -84,22 +84,14 @@ vi.mock('@/app/_lib/pushover', () => ({
 vi.mock('next/headers', () => ({
   headers: vi.fn(async () => ({
     get: (key: string) => {
-      if (key === 'x-user-id') {
-        return 'test-user-id';
-      }
-      // Legacy support
       if (key === 'x-admin-id') {
-        return 'test-user-id';
+        return 'test-admin-id';
       }
       return null;
     },
   })),
   cookies: vi.fn(async () => ({
     get: (name: string) => {
-      if (name === 'revline_session') {
-        return { value: 'test-session-id' };
-      }
-      // Legacy support
       if (name === 'revline_admin_session') {
         return { value: 'test-session-id' };
       }
@@ -162,41 +154,37 @@ afterEach(async () => {
   await testPrisma.workflow.deleteMany();
   await testPrisma.event.deleteMany();
   await testPrisma.lead.deleteMany();
-  await testPrisma.workspaceIntegration.deleteMany();
-  await testPrisma.workspaceMember.deleteMany();
-  await testPrisma.session.deleteMany();
-  await testPrisma.user.deleteMany();
-  await testPrisma.workspace.deleteMany();
+  await testPrisma.clientIntegration.deleteMany();
+  await testPrisma.adminSession.deleteMany();
+  await testPrisma.admin.deleteMany();
+  await testPrisma.client.deleteMany();
   
   // Reset all mocks
   vi.clearAllMocks();
 });
 
 /**
- * Test helper: Create a test workspace
+ * Test helper: Create a test client
  */
-export async function createTestWorkspace(overrides: Partial<{
+export async function createTestClient(overrides: Partial<{
   name: string;
   slug: string;
   status: 'ACTIVE' | 'PAUSED';
 }> = {}) {
-  return testPrisma.workspace.create({
+  return testPrisma.client.create({
     data: {
-      name: overrides.name ?? 'Test Workspace',
-      slug: overrides.slug ?? `test-workspace-${Date.now()}`,
+      name: overrides.name ?? 'Test Client',
+      slug: overrides.slug ?? `test-client-${Date.now()}`,
       status: overrides.status ?? 'ACTIVE',
     },
   });
 }
 
-/** @deprecated Use createTestWorkspace instead */
-export const createTestClient = createTestWorkspace;
-
 /**
  * Test helper: Create a test integration
  */
 export async function createTestIntegration(
-  workspaceId: string,
+  clientId: string,
   integration: 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE',
   secret: string,
   meta?: Record<string, unknown>
@@ -214,12 +202,12 @@ export async function createTestIntegration(
     keyVersion,
   }];
   
-  return testPrisma.workspaceIntegration.create({
+  return testPrisma.clientIntegration.create({
     data: {
-      workspaceId,
+      clientId,
       integration,
-      secrets: secrets as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['secrets'],
-      meta: meta as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['meta'],
+      secrets: secrets as Parameters<typeof testPrisma.clientIntegration.create>[0]['data']['secrets'],
+      meta: meta as Parameters<typeof testPrisma.clientIntegration.create>[0]['data']['meta'],
     },
   });
 }
@@ -229,7 +217,7 @@ export async function createTestIntegration(
  * ABC Ignite requires both App ID and App Key secrets
  */
 export async function createAbcIgniteIntegration(
-  workspaceId: string,
+  clientId: string,
   appId: string,
   appKey: string,
   meta?: {
@@ -260,12 +248,12 @@ export async function createAbcIgniteIntegration(
     },
   ];
   
-  return testPrisma.workspaceIntegration.create({
+  return testPrisma.clientIntegration.create({
     data: {
-      workspaceId,
+      clientId,
       integration: 'ABC_IGNITE',
-      secrets: secrets as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['secrets'],
-      meta: meta as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['meta'],
+      secrets: secrets as Parameters<typeof testPrisma.clientIntegration.create>[0]['data']['secrets'],
+      meta: meta as Parameters<typeof testPrisma.clientIntegration.create>[0]['data']['meta'],
     },
   });
 }
@@ -274,7 +262,7 @@ export async function createAbcIgniteIntegration(
  * Test helper: Create a test lead
  */
 export async function createTestLead(
-  workspaceId: string,
+  clientId: string,
   overrides: Partial<{
     email: string;
     source: string;
@@ -283,7 +271,7 @@ export async function createTestLead(
 ) {
   return testPrisma.lead.create({
     data: {
-      workspaceId,
+      clientId,
       email: overrides.email ?? `test-${Date.now()}@example.com`,
       source: overrides.source ?? 'test',
       stage: overrides.stage ?? 'CAPTURED',
@@ -292,17 +280,14 @@ export async function createTestLead(
 }
 
 /**
- * Test helper: Get events for a workspace
+ * Test helper: Get events for a client
  */
-export async function getEventsForWorkspace(workspaceId: string) {
+export async function getEventsForClient(clientId: string) {
   return testPrisma.event.findMany({
-    where: { workspaceId },
+    where: { clientId },
     orderBy: { createdAt: 'desc' },
   });
 }
-
-/** @deprecated Use getEventsForWorkspace instead */
-export const getEventsForClient = getEventsForWorkspace;
 
 /**
  * Test helper: Create a test workflow
@@ -310,7 +295,7 @@ export const getEventsForClient = getEventsForWorkspace;
  * (workflows start disabled and must be explicitly enabled)
  */
 export async function createTestWorkflow(
-  workspaceId: string,
+  clientId: string,
   overrides: Partial<{
     name: string;
     enabled: boolean;
@@ -321,7 +306,7 @@ export async function createTestWorkflow(
 ) {
   return testPrisma.workflow.create({
     data: {
-      workspaceId,
+      clientId,
       name: overrides.name ?? 'Test Workflow',
       enabled: overrides.enabled ?? false, // Default to disabled - must be explicitly enabled
       triggerAdapter: overrides.triggerAdapter ?? 'revline',
@@ -335,7 +320,7 @@ export async function createTestWorkflow(
  * Test helper: Create a test webhook event
  */
 export async function createTestWebhookEvent(
-  workspaceId: string,
+  clientId: string,
   overrides: Partial<{
     provider: 'stripe' | 'calendly' | 'revline';
     providerEventId: string;
@@ -350,7 +335,7 @@ export async function createTestWebhookEvent(
   
   return testPrisma.webhookEvent.create({
     data: {
-      workspaceId,
+      clientId,
       correlationId: randomUUID(),
       provider: overrides.provider ?? 'stripe',
       providerEventId: overrides.providerEventId ?? `evt_test_${Date.now()}`,
@@ -367,7 +352,7 @@ export async function createTestWebhookEvent(
  * Test helper: Create a test idempotency key
  */
 export async function createTestIdempotencyKey(
-  workspaceId: string,
+  clientId: string,
   overrides: Partial<{
     key: string;
     status: 'PENDING' | 'COMPLETED' | 'FAILED';
@@ -378,7 +363,7 @@ export async function createTestIdempotencyKey(
 ) {
   return testPrisma.idempotencyKey.create({
     data: {
-      workspaceId,
+      clientId,
       key: overrides.key ?? `test-key-${Date.now()}`,
       status: overrides.status ?? 'PENDING',
       result: overrides.result as Parameters<typeof testPrisma.idempotencyKey.create>[0]['data']['result'],
@@ -402,43 +387,9 @@ export async function cleanupTestData() {
   await testPrisma.workflow.deleteMany();
   await testPrisma.event.deleteMany();
   await testPrisma.lead.deleteMany();
-  await testPrisma.workspaceIntegration.deleteMany();
-  await testPrisma.workspaceMember.deleteMany();
-  await testPrisma.session.deleteMany();
-  await testPrisma.user.deleteMany();
-  await testPrisma.workspace.deleteMany();
+  await testPrisma.clientIntegration.deleteMany();
+  await testPrisma.adminSession.deleteMany();
+  await testPrisma.admin.deleteMany();
+  await testPrisma.client.deleteMany();
 }
 
-/**
- * Test helper: Create a test user
- */
-export async function createTestUser(overrides: Partial<{
-  email: string;
-  name: string;
-  passwordHash: string;
-}> = {}) {
-  return testPrisma.user.create({
-    data: {
-      email: overrides.email ?? `test-${Date.now()}@example.com`,
-      name: overrides.name ?? 'Test User',
-      passwordHash: overrides.passwordHash ?? 'test-password-hash',
-    },
-  });
-}
-
-/**
- * Test helper: Create a workspace membership
- */
-export async function createTestWorkspaceMember(
-  userId: string,
-  workspaceId: string,
-  role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' = 'OWNER'
-) {
-  return testPrisma.workspaceMember.create({
-    data: {
-      userId,
-      workspaceId,
-      role,
-    },
-  });
-}
