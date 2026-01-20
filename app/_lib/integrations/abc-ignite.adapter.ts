@@ -261,6 +261,73 @@ interface AbcMembersResponse {
   members?: AbcIgniteMember[];
 }
 
+// =============================================================================
+// EMPLOYEE TYPES
+// =============================================================================
+
+/**
+ * ABC Ignite employee personal info
+ * From GET /employees response
+ */
+export interface AbcIgniteEmployeePersonal {
+  firstName?: string;
+  middleInitial?: string;
+  lastName?: string;
+  birthDate?: string;
+  profile?: string;
+}
+
+/**
+ * ABC Ignite employee employment info
+ */
+export interface AbcIgniteEmployeeEmployment {
+  employeeStatus?: string;
+  wage?: string;
+  commissionLevel?: string;
+  startDate?: string;
+  terminationDate?: string;
+  authorizedClubs?: { clubNumber?: string[] };
+  departments?: { department?: string[] };
+  trainingLevel?: string;
+  earningsCode?: string;
+}
+
+/**
+ * ABC Ignite employee assigned role
+ */
+export interface AbcIgniteEmployeeRole {
+  roleId: string;
+  roleName: string;
+  roleDescription?: string;
+}
+
+/**
+ * ABC Ignite employee
+ * From GET /{clubNumber}/employees response
+ */
+export interface AbcIgniteEmployee {
+  employeeId: string;
+  barcode?: string;
+  personal?: AbcIgniteEmployeePersonal;
+  contact?: {
+    email?: string;
+    homePhone?: string;
+    cellPhone?: string;
+    workPhone?: string;
+  };
+  employment?: AbcIgniteEmployeeEmployment;
+  assignedRoles?: AbcIgniteEmployeeRole[];
+}
+
+/**
+ * Employees response
+ * GET /{clubNumber}/employees
+ */
+interface AbcEmployeesResponse {
+  status?: AbcApiStatus;
+  employees?: AbcIgniteEmployee[];
+}
+
 /**
  * Time block within a day's availability
  * Represents a continuous period when the employee is available
@@ -351,6 +418,23 @@ export type EventCategory = 'appointment' | 'event';
  */
 export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   readonly type = IntegrationType.ABC_IGNITE;
+
+  /**
+   * Known API endpoints for testing UI
+   * These are exposed in the Testing tab for quick access
+   */
+  static readonly knownEndpoints = [
+    { method: 'GET', path: '/employees', description: 'List all employees' },
+    { method: 'GET', path: '/members?barcode={barcode}', description: 'Lookup member by barcode' },
+    { method: 'GET', path: '/members/{memberId}/scheduling/associatedevents/appointments', description: 'Get member appointments' },
+    { method: 'GET', path: '/calendars/eventtypes', description: 'List event types' },
+    { method: 'GET', path: '/calendars/eventtypes/{eventTypeId}/sessionbalances', description: 'Check session balance by event type' },
+    { method: 'GET', path: '/members/{memberId}/services/purchasehistory?eventTypeId={eventTypeId}', description: 'Get member session balance for event type' },
+    { method: 'GET', path: '/calendars/events', description: 'List calendar events' },
+    { method: 'POST', path: '/calendars/events', description: 'Create booking' },
+    { method: 'DELETE', path: '/calendars/events/{eventId}', description: 'Cancel booking' },
+    { method: 'GET', path: '/employees/bookingavailability/{employeeId}?eventTypeId={eventTypeId}', description: 'Get employee availability' },
+  ] as const;
 
   /**
    * Load ABC Ignite adapter for a workspace
@@ -492,6 +576,16 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   ): Promise<IntegrationResult<T>> {
     const clubNumber = this.getClubNumber();
     const url = `${ABC_IGNITE_API_BASE}/${clubNumber}${endpoint}`;
+    const startTime = Date.now();
+    
+    // Structured request log (no secrets, no PII)
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: 'abc_api_request',
+      workspaceId: this.workspaceId,
+      method,
+      endpoint,
+    }));
     
     try {
       const headers = this.getAuthHeaders();
@@ -501,6 +595,8 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
         headers,
         body: body ? JSON.stringify(body) : undefined,
       });
+
+      const duration_ms = Date.now() - startTime;
 
       // Handle non-OK responses
       if (!response.ok) {
@@ -516,6 +612,17 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
           }
         }
         
+        // Structured error response log
+        console.log(JSON.stringify({
+          timestamp: new Date().toISOString(),
+          event: 'abc_api_response',
+          workspaceId: this.workspaceId,
+          endpoint,
+          status: response.status,
+          success: false,
+          duration_ms,
+        }));
+        
         // 5xx errors are retryable, 4xx are not
         const isRetryable = response.status >= 500;
         return this.error(errorMessage, isRetryable);
@@ -523,18 +630,135 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
 
       // Parse successful response
       const data = await response.json() as T;
+      
+      // Structured success response log (safe IDs only, no PII)
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: 'abc_api_response',
+        workspaceId: this.workspaceId,
+        endpoint,
+        status: response.status,
+        success: true,
+        duration_ms,
+        // Safe to log: IDs and counts only
+        responseId: (data as Record<string, unknown>)?.eventId || (data as Record<string, unknown>)?.memberId,
+        memberCount: Array.isArray((data as Record<string, unknown>)?.members) ? ((data as Record<string, unknown>).members as unknown[]).length : undefined,
+        eventCount: Array.isArray((data as Record<string, unknown>)?.events) ? ((data as Record<string, unknown>).events as unknown[]).length : undefined,
+        employeeCount: Array.isArray((data as Record<string, unknown>)?.employees) ? ((data as Record<string, unknown>).employees as unknown[]).length : undefined,
+      }));
+      
       await this.touch();
       return this.success(data);
       
     } catch (error) {
+      const duration_ms = Date.now() - startTime;
       const message = error instanceof Error ? error.message : 'Unknown error';
-      console.error('ABC Ignite API error:', {
+      
+      // Structured error log
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: 'abc_api_error',
         workspaceId: this.workspaceId,
         method,
         endpoint,
+        duration_ms,
         error: message,
-      });
+      }));
+      
       return this.error(message, true);
+    }
+  }
+
+  /**
+   * Raw API request for testing/debugging
+   * Used by the Testing tab to make arbitrary API calls
+   * 
+   * @param method - HTTP method
+   * @param endpoint - API endpoint path (without club number prefix)
+   * @param body - Optional request body for POST/PUT
+   * @returns Response with status, data, and timing
+   */
+  async rawRequest(
+    method: string,
+    endpoint: string,
+    body?: unknown
+  ): Promise<{ status: number; data: unknown; duration_ms: number; error?: string }> {
+    const clubNumber = this.getClubNumber();
+    const url = `${ABC_IGNITE_API_BASE}/${clubNumber}${endpoint}`;
+    const startTime = Date.now();
+    
+    // Structured request log
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: 'abc_raw_request',
+      workspaceId: this.workspaceId,
+      method,
+      endpoint,
+    }));
+    
+    try {
+      const headers = this.getAuthHeaders();
+      
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+
+      const duration_ms = Date.now() - startTime;
+      
+      // Try to parse as JSON, fall back to text
+      let data: unknown;
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        data = await response.json();
+      } else {
+        data = await response.text();
+      }
+      
+      // Structured response log
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: 'abc_raw_response',
+        workspaceId: this.workspaceId,
+        endpoint,
+        status: response.status,
+        success: response.ok,
+        duration_ms,
+      }));
+      
+      if (!response.ok) {
+        return {
+          status: response.status,
+          data,
+          duration_ms,
+          error: typeof data === 'string' ? data : (data as Record<string, unknown>)?.message as string || `HTTP ${response.status}`,
+        };
+      }
+      
+      await this.touch();
+      return { status: response.status, data, duration_ms };
+      
+    } catch (error) {
+      const duration_ms = Date.now() - startTime;
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: 'abc_raw_error',
+        workspaceId: this.workspaceId,
+        method,
+        endpoint,
+        duration_ms,
+        error: message,
+      }));
+      
+      return {
+        status: 0,
+        data: null,
+        duration_ms,
+        error: message,
+      };
     }
   }
 
@@ -613,20 +837,19 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
 
   /**
    * Get a member's upcoming events/appointments
-   * GET /{clubNumber}/members/{memberId}/appointments
+   * GET /{clubNumber}/members/{memberId}/scheduling/associatedevents/appointments
    */
   async getMemberEvents(memberId: string): Promise<IntegrationResult<AbcIgniteEvent[]>> {
-    // Response likely has "appointments" key
-    const result = await this.apiRequest<{ status?: AbcApiStatus; appointments?: AbcIgniteEvent[] }>(
+    const result = await this.apiRequest<{ status?: AbcApiStatus; associatedEvents?: AbcIgniteEvent[] }>(
       'GET',
-      `/members/${memberId}/appointments`
+      `/members/${memberId}/scheduling/associatedevents/appointments`
     );
 
     if (!result.success) {
       return result as IntegrationResult<AbcIgniteEvent[]>;
     }
 
-    return this.success(result.data?.appointments || []);
+    return this.success(result.data?.associatedEvents || []);
   }
 
   // ===========================================================================
@@ -732,6 +955,55 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   }
 
   // ===========================================================================
+  // EMPLOYEE OPERATIONS
+  // ===========================================================================
+
+  /**
+   * Get employees from ABC Ignite
+   * GET /{clubNumber}/employees
+   * 
+   * Used to sync employee list for configuration.
+   * 
+   * @param options - Optional filter options
+   * @returns Array of employees with personal info and roles
+   */
+  async getEmployees(options?: {
+    employeeStatus?: string;
+    departmentOnline?: string;
+    eventTypeId?: string;
+    levelId?: string;
+  }): Promise<IntegrationResult<AbcIgniteEmployee[]>> {
+    const params = new URLSearchParams();
+    
+    if (options?.employeeStatus) {
+      params.append('employeeStatus', options.employeeStatus);
+    }
+    if (options?.departmentOnline) {
+      params.append('departmentOnline', options.departmentOnline);
+    }
+    if (options?.eventTypeId) {
+      params.append('eventTypeId', options.eventTypeId);
+    }
+    if (options?.levelId) {
+      params.append('levelId', options.levelId);
+    }
+
+    const queryString = params.toString();
+    const endpoint = `/employees${queryString ? `?${queryString}` : ''}`;
+    
+    const result = await this.apiRequest<AbcEmployeesResponse>(
+      'GET',
+      endpoint
+    );
+
+    if (!result.success) {
+      return result as IntegrationResult<AbcIgniteEmployee[]>;
+    }
+
+    return this.success(result.data?.employees || []);
+  }
+
+  // ===========================================================================
   // AVAILABILITY & SESSION BALANCE
   // ===========================================================================
 
@@ -800,11 +1072,8 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
     return date;
   }
 
-  // NOTE: getAvailableEmployees and getSessionBalance/canEnroll removed
-  // These require endpoints not currently activated:
-  // - /calendars/events/{id}/availableemployees
-  // - /session-balance
-  // Re-add when those endpoints are activated in ABC Ignite
+  // NOTE: Session balance check requires /session-balance endpoint
+  // which may not be activated. Use getSessionBalances() when available.
 
   // ===========================================================================
   // ENROLLMENT OPERATIONS

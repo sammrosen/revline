@@ -7,10 +7,11 @@ import { AddIntegrationForm } from './add-integration-form';
 import { LeadsView } from './leads-view';
 import MailerLiteInsights from './mailerlite-insights';
 import { WorkflowList } from './workflows/workflow-list';
-import { Workflow as WorkflowIcon } from 'lucide-react';
+import { TestingTab } from './testing-tab';
+import { Workflow as WorkflowIcon, FlaskConical } from 'lucide-react';
 import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
 
-type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'insights';
+type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'insights' | 'testing';
 
 interface SecretSummary {
   id: string;
@@ -164,6 +165,7 @@ export function WorkspaceTabs({ workspaceId, integrations, events, eventCount, l
     { id: 'leads', label: 'Leads', count: leads.length },
     { id: 'insights', label: 'Insights' },
     { id: 'events', label: 'Events', count: events.length },
+    { id: 'testing', label: 'Testing' },
   ];
 
   return (
@@ -200,6 +202,9 @@ export function WorkspaceTabs({ workspaceId, integrations, events, eventCount, l
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
                 </svg>
+              )}
+              {tab.id === 'testing' && (
+                <FlaskConical className="w-4 h-4" />
               )}
               {tab.label}
               {tab.count !== undefined && (
@@ -368,6 +373,10 @@ export function WorkspaceTabs({ workspaceId, integrations, events, eventCount, l
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === 'testing' && (
+          <TestingTab workspaceId={workspaceId} />
         )}
       </div>
     </div>

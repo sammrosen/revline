@@ -25,7 +25,11 @@ export type { CheckoutData, VerifiedWebhookEvent } from './stripe.adapter';
 export { AbcIgniteAdapter } from './abc-ignite.adapter';
 export type { 
   AbcIgniteEvent, 
-  AbcIgniteEventType, 
+  AbcIgniteEventType,
+  AbcIgniteEmployee,
+  AbcIgniteEmployeePersonal,
+  AbcIgniteEmployeeEmployment,
+  AbcIgniteEmployeeRole,
   EnrollmentResult, 
   WaitlistResult,
 } from './abc-ignite.adapter';
