@@ -196,17 +196,20 @@ describe('RetentionService', () => {
         webhookEventsDeleted: 50,
         workflowExecutionsDeleted: 25,
         idempotencyKeysDeleted: 10,
+        pendingBookingsExpired: 5,
+        pendingBookingsDeleted: 3,
         durationMs: 1234,
         dryRun: false,
       };
 
       const formatted = RetentionService.formatResult(result);
       
-      expect(formatted).toContain('Deleted:');
+      expect(formatted).toContain('Processed:');
       expect(formatted).toContain('Events: 100');
       expect(formatted).toContain('Webhooks: 50');
       expect(formatted).toContain('Executions: 25');
       expect(formatted).toContain('Keys: 10');
+      expect(formatted).toContain('PendingBookings:');
       expect(formatted).toContain('1234ms');
     });
 
@@ -216,6 +219,8 @@ describe('RetentionService', () => {
         webhookEventsDeleted: 0,
         workflowExecutionsDeleted: 0,
         idempotencyKeysDeleted: 0,
+        pendingBookingsExpired: 0,
+        pendingBookingsDeleted: 0,
         durationMs: 500,
         dryRun: true,
       };
@@ -223,7 +228,7 @@ describe('RetentionService', () => {
       const formatted = RetentionService.formatResult(result);
       
       expect(formatted).toContain('[DRY RUN]');
-      expect(formatted).toContain('Would delete');
+      expect(formatted).toContain('Would process');
     });
   });
 

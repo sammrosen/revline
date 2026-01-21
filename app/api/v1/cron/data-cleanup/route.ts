@@ -62,9 +62,12 @@ export async function GET(request: NextRequest) {
       result.eventsDeleted + 
       result.webhookEventsDeleted + 
       result.workflowExecutionsDeleted + 
-      result.idempotencyKeysDeleted;
+      result.idempotencyKeysDeleted +
+      result.pendingBookingsDeleted;
+    
+    const totalProcessed = totalDeleted + result.pendingBookingsExpired;
 
-    if (totalDeleted > 0 || dryRun) {
+    if (totalProcessed > 0 || dryRun) {
       AlertService.info(
         dryRun ? 'Cleanup Preview' : 'Daily Cleanup Complete',
         RetentionService.formatResult(result),

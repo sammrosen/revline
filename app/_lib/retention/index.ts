@@ -87,9 +87,10 @@ export const RetentionService = {
       `Webhooks: ${result.webhookEventsDeleted.toLocaleString()}`,
       `Executions: ${result.workflowExecutionsDeleted.toLocaleString()}`,
       `Keys: ${result.idempotencyKeysDeleted.toLocaleString()}`,
+      `PendingBookings: ${result.pendingBookingsExpired.toLocaleString()} expired, ${result.pendingBookingsDeleted.toLocaleString()} deleted`,
     ];
     
-    const prefix = result.dryRun ? '[DRY RUN] Would delete' : 'Deleted';
+    const prefix = result.dryRun ? '[DRY RUN] Would process' : 'Processed';
     return `${prefix}: ${parts.join(', ')} (${result.durationMs}ms)`;
   },
 };

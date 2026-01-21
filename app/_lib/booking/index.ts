@@ -13,5 +13,8 @@ export * from './providers';
 // Provider resolver
 export * from './get-provider';
 
+// Magic link for booking confirmations
+export * from './magic-link';
+
 // Components
 export * from './components';

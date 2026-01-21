@@ -154,6 +154,7 @@ afterEach(async () => {
   await testPrisma.workflow.deleteMany();
   await testPrisma.event.deleteMany();
   await testPrisma.lead.deleteMany();
+  await testPrisma.pendingBooking.deleteMany();
   await testPrisma.workspaceIntegration.deleteMany();
   await testPrisma.session.deleteMany();
   await testPrisma.workspaceMember.deleteMany();
@@ -398,6 +399,7 @@ export async function cleanupTestData() {
   await testPrisma.workflow.deleteMany();
   await testPrisma.event.deleteMany();
   await testPrisma.lead.deleteMany();
+  await testPrisma.pendingBooking.deleteMany();
   await testPrisma.workspaceIntegration.deleteMany();
   await testPrisma.session.deleteMany();
   await testPrisma.workspaceMember.deleteMany();

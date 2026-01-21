@@ -120,6 +120,43 @@ export function rateLimitByClient(
 }
 
 /**
+ * Rate limit by customer identifier (for booking requests)
+ * Identifier can be barcode, email, phone, etc. depending on provider
+ */
+export function rateLimitByIdentifier(
+  identifier: string,
+  config: RateLimitConfig = RATE_LIMITS.BOOKING_BY_IDENTIFIER
+): RateLimitResult {
+  const key = `booking:identifier:${identifier}`;
+  return checkRateLimit(key, config);
+}
+
+/**
+ * Combined booking rate limit check
+ * Enforces both per-identifier and per-IP limits
+ * Returns the more restrictive result if either is exceeded
+ */
+export function checkBookingRateLimit(
+  identifier: string,
+  ip: string | null
+): { allowed: boolean; result: RateLimitResult } {
+  // Check identifier limit
+  const identifierResult = rateLimitByIdentifier(identifier);
+  if (!identifierResult.allowed) {
+    return { allowed: false, result: identifierResult };
+  }
+
+  // Check IP limit
+  const ipResult = rateLimitByIP(ip, RATE_LIMITS.BOOKING_BY_IP);
+  if (!ipResult.allowed) {
+    return { allowed: false, result: ipResult };
+  }
+
+  // Both passed - return identifier result (more restrictive)
+  return { allowed: true, result: identifierResult };
+}
+
+/**
  * Get client IP from request headers
  * Handles various proxy configurations
  */

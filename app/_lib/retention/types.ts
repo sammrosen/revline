@@ -19,6 +19,8 @@ export interface RetentionConfig {
   webhookEventDays: number;
   /** Days to keep WorkflowExecution records (default: 90) */
   workflowExecutionDays: number;
+  /** Days to keep PendingBooking records (default: 30) */
+  pendingBookingDays: number;
   /** IdempotencyKeys use their own TTL (24h), cleaned separately */
 }
 
@@ -29,6 +31,7 @@ export const DEFAULT_RETENTION: RetentionConfig = {
   eventDays: 90,
   webhookEventDays: 30,
   workflowExecutionDays: 90,
+  pendingBookingDays: 30,
 };
 
 // =============================================================================
@@ -47,6 +50,10 @@ export interface CleanupResult {
   workflowExecutionsDeleted: number;
   /** Number of IdempotencyKey records deleted */
   idempotencyKeysDeleted: number;
+  /** Number of PendingBooking records marked as expired */
+  pendingBookingsExpired: number;
+  /** Number of old PendingBooking records deleted */
+  pendingBookingsDeleted: number;
   /** Total duration in milliseconds */
   durationMs: number;
   /** Whether this was a dry run */

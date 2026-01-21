@@ -110,6 +110,14 @@ export class AbcIgniteBookingProvider implements BookingProvider {
   }
   
   /**
+   * Get customer's email address for magic link verification
+   * Email is stored in the BookingCustomer after lookup
+   */
+  getCustomerEmail(customer: BookingCustomer): string | null {
+    return customer.email || null;
+  }
+  
+  /**
    * Check if member is eligible to book
    * 
    * Note: Session balance check disabled until /session-balance endpoint activated.

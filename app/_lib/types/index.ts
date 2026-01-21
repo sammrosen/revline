@@ -422,6 +422,9 @@ export const RATE_LIMITS = {
   SUBSCRIBE: { requests: 10, windowMs: 60_000 },  // 10 per minute
   WEBHOOK: { requests: 100, windowMs: 60_000 },   // 100 per minute
   ADMIN: { requests: 100, windowMs: 60_000 },     // 100 per minute
+  // Booking rate limits - stricter to prevent abuse
+  BOOKING_BY_IDENTIFIER: { requests: 3, windowMs: 15 * 60_000 },  // 3 per 15 minutes per identifier
+  BOOKING_BY_IP: { requests: 5, windowMs: 10 * 60_000 },          // 5 per 10 minutes per IP
 } as const;
 
 export const TIMEOUTS = {

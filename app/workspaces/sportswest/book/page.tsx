@@ -4,6 +4,12 @@
  * Custom styled booking page matching Sports West branding.
  * Light theme with burgundy accents.
  * 
+ * Uses Magic Link flow:
+ * 1. User selects time slot
+ * 2. Enters barcode + email
+ * 3. Receives email with confirmation link
+ * 4. Clicks link to finalize booking
+ * 
  * This page uses formId-based workspace lookup:
  * 1. Developer sets FORM_ID below
  * 2. Admin enables this formId in workspace's RevLine config
@@ -16,19 +22,27 @@ import {
   getBookingCapabilities, 
   hasBookingProvider 
 } from '@/app/_lib/booking';
-import { SportsWestBookingClient } from './client';
+import { MagicLinkBookingClient } from './magic-link-client';
 
 // Form ID - enable this in the workspace's RevLine config to connect
 const FORM_ID = 'sportswest-booking';
 
+// Error messages for confirmation redirects
+const ERROR_MESSAGES: Record<string, string> = {
+  invalid: 'This booking link is invalid or has already been used.',
+  expired: 'This booking link has expired. Please request a new booking.',
+  failed: 'Unable to complete your booking. Please try again or contact the front desk.',
+};
+
 export default async function SportsWestBookingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ barcode?: string }>;
+  searchParams: Promise<{ barcode?: string; error?: string }>;
 }) {
-  // Get URL params (e.g., ?barcode=123456 for pre-filled barcode links)
+  // Get URL params
   const params = await searchParams;
   const initialBarcode = params.barcode || null;
+  const errorCode = params.error;
   
   // Find workspace by formId (configured in RevLine integration)
   let workspace;
@@ -80,13 +94,30 @@ export default async function SportsWestBookingPage({
     );
   }
 
+  // Show error message if redirected from confirm with error
+  const errorMessage = errorCode ? ERROR_MESSAGES[errorCode] : null;
+
   return (
-    <SportsWestBookingClient
-      workspaceSlug={workspace.slug}
-      workspaceName={workspace.name}
-      capabilities={capabilities}
-      initialBarcode={initialBarcode}
-    />
+    <>
+      {errorMessage && (
+        <div className="bg-red-50 border-b border-red-200">
+          <div className="max-w-4xl mx-auto px-4 py-4">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm text-red-700">{errorMessage}</p>
+            </div>
+          </div>
+        </div>
+      )}
+      <MagicLinkBookingClient
+        workspaceSlug={workspace.slug}
+        workspaceName={workspace.name}
+        capabilities={capabilities}
+        initialBarcode={initialBarcode}
+      />
+    </>
   );
 }
 

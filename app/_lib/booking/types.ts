@@ -195,6 +195,14 @@ export interface BookingProvider {
    * @returns Waitlist result
    */
   addToWaitlist?(slot: TimeSlot, customer: BookingCustomer): Promise<BookingResult>;
+  
+  /**
+   * Get customer's email address (optional)
+   * Used for magic link verification - email provided must match customer record
+   * @param customer - Customer to get email for
+   * @returns Email address or null if not available
+   */
+  getCustomerEmail?(customer: BookingCustomer): string | null;
 }
 
 // =============================================================================
