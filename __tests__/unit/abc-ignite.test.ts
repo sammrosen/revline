@@ -523,6 +523,268 @@ describe('ABC Ignite Adapter', () => {
     });
   });
 
+  describe('employee operations', () => {
+    it('should fetch employees successfully', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-employees-fetch' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      // Mock employees response
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          employees: [
+            {
+              employeeId: 'emp-123',
+              barcode: 'EMP123',
+              personal: { firstName: 'John', lastName: 'Doe' },
+              employment: { employeeStatus: 'Active' },
+              assignedRoles: [{ roleId: '1', roleName: 'Personal Trainer' }],
+            },
+            {
+              employeeId: 'emp-456',
+              barcode: 'EMP456',
+              personal: { firstName: 'Jane', lastName: 'Smith' },
+              employment: { employeeStatus: 'Active' },
+              assignedRoles: [],
+            },
+          ],
+        }),
+      });
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      const result = await adapter!.getEmployees();
+      
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(2);
+      expect(result.data![0].employeeId).toBe('emp-123');
+      expect(result.data![0].personal?.firstName).toBe('John');
+    });
+
+    it('should filter employees by status', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-employees-filter' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      // Mock filtered response
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ employees: [] }),
+      });
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      await adapter!.getEmployees({ employeeStatus: 'Inactive' });
+      
+      // Verify request URL includes filter parameter
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('employeeStatus=Inactive'),
+        expect.anything()
+      );
+    });
+
+    it('should handle employee API errors', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-employees-error' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      // Mock error response
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        text: async () => 'Access denied',
+      });
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      const result = await adapter!.getEmployees();
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Access denied');
+    });
+  });
+
+  describe('rawRequest for testing', () => {
+    it('should execute raw GET request successfully', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-raw-get' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      // Mock successful response with all required properties
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ eventTypes: [{ id: '1', name: 'Test' }] }),
+      });
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      const result = await adapter!.rawRequest('GET', '/calendars/eventtypes');
+      
+      expect(result.status).toBe(200);
+      expect(result.error).toBeUndefined();
+      expect(result.duration_ms).toBeGreaterThanOrEqual(0);
+      expect((result.data as { eventTypes: unknown[] }).eventTypes).toHaveLength(1);
+    });
+
+    it('should execute raw POST request with body', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-raw-post' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      // Mock successful response with all required properties
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ eventId: 'new-event-123' }),
+      });
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      const body = { employeeId: 'emp-1', memberId: 'mem-1' };
+      const result = await adapter!.rawRequest('POST', '/calendars/events', body);
+      
+      expect(result.status).toBe(200);
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
+      );
+    });
+
+    it('should handle raw request errors gracefully', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-raw-error' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      // Mock error response
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ message: 'Resource not found' }),
+      });
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      const result = await adapter!.rawRequest('GET', '/invalid/endpoint');
+      
+      expect(result.status).toBe(404);
+      expect(result.error).toContain('not found');
+    });
+
+    it('should handle network errors in raw request', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-raw-network-error' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      // Mock network failure
+      mockFetch.mockRejectedValueOnce(new Error('Connection refused'));
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      const result = await adapter!.rawRequest('GET', '/employees');
+      
+      expect(result.status).toBe(0);
+      expect(result.error).toBe('Connection refused');
+      expect(result.duration_ms).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should not leak secrets in raw request logs', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-raw-no-secrets' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      const consoleSpy = vi.spyOn(console, 'log');
+      
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ result: 'ok' }),
+      });
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      await adapter!.rawRequest('GET', '/employees');
+      
+      // Check that no log contains secrets
+      for (const call of consoleSpy.mock.calls) {
+        const logString = JSON.stringify(call);
+        expect(logString).not.toContain(TEST_APP_ID);
+        expect(logString).not.toContain(TEST_APP_KEY);
+      }
+      
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('knownEndpoints', () => {
+    it('should expose known endpoints as static property', async () => {
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      
+      expect(AbcIgniteAdapter.knownEndpoints).toBeDefined();
+      expect(Array.isArray(AbcIgniteAdapter.knownEndpoints)).toBe(true);
+      expect(AbcIgniteAdapter.knownEndpoints.length).toBeGreaterThan(0);
+    });
+
+    it('should include required endpoint properties', async () => {
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      
+      for (const endpoint of AbcIgniteAdapter.knownEndpoints) {
+        expect(endpoint).toHaveProperty('method');
+        expect(endpoint).toHaveProperty('path');
+        expect(endpoint).toHaveProperty('description');
+        expect(['GET', 'POST', 'PUT', 'DELETE']).toContain(endpoint.method);
+        expect(typeof endpoint.path).toBe('string');
+        expect(typeof endpoint.description).toBe('string');
+      }
+    });
+
+    it('should include employees endpoint', async () => {
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      
+      const employeesEndpoint = AbcIgniteAdapter.knownEndpoints.find(
+        ep => ep.path === '/employees' && ep.method === 'GET'
+      );
+      
+      expect(employeesEndpoint).toBeDefined();
+      expect(employeesEndpoint?.description).toContain('employee');
+    });
+
+    it('should include booking endpoint', async () => {
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      
+      const bookingEndpoint = AbcIgniteAdapter.knownEndpoints.find(
+        ep => ep.path === '/calendars/events' && ep.method === 'POST'
+      );
+      
+      expect(bookingEndpoint).toBeDefined();
+      expect(bookingEndpoint?.description.toLowerCase()).toContain('booking');
+    });
+  });
+
   describe('connection test', () => {
     it('should test connection successfully', async () => {
       const client = await createTestWorkspace({ slug: 'abc-test-conn' });

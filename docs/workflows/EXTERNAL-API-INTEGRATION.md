@@ -91,10 +91,23 @@ When an integration fails:
 ### Endpoint Patterns
 | Operation | Correct Path |
 |-----------|--------------|
-| Event Types | `GET /{clubNumber}/calendars/event-types` |
+| Event Types | `GET /{clubNumber}/calendars/eventtypes` |
 | Events | `GET /{clubNumber}/calendars/events` |
+| Create Booking | `POST /{clubNumber}/calendars/events` |
+| Cancel Booking | `DELETE /{clubNumber}/calendars/events/{eventId}` |
+| Employees | `GET /{clubNumber}/employees` |
 | Employee Availability | `GET /{clubNumber}/employees/bookingavailability/{employeeId}` |
 | Members | `GET /{clubNumber}/members` |
+| Member Appointments | `GET /{clubNumber}/members/{memberId}/scheduling/associatedevents/appointments` |
+| Session Balance | `GET /{clubNumber}/members/{memberId}/services/purchasehistory?eventTypeId={eventTypeId}` |
+
+### Testing Tab
+
+The workspace Testing tab provides a direct API testing interface for ABC Ignite:
+- Select from known endpoints or enter custom paths
+- Form-based input for POST /calendars/events
+- Query parameter support for GET /employees (firstName, lastName, status filters)
+- All authentication handled automatically via configured credentials
 
 ### Authentication Headers
 ```
