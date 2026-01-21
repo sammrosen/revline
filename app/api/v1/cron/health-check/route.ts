@@ -205,15 +205,6 @@ export async function GET(request: NextRequest) {
       await sendAlerts(issues);
     }
 
-    // Emit completion event
-    await emitEvent({
-      workspaceId: 'system',
-      system: EventSystem.CRON,
-      eventType: 'health_check_completed',
-      success: true,
-      errorMessage: issues.length > 0 ? `${issues.length} issue(s) found` : undefined,
-    });
-
     const durationMs = Date.now() - startTime;
 
     return NextResponse.json({

@@ -402,6 +402,7 @@ export class AbcIgniteBookingProvider implements BookingProvider {
     const barcode = personal.barcode || member.barcode;
     const homeClub = personal.homeClub || member.homeClub;
     const email = personal.email;
+    const phone = personal.primaryPhone;
     
     const name = [firstName, lastName]
       .filter(Boolean)
@@ -414,6 +415,7 @@ export class AbcIgniteBookingProvider implements BookingProvider {
       providerData: {
         barcode,
         homeClub,
+        phone,
         hasActiveRecurringService: member.hasActiveRecurringService,
       },
     };

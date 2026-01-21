@@ -190,6 +190,35 @@ Provide client with:
 
 ## Troubleshooting
 
+### Using the Testing Tab
+
+The Testing tab (available in each workspace) provides direct API testing for debugging integrations.
+
+**Access:**
+1. Go to workspace dashboard
+2. Click the "Testing" tab (flask icon)
+
+**Features:**
+- **Known Endpoints**: Dropdown of common API endpoints pre-configured
+- **Custom Endpoints**: Enter any API path for testing
+- **Method Selection**: GET, POST, PUT, DELETE
+- **Form Input**: POST /calendars/events has a structured form
+- **Query Parameters**: GET /employees supports firstName, lastName, status filters
+- **Multi-Panel**: Open up to 3 side-by-side panels for comparison
+- **Response Search**: Search and highlight text in responses
+- **Match Navigation**: Navigate between search matches
+
+**Use Cases:**
+- Verify API credentials are working
+- Test new endpoints before implementing
+- Debug booking/calendar issues
+- Check member data and session balances
+- Compare responses between different parameters
+
+**Security:** Requires ADMIN or OWNER role. Authentication credentials are never exposed in the UI.
+
+---
+
 ### Client reports "emails not going through"
 
 1. Check admin dashboard → click client

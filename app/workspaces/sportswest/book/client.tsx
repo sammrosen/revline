@@ -550,6 +550,7 @@ function MemberLookupStep({
   setLoading: (loading: boolean) => void;
 }) {
   const [identifier, setIdentifier] = useState(initialValue || '');
+  const [phoneLastFour, setPhoneLastFour] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -561,22 +562,34 @@ function MemberLookupStep({
       return;
     }
 
+    if (!phoneLastFour.trim() || phoneLastFour.length !== 4) {
+      setLocalError('Please enter the last 4 digits of your phone number');
+      return;
+    }
+
     setLoading(true);
 
     try {
       const response = await fetch(BookingApi.lookup, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceSlug, identifier: identifier.trim() }),
+        body: JSON.stringify({ 
+          workspaceSlug, 
+          identifier: identifier.trim(),
+          phoneLastFour: phoneLastFour.trim(),
+        }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        setLocalError(response.status === 404 
-          ? 'Member not found. Please check your barcode and try again.'
-          : data.error || 'Failed to look up member'
-        );
+        if (response.status === 404) {
+          setLocalError('Member not found. Please check your barcode and try again.');
+        } else if (response.status === 401) {
+          setLocalError('Verification failed. Please check your barcode and phone number.');
+        } else {
+          setLocalError(data.error || 'Failed to verify membership');
+        }
         return;
       }
 
@@ -588,6 +601,12 @@ function MemberLookupStep({
     }
   };
 
+  // Only allow digits in phone field
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+    setPhoneLastFour(value);
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-lg overflow-hidden">
       <div className="p-6 border-b" style={{ borderColor: BRAND.border }}>
@@ -595,7 +614,7 @@ function MemberLookupStep({
           Verify Membership
         </h2>
         <p style={{ color: BRAND.textMuted }}>
-          Enter your member barcode to continue.
+          Enter your member barcode and phone number to continue.
         </p>
       </div>
 
@@ -613,8 +632,8 @@ function MemberLookupStep({
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="p-6">
-        <div className="mb-6">
+      <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <div>
           <label className="block text-sm font-medium mb-2" style={{ color: BRAND.text }}>
             {identifierLabel} <span className="text-red-500">*</span>
           </label>
@@ -632,15 +651,41 @@ function MemberLookupStep({
               '--tw-ring-color': BRAND.primary,
             } as React.CSSProperties}
           />
-          {localError && (
-            <p className="mt-2 text-sm text-red-600">{localError}</p>
-          )}
           <p className="mt-2 text-sm" style={{ color: BRAND.textMuted }}>
             Find this on the back of your membership card.
           </p>
         </div>
 
-        <div className="flex gap-4">
+        <div>
+          <label className="block text-sm font-medium mb-2" style={{ color: BRAND.text }}>
+            Last 4 Digits of Phone Number <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={phoneLastFour}
+            onChange={handlePhoneChange}
+            placeholder="1234"
+            disabled={loading}
+            maxLength={4}
+            className={`w-full px-4 py-3 border rounded focus:outline-none focus:ring-2 ${
+              localError ? 'border-red-500' : ''
+            }`}
+            style={{ 
+              borderColor: localError ? undefined : BRAND.border,
+              '--tw-ring-color': BRAND.primary,
+            } as React.CSSProperties}
+          />
+          <p className="mt-2 text-sm" style={{ color: BRAND.textMuted }}>
+            The phone number on file with your membership.
+          </p>
+        </div>
+
+        {localError && (
+          <p className="text-sm text-red-600">{localError}</p>
+        )}
+
+        <div className="flex gap-4 pt-2">
           <button
             type="button"
             onClick={onBack}
@@ -652,14 +697,14 @@ function MemberLookupStep({
           </button>
           <button
             type="submit"
-            disabled={loading || !identifier.trim()}
+            disabled={loading || !identifier.trim() || phoneLastFour.length !== 4}
             className="flex-1 py-3 text-white font-medium rounded disabled:opacity-50 flex items-center justify-center gap-2"
             style={{ backgroundColor: BRAND.primary }}
           >
             {loading ? (
               <>
                 <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
-                <span>Looking up...</span>
+                <span>Verifying...</span>
               </>
             ) : (
               'Continue'

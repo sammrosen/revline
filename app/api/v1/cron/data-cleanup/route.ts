@@ -14,7 +14,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { AlertService } from '@/app/_lib/alerts';
 import { RetentionService } from '@/app/_lib/retention';
 
@@ -58,15 +57,6 @@ export async function GET(request: NextRequest) {
     // Get table stats after cleanup (if not dry-run)
     const statsAfter = dryRun ? statsBefore : await RetentionService.getTableStats();
 
-    // Emit event for audit trail
-    await emitEvent({
-      workspaceId: 'system',
-      system: EventSystem.CRON,
-      eventType: 'retention_cleanup_completed',
-      success: true,
-      errorMessage: dryRun ? 'Dry run' : undefined,
-    });
-
     // Send low-priority notification (info level = no push notification sound)
     const totalDeleted = 
       result.eventsDeleted + 
@@ -104,15 +94,6 @@ export async function GET(request: NextRequest) {
     } catch {
       console.error('Failed to send cleanup failure alert');
     }
-
-    // Emit failure event
-    await emitEvent({
-      workspaceId: 'system',
-      system: EventSystem.CRON,
-      eventType: 'retention_cleanup_failed',
-      success: false,
-      errorMessage: error instanceof Error ? error.message : 'Unknown error',
-    });
 
     return NextResponse.json(
       { error: 'Data cleanup failed' },

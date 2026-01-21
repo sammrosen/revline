@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     // Support both workspaceSlug and clientSlug for backwards compatibility
     const workspaceSlug = body.workspaceSlug || body.clientSlug;
-    const { identifier } = body;
+    const { identifier, phoneLastFour } = body;
 
     // Validate input
     if (!workspaceSlug || typeof workspaceSlug !== 'string') {
@@ -46,6 +46,15 @@ export async function POST(request: NextRequest) {
         'identifier is required',
         400,
         ErrorCodes.MISSING_REQUIRED
+      );
+    }
+
+    // Validate phoneLastFour format if provided
+    if (phoneLastFour && (typeof phoneLastFour !== 'string' || !/^\d{4}$/.test(phoneLastFour))) {
+      return ApiResponse.error(
+        'phoneLastFour must be exactly 4 digits',
+        400,
+        ErrorCodes.VALIDATION_FAILED
       );
     }
 
@@ -87,6 +96,21 @@ export async function POST(request: NextRequest) {
         404,
         ErrorCodes.NOT_FOUND
       );
+    }
+
+    // Verify phone number if phoneLastFour was provided
+    if (phoneLastFour) {
+      const memberPhone = customer.providerData?.phone as string | undefined;
+      // Strip non-digits from stored phone for comparison
+      const phoneDigits = memberPhone?.replace(/\D/g, '') || '';
+      
+      if (!phoneDigits || !phoneDigits.endsWith(phoneLastFour)) {
+        return ApiResponse.error(
+          'Phone verification failed. Please check your information and try again.',
+          401,
+          ErrorCodes.UNAUTHORIZED
+        );
+      }
     }
 
     return ApiResponse.success({

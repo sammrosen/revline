@@ -116,14 +116,16 @@ export const ObservabilityService = {
       );
     }
 
-    // Emit event for audit trail
-    await emitEvent({
-      workspaceId: clientId ?? 'system',
-      system: EventSystem.CRON,
-      eventType: 'observability_threshold_exceeded',
-      success: false,
-      errorMessage: violations.map(v => v.type).join(', '),
-    });
+    // Emit event for audit trail (only if workspace-scoped)
+    if (clientId) {
+      await emitEvent({
+        workspaceId: clientId,
+        system: EventSystem.CRON,
+        eventType: 'observability_threshold_exceeded',
+        success: false,
+        errorMessage: violations.map(v => v.type).join(', '),
+      });
+    }
 
     return violations;
   },
