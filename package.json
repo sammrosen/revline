@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.1",
+    "@sentry/nextjs": "^10.36.0",
     "argon2": "^0.44.0",
     "lucide-react": "^0.562.0",
     "next": "^16.1.1",
