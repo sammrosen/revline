@@ -78,7 +78,7 @@ export async function GET(
   });
 }
 
-// PATCH /api/v1/workspaces/[id] - Update workspace (pause/unpause)
+// PATCH /api/v1/workspaces/[id] - Update workspace (pause/unpause or settings)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -102,8 +102,9 @@ export async function PATCH(
   }
 
   const body = await request.json();
-  const { action } = body;
+  const { action, timezone } = body;
 
+  // Handle pause/unpause actions
   if (action === 'pause') {
     await pauseClient(id);
     return NextResponse.json({ success: true, status: 'PAUSED' });
@@ -114,7 +115,33 @@ export async function PATCH(
     return NextResponse.json({ success: true, status: 'ACTIVE' });
   }
 
-  return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+  // Handle settings updates (timezone, etc.)
+  if (timezone !== undefined) {
+    // Validate timezone is a valid IANA timezone
+    const validTimezones = [
+      'America/New_York',
+      'America/Chicago',
+      'America/Denver',
+      'America/Los_Angeles',
+      'America/Anchorage',
+      'Pacific/Honolulu',
+      'America/Phoenix',
+      'UTC',
+    ];
+    
+    if (!validTimezones.includes(timezone)) {
+      return NextResponse.json({ error: 'Invalid timezone' }, { status: 400 });
+    }
+
+    await prisma.workspace.update({
+      where: { id },
+      data: { timezone },
+    });
+
+    return NextResponse.json({ success: true, timezone });
+  }
+
+  return NextResponse.json({ error: 'Invalid action or missing fields' }, { status: 400 });
 }
 
 // DELETE /api/v1/workspaces/[id] - Delete workspace (cascade deletes integrations, leads, events)

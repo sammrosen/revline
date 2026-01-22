@@ -9,7 +9,6 @@
  * Shows booking details and next steps.
  */
 
-import Link from 'next/link';
 import { useSearchParams, useParams } from 'next/navigation';
 import { Suspense } from 'react';
 
@@ -208,8 +207,8 @@ function SuccessContent() {
 
           {/* Actions */}
           <div className="p-8 border-t flex flex-col sm:flex-row gap-4" style={{ borderColor: BRAND.border }}>
-            <Link
-              href={`/public/${slug}/book`}
+            <button
+              onClick={() => window.location.href = `/public/${slug}/book`}
               className="flex-1 py-3 text-center rounded font-medium transition-colors"
               style={{ 
                 backgroundColor: BRAND.primary, 
@@ -217,7 +216,7 @@ function SuccessContent() {
               }}
             >
               Book Another Session
-            </Link>
+            </button>
             <button
               onClick={handlePrint}
               className="flex-1 py-3 text-center border rounded font-medium hover:bg-white transition-colors"

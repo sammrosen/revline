@@ -108,7 +108,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Look up workspace
     const workspace = await prisma.workspace.findUnique({
       where: { slug: workspaceSlug },
-      select: { id: true, name: true, status: true },
+      select: { id: true, name: true, status: true, timezone: true, slug: true },
     });
     
     if (!workspace || workspace.status !== 'ACTIVE') {
@@ -257,7 +257,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       success: true,
     });
     
-    // Format session time for email
+    // Format session time for email using workspace timezone
     const sessionDate = new Date(slotTime);
     const formattedTime = sessionDate.toLocaleString('en-US', {
       weekday: 'long',
@@ -266,6 +266,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       year: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
+      timeZone: workspace.timezone,
       timeZoneName: 'short',
     });
     
