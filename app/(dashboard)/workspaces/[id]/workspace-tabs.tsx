@@ -8,10 +8,11 @@ import { LeadsView } from './leads-view';
 import MailerLiteInsights from './mailerlite-insights';
 import { WorkflowList } from './workflows/workflow-list';
 import { TestingTab } from './testing-tab';
-import { Workflow as WorkflowIcon, FlaskConical } from 'lucide-react';
+import { WorkspaceSettings } from './workspace-settings';
+import { Workflow as WorkflowIcon, FlaskConical, Settings } from 'lucide-react';
 import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
 
-type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'insights' | 'testing';
+type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'insights' | 'testing' | 'settings';
 
 interface SecretSummary {
   id: string;
@@ -76,6 +77,7 @@ interface WorkspaceTabsProps {
   configuredIntegrations: string[];
   mailerliteGroups?: Record<string, { id: string; name: string }>;
   stripeProducts?: Record<string, string>;
+  timezone?: string; // Workspace timezone for settings
 }
 
 // Parse secrets from JSON, returning only id and name (never values)
@@ -117,9 +119,23 @@ interface IntegrationDependency {
   usedBy: Array<{ workflowId: string; workflowName: string }>;
 }
 
-export function WorkspaceTabs({ workspaceId, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {} }: WorkspaceTabsProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('workflows');
+// Get initial tab from URL hash (runs only on client)
+function getInitialTab(): TabType {
+  if (typeof window === 'undefined') return 'workflows';
+  const hash = window.location.hash.slice(1) as TabType;
+  const validTabs: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'insights', 'testing', 'settings'];
+  return hash && validTabs.includes(hash) ? hash : 'workflows';
+}
+
+export function WorkspaceTabs({ workspaceId, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York' }: WorkspaceTabsProps) {
+  const [activeTab, setActiveTab] = useState<TabType>(getInitialTab);
   const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
+
+  // Update URL hash when tab changes (without triggering navigation)
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    window.history.replaceState(null, '', `#${tab}`);
+  };
 
   // Fetch integration dependencies when integrations tab is active
   const fetchDependencies = useCallback(async () => {
@@ -166,6 +182,7 @@ export function WorkspaceTabs({ workspaceId, integrations, events, eventCount, l
     { id: 'insights', label: 'Insights' },
     { id: 'events', label: 'Events', count: events.length },
     { id: 'testing', label: 'Testing' },
+    { id: 'settings', label: 'Settings' },
   ];
 
   return (
@@ -174,7 +191,7 @@ export function WorkspaceTabs({ workspaceId, integrations, events, eventCount, l
       <div className="sm:hidden mb-4">
         <select
           value={activeTab}
-          onChange={(e) => setActiveTab(e.target.value as TabType)}
+          onChange={(e) => handleTabChange(e.target.value as TabType)}
           className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-white text-sm font-medium focus:outline-none focus:border-zinc-700"
         >
           {tabs.map((tab) => (
@@ -191,7 +208,7 @@ export function WorkspaceTabs({ workspaceId, integrations, events, eventCount, l
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`px-4 py-2 text-sm font-medium transition-colors relative flex items-center gap-1.5 whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'text-white'
@@ -205,6 +222,9 @@ export function WorkspaceTabs({ workspaceId, integrations, events, eventCount, l
               )}
               {tab.id === 'testing' && (
                 <FlaskConical className="w-4 h-4" />
+              )}
+              {tab.id === 'settings' && (
+                <Settings className="w-4 h-4" />
               )}
               {tab.label}
               {tab.count !== undefined && (
@@ -377,6 +397,10 @@ export function WorkspaceTabs({ workspaceId, integrations, events, eventCount, l
 
         {activeTab === 'testing' && (
           <TestingTab workspaceId={workspaceId} />
+        )}
+
+        {activeTab === 'settings' && (
+          <WorkspaceSettings workspaceId={workspaceId} currentTimezone={timezone} />
         )}
       </div>
     </div>

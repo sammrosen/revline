@@ -3,6 +3,7 @@ import { prisma } from '@/app/_lib/db';
 import Link from 'next/link';
 import { WorkspaceActionsDropdown } from './workspace-actions-dropdown';
 import { WorkspaceTabs } from './workspace-tabs';
+import { WorkspaceSettingsButton } from './workspace-settings-button';
 import { IntegrationType } from '@prisma/client';
 import { MailerLiteMeta, isMailerLiteMeta, StripeMeta } from '@/app/_lib/types';
 
@@ -107,11 +108,17 @@ export default async function WorkspaceDetailPage({
                 Onboarding Guide
               </Link>
             </div>
-            <WorkspaceActionsDropdown 
-              workspaceId={workspace.id} 
-              workspaceName={workspace.name}
-              currentStatus={workspace.status}
-            />
+            <div className="flex items-center gap-2">
+              <WorkspaceSettingsButton 
+                workspaceId={workspace.id}
+                currentTimezone={workspace.timezone}
+              />
+              <WorkspaceActionsDropdown 
+                workspaceId={workspace.id} 
+                workspaceName={workspace.name}
+                currentStatus={workspace.status}
+              />
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight text-white">{workspace.name}</h1>
@@ -150,6 +157,7 @@ export default async function WorkspaceDetailPage({
           configuredIntegrations={workspace.integrations.map((i) => i.integration)}
           mailerliteGroups={mailerliteGroups}
           stripeProducts={stripeProducts}
+          timezone={workspace.timezone}
         />
       </div>
     </div>
