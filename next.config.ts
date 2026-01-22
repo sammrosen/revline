@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   output: 'standalone',
@@ -8,4 +9,17 @@ const nextConfig: NextConfig = {
   /* config options here */
 };
 
-export default nextConfig;
+// Wrap with Sentry for error tracking and source maps
+export default withSentryConfig(nextConfig, {
+  // Suppress Sentry CLI output during build
+  silent: true,
+  
+  // Source map configuration
+  sourcemaps: {
+    // Don't expose source maps publicly (security)
+    deleteSourcemapsAfterUpload: true,
+  },
+  
+  // Disable Sentry telemetry
+  telemetry: false,
+});
