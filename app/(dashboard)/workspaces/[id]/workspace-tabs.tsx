@@ -119,18 +119,17 @@ interface IntegrationDependency {
   usedBy: Array<{ workflowId: string; workflowName: string }>;
 }
 
-export function WorkspaceTabs({ workspaceId, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York' }: WorkspaceTabsProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('workflows');
-  const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
+// Get initial tab from URL hash (runs only on client)
+function getInitialTab(): TabType {
+  if (typeof window === 'undefined') return 'workflows';
+  const hash = window.location.hash.slice(1) as TabType;
+  const validTabs: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'insights', 'testing', 'settings'];
+  return hash && validTabs.includes(hash) ? hash : 'workflows';
+}
 
-  // Read initial tab from URL hash on mount
-  useEffect(() => {
-    const hash = window.location.hash.slice(1) as TabType;
-    const validTabs: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'insights', 'testing', 'settings'];
-    if (hash && validTabs.includes(hash)) {
-      setActiveTab(hash);
-    }
-  }, []);
+export function WorkspaceTabs({ workspaceId, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York' }: WorkspaceTabsProps) {
+  const [activeTab, setActiveTab] = useState<TabType>(getInitialTab);
+  const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
 
   // Update URL hash when tab changes (without triggering navigation)
   const handleTabChange = (tab: TabType) => {
