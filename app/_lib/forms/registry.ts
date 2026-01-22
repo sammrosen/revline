@@ -45,7 +45,7 @@ export const FORM_REGISTRY: FormRegistryEntry[] = [
     id: 'sportswest-booking',
     name: 'Sports West Booking',
     description: 'Personal training session booking for Sports West Athletic Club',
-    path: '/workspaces/sportswest/book',
+    path: '/public/sportswest/book',
     type: 'booking',
     triggers: [
       {
