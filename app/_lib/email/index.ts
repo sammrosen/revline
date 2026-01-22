@@ -23,8 +23,18 @@ import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { bookingConfirmationTemplate } from './templates/booking-confirm';
 import { ResendAdapter } from '@/app/_lib/integrations';
 
-// Initialize fallback Resend client (uses env var)
-const fallbackResend = new Resend(process.env.RESEND_API_KEY);
+// Lazy-initialize fallback Resend client to avoid build-time errors
+// (RESEND_API_KEY may not be available during Next.js static build)
+let _fallbackResend: Resend | null = null;
+function getFallbackResend(): Resend | null {
+  if (!process.env.RESEND_API_KEY) {
+    return null;
+  }
+  if (!_fallbackResend) {
+    _fallbackResend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return _fallbackResend;
+}
 
 /** Default sender for RevLine emails */
 const DEFAULT_SENDER = 'RevLine <onboarding@resend.dev>';
@@ -161,7 +171,12 @@ export class EmailService {
     }
 
     try {
-      const { data, error } = await fallbackResend.emails.send({
+      const resendClient = getFallbackResend();
+      if (!resendClient) {
+        return { success: false, error: 'Resend client not available' };
+      }
+      
+      const { data, error } = await resendClient.emails.send({
         from: FALLBACK_SENDER,
         to,
         subject,
