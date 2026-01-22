@@ -27,6 +27,7 @@ describe('ABC Ignite Adapter', () => {
   
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.resetModules();
     mockFetch.mockReset();
   });
 
@@ -785,6 +786,110 @@ describe('ABC Ignite Adapter', () => {
     });
   });
 
+  describe('createAppointment', () => {
+    it('should extract eventId from result.links href', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-create-appt' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      // Mock ABC response with eventId in result.links[0].href
+      const expectedEventId = 'e8a60ab5cdfc46b6b123f7a07974cc18';
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: {
+            message: 'success',
+            count: '1',
+            messageCode: 'API-CAL-EVT-0000',
+          },
+          result: {
+            links: [
+              {
+                rel: 'events',
+                href: `/rest/${TEST_CLUB_NUMBER}/calendars/events/${expectedEventId}`,
+              },
+            ],
+          },
+        }),
+      });
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      const result = await adapter!.createAppointment({
+        employeeId: 'emp-123',
+        eventTypeId: 'evt-456',
+        levelId: 'level-789',
+        startTime: '2026-01-24 10:00:00',
+        memberId: 'member-abc',
+      });
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.eventId).toBe(expectedEventId);
+      expect(result.data?.message).toContain('Appointment created successfully');
+    });
+
+    it('should handle missing links in response gracefully', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-create-appt-no-links' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      // Mock response without links (edge case)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: { message: 'success' },
+          result: {},
+        }),
+      });
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      const result = await adapter!.createAppointment({
+        employeeId: 'emp-123',
+        eventTypeId: 'evt-456',
+        levelId: 'level-789',
+        startTime: '2026-01-24 10:00:00',
+        memberId: 'member-abc',
+      });
+      
+      // Should succeed but eventId will be undefined
+      expect(result.success).toBe(true);
+      expect(result.data?.eventId).toBeUndefined();
+    });
+
+    it('should handle API errors', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-create-appt-error' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      // Mock error response
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ message: 'Member has no available sessions' }),
+      });
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      const result = await adapter!.createAppointment({
+        employeeId: 'emp-123',
+        eventTypeId: 'evt-456',
+        levelId: 'level-789',
+        startTime: '2026-01-24 10:00:00',
+        memberId: 'member-abc',
+      });
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('no available sessions');
+    });
+  });
+
   describe('connection test', () => {
     it('should test connection successfully', async () => {
       const client = await createTestWorkspace({ slug: 'abc-test-conn' });
@@ -832,6 +937,329 @@ describe('ABC Ignite Adapter', () => {
       
       expect(result.success).toBe(false);
       expect(result.error).toContain('Connection test failed');
+    });
+  });
+
+  describe('getEmployeeConfig', () => {
+    it('should return employee config by key', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-emp-config' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+        employees: {
+          sam_rosen: {
+            id: '12d0d1472b314a95b4e53b08b20d8769',
+            name: 'Sam Rosen',
+            title: 'Personal Trainer',
+          },
+          jane_doe: {
+            id: 'abc123def456',
+            name: 'Jane Doe',
+          },
+        },
+      });
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      const config = adapter!.getEmployeeConfig('sam_rosen');
+      
+      expect(config).toBeDefined();
+      expect(config?.id).toBe('12d0d1472b314a95b4e53b08b20d8769');
+      expect(config?.name).toBe('Sam Rosen');
+      expect(config?.title).toBe('Personal Trainer');
+    });
+
+    it('should return undefined for unknown employee key', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-emp-config-missing' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+        employees: {
+          sam_rosen: {
+            id: '12d0d1472b314a95b4e53b08b20d8769',
+            name: 'Sam Rosen',
+          },
+        },
+      });
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      const config = adapter!.getEmployeeConfig('unknown_employee');
+      
+      expect(config).toBeUndefined();
+    });
+
+    it('should return undefined when no employees configured', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-emp-config-none' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+        // No employees configured
+      });
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      const config = adapter!.getEmployeeConfig('sam_rosen');
+      
+      expect(config).toBeUndefined();
+    });
+  });
+
+  describe('createAppointment soft failures', () => {
+    it('should detect ABC soft failure (200 with count=0)', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-soft-fail' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      // Mock ABC "soft failure" - HTTP 200 but with error in status
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: {
+            message: "The employee for provided club doesn't exist or not active.",
+            count: '0',
+            clubNumber: TEST_CLUB_NUMBER,
+          },
+        }),
+      });
+      
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      
+      const result = await adapter!.createAppointment({
+        employeeId: 'invalid_employee',
+        eventTypeId: 'evt-456',
+        levelId: 'level-789',
+        startTime: '2026-01-24 10:00:00',
+        memberId: 'member-abc',
+      });
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("employee");
+      expect(result.error).toContain("not active");
+    });
+  });
+});
+
+describe('ABC Ignite Booking Provider', () => {
+  const TEST_APP_ID = 'test-app-id-12345';
+  const TEST_APP_KEY = 'test-app-key-67890';
+  const TEST_CLUB_NUMBER = '7715';
+  
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    mockFetch.mockReset();
+  });
+
+  describe('buildBookingPayload', () => {
+    it('should build appointment payload from availability slot', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-build-payload-appt' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      const { AbcIgniteBookingProvider } = await import('@/app/_lib/booking/providers/abc-ignite');
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      const provider = new AbcIgniteBookingProvider(adapter!);
+      
+      const slot = {
+        id: 'slot-123',
+        startTime: '2026-01-24T18:00:00.000Z',
+        endTime: '2026-01-24T19:00:00.000Z',
+        duration: 60,
+        title: 'PT Session',
+        providerData: {
+          employeeId: '12d0d1472b314a95b4e53b08b20d8769',
+          eventTypeId: 'e97a362c66fe4b4683a36852eba33e5b',
+          levelId: 'xzxxxxxxxxxxxxxxxxxxxxxxxxxxx001',
+          isAvailabilitySlot: true,
+        },
+      };
+      
+      const customer = {
+        id: 'member-abc123',
+        name: 'John Doe',
+        email: 'john@example.com',
+      };
+      
+      const result = await provider.buildBookingPayload(slot, customer);
+      
+      expect(result.success).toBe(true);
+      expect(result.payload).toBeDefined();
+      expect(result.payload?.type).toBe('appointment');
+      expect(result.payload?.employeeId).toBe('12d0d1472b314a95b4e53b08b20d8769');
+      expect(result.payload?.eventTypeId).toBe('e97a362c66fe4b4683a36852eba33e5b');
+      expect(result.payload?.levelId).toBe('xzxxxxxxxxxxxxxxxxxxxxxxxxxxx001');
+      expect(result.payload?.memberId).toBe('member-abc123');
+      expect(result.payload?.startTime).toBe('2026-01-24 18:00:00');
+    });
+
+    it('should build enrollment payload from pre-scheduled event', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-build-payload-enroll' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      const { AbcIgniteBookingProvider } = await import('@/app/_lib/booking/providers/abc-ignite');
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      const provider = new AbcIgniteBookingProvider(adapter!);
+      
+      const slot = {
+        id: 'event-xyz789',
+        startTime: '2026-01-24T18:00:00.000Z',
+        endTime: '2026-01-24T19:00:00.000Z',
+        duration: 60,
+        title: 'Group Class',
+        providerData: {
+          isAvailabilitySlot: false,
+        },
+      };
+      
+      const customer = {
+        id: 'member-def456',
+        name: 'Jane Doe',
+      };
+      
+      const result = await provider.buildBookingPayload(slot, customer);
+      
+      expect(result.success).toBe(true);
+      expect(result.payload).toBeDefined();
+      expect(result.payload?.type).toBe('enrollment');
+      expect(result.payload?.eventId).toBe('event-xyz789');
+      expect(result.payload?.memberId).toBe('member-def456');
+    });
+
+    it('should fail when missing required slot data', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-build-payload-fail' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      const { AbcIgniteBookingProvider } = await import('@/app/_lib/booking/providers/abc-ignite');
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      const provider = new AbcIgniteBookingProvider(adapter!);
+      
+      const slot = {
+        id: 'slot-123',
+        startTime: '2026-01-24T18:00:00.000Z',
+        endTime: '2026-01-24T19:00:00.000Z',
+        duration: 60,
+        title: 'PT Session',
+        providerData: {
+          isAvailabilitySlot: true,
+          // Missing employeeId, eventTypeId, levelId
+        },
+      };
+      
+      const customer = { id: 'member-abc', name: 'John' };
+      
+      const result = await provider.buildBookingPayload(slot, customer);
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Missing required slot data');
+    });
+  });
+
+  describe('executeBookingPayload', () => {
+    it('should execute appointment payload successfully', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-exec-payload-appt' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      const expectedEventId = 'new-event-abc123';
+      
+      // Mock successful ABC response
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: { message: 'success', count: '1' },
+          result: {
+            links: [{ rel: 'events', href: `/rest/${TEST_CLUB_NUMBER}/calendars/events/${expectedEventId}` }],
+          },
+        }),
+      });
+      
+      const { AbcIgniteBookingProvider } = await import('@/app/_lib/booking/providers/abc-ignite');
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      const provider = new AbcIgniteBookingProvider(adapter!);
+      
+      const payload = {
+        type: 'appointment',
+        employeeId: '12d0d1472b314a95b4e53b08b20d8769',
+        eventTypeId: 'e97a362c66fe4b4683a36852eba33e5b',
+        levelId: 'xzxxxxxxxxxxxxxxxxxxxxxxxxxxx001',
+        startTime: '2026-01-24 18:00:00',
+        memberId: 'member-abc123',
+      };
+      
+      const result = await provider.executeBookingPayload(payload);
+      
+      expect(result.success).toBe(true);
+      expect(result.bookingId).toBe(expectedEventId);
+    });
+
+    it('should execute enrollment payload successfully', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-exec-payload-enroll' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      // Mock successful enrollment
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true }),
+      });
+      
+      const { AbcIgniteBookingProvider } = await import('@/app/_lib/booking/providers/abc-ignite');
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      const provider = new AbcIgniteBookingProvider(adapter!);
+      
+      const payload = {
+        type: 'enrollment',
+        eventId: 'event-xyz789',
+        memberId: 'member-def456',
+      };
+      
+      const result = await provider.executeBookingPayload(payload);
+      
+      expect(result.success).toBe(true);
+      expect(result.bookingId).toBe('event-xyz789-member-def456');
+    });
+
+    it('should fail with unknown payload type', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-exec-payload-unknown' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      const { AbcIgniteBookingProvider } = await import('@/app/_lib/booking/providers/abc-ignite');
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      const provider = new AbcIgniteBookingProvider(adapter!);
+      
+      const payload = {
+        type: 'invalid_type',
+        someData: 'value',
+      };
+      
+      const result = await provider.executeBookingPayload(payload);
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Unknown payload type');
     });
   });
 });

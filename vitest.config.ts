@@ -6,24 +6,36 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./__tests__/setup.ts'],
-    // Run ALL tests sequentially to avoid database isolation issues
-    // This is critical when tests share a database and use afterEach cleanup
-    pool: 'forks',
+    
+    // Global setup creates isolated databases for each worker
+    // The setup function returns a teardown function that drops them after tests
+    globalSetup: ['./__tests__/globalSetup.ts'],
+    
+    // Enable parallel execution with isolated databases per worker
+    // Each worker gets its own database (test_db_0, test_db_1, etc.)
+    pool: 'threads',
     poolOptions: {
-      forks: {
-        singleFork: true,
+      threads: {
+        minThreads: 1,
+        // Default to 4 threads, can override via VITEST_MAX_THREADS env var
+        maxThreads: parseInt(process.env.VITEST_MAX_THREADS || '4', 10),
+        isolate: true,
       },
     },
-    // Disable file parallelism - run test files one at a time
-    fileParallelism: false,
-    // Consistent test ordering
+    
+    // Enable file parallelism - run test files in parallel across workers
+    fileParallelism: true,
+    
+    // Consistent test ordering within each file
     sequence: {
       shuffle: false,
     },
+    
     // Increase timeout for database operations
     testTimeout: 30000,
-    // Retry flaky tests once (helps with transient DB issues)
-    retry: 1,
+    
+    // Don't retry tests - each test should be deterministic
+    retry: 0,
   },
   resolve: {
     alias: {

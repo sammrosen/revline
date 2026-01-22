@@ -31,6 +31,7 @@ model Workspace {
   workflowExecutions WorkflowExecution[]
   webhookEvents      WebhookEvent[]
   idempotencyKeys    IdempotencyKey[]
+  pendingBookings    PendingBooking[]
 
   @@map("workspaces")
 }
@@ -67,6 +68,7 @@ enum IntegrationType {
   MANYCHAT
   ABC_IGNITE
   REVLINE
+  RESEND
 }
 
 enum HealthStatus {
@@ -134,6 +136,7 @@ enum EventSystem {
   CALENDLY
   MANYCHAT
   ABC_IGNITE
+  RESEND
   CRON
   WORKFLOW
 }
@@ -323,5 +326,68 @@ model IdempotencyKey {
 enum IdempotencyKeyStatus {
   PENDING
   COMPLETED
+  FAILED
+}
+
+// =============================================================================
+// PENDING BOOKINGS (Magic Link Flow)
+// =============================================================================
+
+// Provider-agnostic pending booking for magic link confirmation
+// Supports ABC Ignite, Calendly, and future booking providers
+model PendingBooking {
+  id            String               @id @default(uuid())
+  workspaceId   String               @map("workspace_id")
+
+  // Provider identification (enables multi-provider support)
+  provider      String               // 'abc_ignite', 'calendly', etc.
+
+  // Customer info (generic - works for any provider)
+  customerId    String               @map("customer_id")    // Member ID, Calendly invitee, etc.
+  customerEmail String               @map("customer_email")
+  customerName  String?              @map("customer_name")
+
+  // Booking details (generic)
+  staffId       String?              @map("staff_id")       // Trainer, host, etc.
+  staffName     String?              @map("staff_name")
+  serviceId     String?              @map("service_id")     // Event type, service, etc.
+  serviceName   String?              @map("service_name")
+  scheduledAt   DateTime             @map("scheduled_at")
+
+  // Provider-specific context data (JSON blob for flexibility)
+  // e.g., { barcode, homeClub } for ABC member context
+  // e.g., { inviteeUri } for Calendly
+  providerData  Json?                @map("provider_data")
+
+  // The EXACT payload to send to the provider API
+  // Built at request time when all context is available
+  // This is what gets POSTed - no transformation needed at confirm time
+  providerPayload Json?              @map("provider_payload")
+
+  // Magic link security (SHA-256 hash of token)
+  tokenHash     String               @unique @map("token_hash")
+
+  // Status tracking
+  status        PendingBookingStatus @default(PENDING)
+  expiresAt     DateTime             @map("expires_at")
+  confirmedAt   DateTime?            @map("confirmed_at")
+  externalId    String?              @map("external_id")    // Provider's booking ID after confirmation
+  failureReason String?              @map("failure_reason")
+
+  createdAt     DateTime             @default(now()) @map("created_at")
+
+  workspace     Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([workspaceId, customerId, status])
+  @@index([workspaceId, provider])
+  @@index([expiresAt])
+  @@map("pending_bookings")
+}
+
+enum PendingBookingStatus {
+  PENDING
+  CONFIRMED
+  EXPIRED
   FAILED
 }

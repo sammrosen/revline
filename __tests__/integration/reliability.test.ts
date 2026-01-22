@@ -9,18 +9,25 @@
  * - IdempotentExecutor: execution, caching, concurrent access
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   testPrisma,
   createTestWorkspace,
 } from '../setup';
-import {
-  WebhookProcessor,
-  executeIdempotent,
-  generateIdempotencyKey,
-} from '@/app/_lib/reliability';
+
+// Import dynamically to ensure mocks are applied
+let WebhookProcessor: typeof import('@/app/_lib/reliability').WebhookProcessor;
+let executeIdempotent: typeof import('@/app/_lib/reliability').executeIdempotent;
+let generateIdempotencyKey: typeof import('@/app/_lib/reliability').generateIdempotencyKey;
 
 describe('WebhookProcessor Integration', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    const reliability = await import('@/app/_lib/reliability');
+    WebhookProcessor = reliability.WebhookProcessor;
+    executeIdempotent = reliability.executeIdempotent;
+    generateIdempotencyKey = reliability.generateIdempotencyKey;
+  });
   describe('register', () => {
     it('should register a new webhook event and return isDuplicate=false', async () => {
       const client = await createTestWorkspace();
@@ -297,6 +304,14 @@ describe('WebhookProcessor Integration', () => {
 });
 
 describe('IdempotentExecutor Integration', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    const reliability = await import('@/app/_lib/reliability');
+    WebhookProcessor = reliability.WebhookProcessor;
+    executeIdempotent = reliability.executeIdempotent;
+    generateIdempotencyKey = reliability.generateIdempotencyKey;
+  });
+
   describe('executeIdempotent', () => {
     it('should execute function and return executed=true for new key', async () => {
       const client = await createTestWorkspace();
@@ -500,6 +515,14 @@ describe('IdempotentExecutor Integration', () => {
 });
 
 describe('End-to-end reliability flow', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    const reliability = await import('@/app/_lib/reliability');
+    WebhookProcessor = reliability.WebhookProcessor;
+    executeIdempotent = reliability.executeIdempotent;
+    generateIdempotencyKey = reliability.generateIdempotencyKey;
+  });
+
   it('should prevent duplicate webhook processing with idempotent actions', async () => {
     const client = await createTestWorkspace();
     let actionExecutionCount = 0;

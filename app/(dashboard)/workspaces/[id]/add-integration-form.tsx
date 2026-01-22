@@ -7,6 +7,7 @@ import { MailerLiteConfigEditor } from './mailerlite-config-editor';
 import { StripeConfigEditor } from './stripe-config-editor';
 import { AbcIgniteAddConfig } from './abc-ignite-add-config';
 import { RevlineAddConfig } from './revline-add-config';
+import { ResendAddConfig } from './resend-add-config';
 import { lockScroll, unlockScroll } from '@/app/_lib/utils/scroll-lock';
 import { 
   INTEGRATION_TYPES, 
@@ -167,6 +168,7 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
   const isStripe = integration === 'STRIPE';
   const isAbcIgnite = integration === 'ABC_IGNITE';
   const isRevline = integration === 'REVLINE';
+  const isResend = integration === 'RESEND';
 
   // Get the first secret's description as hint
   const secretHint = config?.secrets[0]?.description;
@@ -199,7 +201,7 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <label className="text-sm font-semibold text-zinc-300">Integration Type</label>
-                {!isMailerLite && !isStripe && !isAbcIgnite && !isRevline && (
+                {!isMailerLite && !isStripe && !isAbcIgnite && !isRevline && !isResend && (
                   <IntegrationHelp 
                     integration={integration} 
                     context="create"
@@ -290,7 +292,7 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
                 <label className="text-sm font-semibold text-zinc-300">
                   {config?.metaDescription ? `${config.displayName} Config` : 'Meta (JSON, optional)'}
                 </label>
-                {!isMailerLite && !isStripe && !isAbcIgnite && (
+                {!isMailerLite && !isStripe && !isAbcIgnite && !isResend && (
                   <IntegrationTemplateButton 
                     integration={integration}
                     onCopyTemplate={(template) => setMeta(template)}
@@ -316,6 +318,11 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
               />
             ) : isRevline ? (
               <RevlineAddConfig
+                value={meta}
+                onChange={setMeta}
+              />
+            ) : isResend ? (
+              <ResendAddConfig
                 value={meta}
                 onChange={setMeta}
               />

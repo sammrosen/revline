@@ -37,6 +37,9 @@ export function getRetentionConfig(): RetentionConfig {
     workflowExecutionDays: parseInt(
       process.env.RETENTION_WORKFLOW_EXECUTIONS_DAYS || String(DEFAULT_RETENTION.workflowExecutionDays)
     ),
+    pendingBookingDays: parseInt(
+      process.env.RETENTION_PENDING_BOOKING_DAYS || String(DEFAULT_RETENTION.pendingBookingDays)
+    ),
   };
 }
 
@@ -56,7 +59,7 @@ type PrismaTableOps = {
 };
 
 async function batchDelete(
-  tableName: 'event' | 'webhookEvent' | 'workflowExecution' | 'idempotencyKey',
+  tableName: 'event' | 'webhookEvent' | 'workflowExecution' | 'idempotencyKey' | 'pendingBooking',
   whereClause: object,
   batchSize: number,
   dryRun: boolean
@@ -180,6 +183,54 @@ export async function cleanupIdempotencyKeys(
   );
 }
 
+/**
+ * Mark expired PendingBooking records as EXPIRED
+ * Only affects PENDING bookings that have passed their expiresAt time
+ * Returns count of updated records
+ */
+export async function expirePendingBookings(
+  dryRun: boolean
+): Promise<number> {
+  const where = {
+    status: 'PENDING' as const,
+    expiresAt: { lt: new Date() },
+  };
+
+  if (dryRun) {
+    return prisma.pendingBooking.count({ where });
+  }
+
+  const result = await prisma.pendingBooking.updateMany({
+    where,
+    data: { status: 'EXPIRED' },
+  });
+
+  return result.count;
+}
+
+/**
+ * Delete old PendingBooking records
+ * Only deletes non-pending bookings older than retention period
+ */
+export async function cleanupPendingBookings(
+  retentionDays: number,
+  batchSize: number,
+  dryRun: boolean
+): Promise<number> {
+  const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+  
+  return batchDelete(
+    'pendingBooking' as 'event', // Type cast for the generic batchDelete function
+    { 
+      createdAt: { lt: cutoffDate },
+      // Only delete completed bookings (not pending ones that might still be processing)
+      status: { not: 'PENDING' as const },
+    },
+    batchSize,
+    dryRun
+  );
+}
+
 // =============================================================================
 // MAIN CLEANUP FUNCTION
 // =============================================================================
@@ -209,6 +260,10 @@ export async function runCleanup(options: CleanupOptions = {}): Promise<CleanupR
   const webhookEventsDeleted = await cleanupWebhookEvents(config.webhookEventDays, batchSize, dryRun);
   const workflowExecutionsDeleted = await cleanupWorkflowExecutions(config.workflowExecutionDays, batchSize, dryRun);
   const idempotencyKeysDeleted = await cleanupIdempotencyKeys(batchSize, dryRun);
+  
+  // Pending bookings: first mark expired, then delete old ones
+  const pendingBookingsExpired = await expirePendingBookings(dryRun);
+  const pendingBookingsDeleted = await cleanupPendingBookings(config.pendingBookingDays, batchSize, dryRun);
 
   const durationMs = Date.now() - startTime;
 
@@ -217,6 +272,8 @@ export async function runCleanup(options: CleanupOptions = {}): Promise<CleanupR
     webhookEventsDeleted,
     workflowExecutionsDeleted,
     idempotencyKeysDeleted,
+    pendingBookingsExpired,
+    pendingBookingsDeleted,
     durationMs,
     dryRun,
   };
@@ -232,6 +289,8 @@ export async function runCleanup(options: CleanupOptions = {}): Promise<CleanupR
       webhookEventsDeleted,
       workflowExecutionsDeleted,
       idempotencyKeysDeleted,
+      pendingBookingsExpired,
+      pendingBookingsDeleted,
     },
   });
 

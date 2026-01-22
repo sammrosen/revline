@@ -192,6 +192,26 @@ export interface RevlineMeta {
 }
 
 /**
+ * Resend integration metadata
+ * Configuration for transactional email sending
+ * 
+ * @example
+ * {
+ *   "fromEmail": "bookings@yourdomain.com",
+ *   "fromName": "Sports West",
+ *   "replyTo": "support@yourdomain.com"
+ * }
+ */
+export interface ResendMeta {
+  /** Verified sender email address (required) */
+  fromEmail: string;
+  /** Display name for sender (e.g., "Sports West") */
+  fromName?: string;
+  /** Default reply-to address */
+  replyTo?: string;
+}
+
+/**
  * Union of all integration meta types
  */
 export type IntegrationMeta = 
@@ -201,6 +221,7 @@ export type IntegrationMeta =
   | ManyChatMeta 
   | AbcIgniteMeta
   | RevlineMeta
+  | ResendMeta
   | Record<string, unknown>;
 
 /**
@@ -422,6 +443,9 @@ export const RATE_LIMITS = {
   SUBSCRIBE: { requests: 10, windowMs: 60_000 },  // 10 per minute
   WEBHOOK: { requests: 100, windowMs: 60_000 },   // 100 per minute
   ADMIN: { requests: 100, windowMs: 60_000 },     // 100 per minute
+  // Booking rate limits - stricter to prevent abuse
+  BOOKING_BY_IDENTIFIER: { requests: 3, windowMs: 15 * 60_000 },  // 3 per 15 minutes per identifier
+  BOOKING_BY_IP: { requests: 5, windowMs: 10 * 60_000 },          // 5 per 10 minutes per IP
 } as const;
 
 export const TIMEOUTS = {

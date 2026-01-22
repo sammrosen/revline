@@ -1,31 +1,27 @@
 /**
- * Sports West Athletic Club - Booking Page
+ * Public Booking Page
  * 
- * Custom styled booking page matching Sports West branding.
- * Light theme with burgundy accents.
+ * /public/[slug]/book
  * 
- * Uses Magic Link flow:
- * 1. User selects time slot
- * 2. Enters barcode + email
- * 3. Receives email with confirmation link
- * 4. Clicks link to finalize booking
- * 
- * This page uses formId-based workspace lookup:
- * 1. Developer sets FORM_ID below
- * 2. Admin enables this formId in workspace's RevLine config
- * 3. Page automatically connects to the right workspace
+ * Public-facing magic link booking page for any workspace.
+ * Uses workspace slug for lookup.
  */
 
 import { notFound } from 'next/navigation';
-import { 
-  getWorkspaceByFormId, 
-  getBookingCapabilities, 
-  hasBookingProvider 
-} from '@/app/_lib/booking';
-import { MagicLinkBookingClient } from './magic-link-client';
+import { prisma } from '@/app/_lib/db';
+import { WorkspaceStatus } from '@prisma/client';
+import { getBookingCapabilities, hasBookingProvider } from '@/app/_lib/booking';
+import { MagicLinkBookingClient } from './client';
 
-// Form ID - enable this in the workspace's RevLine config to connect
-const FORM_ID = 'sportswest-booking';
+interface BookingPageProps {
+  params: Promise<{
+    slug: string;
+  }>;
+  searchParams: Promise<{
+    barcode?: string;
+    error?: string;
+  }>;
+}
 
 // Error messages for confirmation redirects
 const ERROR_MESSAGES: Record<string, string> = {
@@ -34,36 +30,36 @@ const ERROR_MESSAGES: Record<string, string> = {
   failed: 'Unable to complete your booking. Please try again or contact the front desk.',
 };
 
-export default async function SportsWestBookingPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ barcode?: string; error?: string }>;
-}) {
-  // Get URL params
-  const params = await searchParams;
-  const initialBarcode = params.barcode || null;
-  const errorCode = params.error;
+export default async function PublicBookingPage({ params, searchParams }: BookingPageProps) {
+  const { slug } = await params;
+  const { barcode, error: errorCode } = await searchParams;
   
-  // Find workspace by formId (configured in RevLine integration)
-  let workspace;
-  try {
-    workspace = await getWorkspaceByFormId(FORM_ID);
-  } catch (error) {
-    // Multiple workspaces have this formId - configuration error
-    console.error('FormId configuration error:', error);
+  // Find workspace by slug
+  const workspace = await prisma.workspace.findUnique({
+    where: { slug: slug.toLowerCase() },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      status: true,
+    },
+  });
+
+  // 404 if workspace not found
+  if (!workspace) {
+    notFound();
+  }
+
+  // Show paused message if workspace is paused
+  if (workspace.status !== WorkspaceStatus.ACTIVE) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-lg p-8 text-center max-w-md">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">Configuration Error</h1>
-          <p className="text-gray-600">This form has a configuration issue. Please contact support.</p>
+          <h1 className="text-2xl font-semibold text-gray-900 mb-2">Booking Unavailable</h1>
+          <p className="text-gray-600">Online booking is temporarily unavailable. Please contact us directly.</p>
         </div>
       </div>
     );
-  }
-
-  // No workspace has this formId enabled
-  if (!workspace) {
-    notFound();
   }
 
   // Check if workspace has a booking provider
@@ -115,13 +111,31 @@ export default async function SportsWestBookingPage({
         workspaceSlug={workspace.slug}
         workspaceName={workspace.name}
         capabilities={capabilities}
-        initialBarcode={initialBarcode}
+        initialBarcode={barcode || null}
       />
     </>
   );
 }
 
-export const metadata = {
-  title: 'Book a Session - Sports West Athletic Club',
-  description: 'Schedule your personal training session at Sports West Athletic Club.',
-};
+/**
+ * Generate metadata for SEO
+ */
+export async function generateMetadata({ params }: BookingPageProps) {
+  const { slug } = await params;
+  
+  const workspace = await prisma.workspace.findUnique({
+    where: { slug: slug.toLowerCase() },
+    select: { name: true },
+  });
+
+  if (!workspace) {
+    return {
+      title: 'Booking Not Found',
+    };
+  }
+
+  return {
+    title: `Book a Session - ${workspace.name}`,
+    description: `Schedule your session at ${workspace.name}. Easy online booking.`,
+  };
+}

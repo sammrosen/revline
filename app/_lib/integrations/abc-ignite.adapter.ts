@@ -1175,12 +1175,28 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
    * Used to book an appointment when selecting from employee availability.
    * Unlike enrollMember which adds to an existing event, this creates a new appointment.
    * 
+   * ABC Response format:
+   * {
+   *   "status": { "message": "success", ... },
+   *   "result": {
+   *     "links": [{ "rel": "events", "href": "/rest/7715/calendars/events/{eventId}" }]
+   *   }
+   * }
+   * 
    * @param params - Appointment creation parameters
    */
   async createAppointment(
     params: CreateAppointmentParams
   ): Promise<IntegrationResult<CreateAppointmentResult>> {
-    const result = await this.apiRequest<{ status?: AbcApiStatus; eventId?: string }>(
+    // ABC returns eventId in result.links[0].href, not as a top-level field
+    interface CreateAppointmentResponse {
+      status?: AbcApiStatus;
+      result?: {
+        links?: Array<{ rel: string; href: string }>;
+      };
+    }
+
+    const result = await this.apiRequest<CreateAppointmentResponse>(
       'POST',
       '/calendars/events',
       {
@@ -1200,9 +1216,29 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
       };
     }
 
+    // Check for "soft failure" - ABC returns 200 but with error in status.message
+    // Success responses have count >= 1 and result.links
+    const status = result.data?.status;
+    if (status && status.count === '0') {
+      const errorMessage = status.message || 'Failed to create appointment';
+      console.error('ABC createAppointment soft failure:', {
+        workspaceId: this.workspaceId,
+        error: errorMessage,
+      });
+      return {
+        success: false,
+        error: errorMessage,
+        data: { success: false, message: errorMessage },
+      };
+    }
+
+    // Extract eventId from href like "/rest/7715/calendars/events/e8a60ab5..."
+    const eventLink = result.data?.result?.links?.find(l => l.rel === 'events');
+    const eventId = eventLink?.href?.split('/').pop();
+
     return this.success({
       success: true,
-      eventId: result.data?.eventId,
+      eventId,
       message: 'Appointment created successfully',
     });
   }

@@ -399,6 +399,36 @@ export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
   },
 };
 
+/**
+ * Resend Adapter
+ * Handles transactional email sending via Resend
+ */
+export const RESEND_ADAPTER: AdapterDefinition = {
+  id: 'resend',
+  name: 'Resend',
+  requiresIntegration: true,
+  requirements: {
+    secrets: ['API Key'],
+    metaKeys: ['fromEmail'],
+  },
+  triggers: {}, // No inbound webhooks from Resend
+  actions: {
+    send_email: {
+      name: 'send_email',
+      label: 'Send Email',
+      description: 'Send a transactional email via Resend',
+      payloadSchema: CommonPayloadSchema.extend({
+        email: z.string().email().describe('Recipient email from trigger payload'),
+      }),
+      paramsSchema: z.object({
+        subject: z.string().describe('Email subject line'),
+        body: z.string().describe('Email body content (HTML supported)'),
+        replyTo: z.string().email().optional().describe('Override reply-to address'),
+      }),
+    },
+  },
+};
+
 // =============================================================================
 // REGISTRY
 // =============================================================================
@@ -413,6 +443,7 @@ export const ADAPTER_REGISTRY: Record<string, AdapterDefinition> = {
   revline: REVLINE_ADAPTER,
   manychat: MANYCHAT_ADAPTER,
   abc_ignite: ABC_IGNITE_ADAPTER,
+  resend: RESEND_ADAPTER,
 };
 
 // =============================================================================

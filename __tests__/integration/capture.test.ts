@@ -11,7 +11,7 @@
  * - Invalid email handled gracefully
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { testPrisma, createTestWorkspace, createTestIntegration, createTestWorkflow, getEventsForWorkspace } from '../setup';
 
 // Mock the MailerLite API calls (we don't want to hit real API in tests)
@@ -51,7 +51,10 @@ vi.mock('@/app/_lib/integrations/mailerlite.adapter', async () => {
 });
 
 describe('Capture Service Integration', () => {
-  
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
   describe('CaptureService.captureEmail', () => {
     it('should create lead record on successful capture', async () => {
       const { CaptureService } = await import('@/app/_lib/services/capture.service');

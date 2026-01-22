@@ -37,6 +37,9 @@ export type {
 export { RevlineAdapter } from './revline.adapter';
 export type { FormConfig } from './revline.adapter';
 
+export { ResendAdapter } from './resend.adapter';
+export type { SendEmailResult, SendEmailParams } from './resend.adapter';
+
 // Integration config - single source of truth
 export {
   INTEGRATION_TYPES,

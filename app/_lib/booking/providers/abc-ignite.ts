@@ -18,6 +18,7 @@ import {
   AvailabilityQuery,
   BookingResult,
   EligibilityResult,
+  BookingPayloadResult,
 } from '../types';
 import {
   AbcIgniteAdapter,
@@ -107,6 +108,14 @@ export class AbcIgniteBookingProvider implements BookingProvider {
     
     const member = result.data;
     return this.mapMemberToCustomer(member);
+  }
+  
+  /**
+   * Get customer's email address for magic link verification
+   * Email is stored in the BookingCustomer after lookup
+   */
+  getCustomerEmail(customer: BookingCustomer): string | null {
+    return customer.email || null;
   }
   
   /**
@@ -347,18 +356,147 @@ export class AbcIgniteBookingProvider implements BookingProvider {
     };
   }
   
+  // ===========================================================================
+  // PAYLOAD-BASED BOOKING (for magic link flow)
+  // ===========================================================================
+  
+  /**
+   * Build the exact payload needed to create a booking
+   * 
+   * Called at request time when all slot context is available.
+   * The payload is stored in JSONB and sent as-is during confirmation.
+   * This eliminates the need for ID resolution at confirm time.
+   */
+  async buildBookingPayload(
+    slot: TimeSlot,
+    customer: BookingCustomer
+  ): Promise<BookingPayloadResult> {
+    const memberId = customer.id;
+    
+    // Handle availability slot (POST /calendars/events)
+    if (slot.providerData?.isAvailabilitySlot) {
+      const employeeId = slot.providerData.employeeId as string;
+      const eventTypeId = slot.providerData.eventTypeId as string;
+      const levelId = slot.providerData.levelId as string;
+      
+      // Validate required fields
+      if (!employeeId || !eventTypeId || !levelId) {
+        return {
+          success: false,
+          error: 'Missing required slot data (employeeId, eventTypeId, or levelId)',
+        };
+      }
+      
+      return {
+        success: true,
+        payload: {
+          type: 'appointment', // Identifies which API call to make
+          employeeId,
+          eventTypeId,
+          levelId,
+          startTime: this.formatDateTimeForApi(slot.startTime),
+          memberId,
+        },
+      };
+    }
+    
+    // Handle pre-scheduled event (POST /calendars/events/{eventId}/members/{memberId})
+    const eventId = slot.id;
+    if (!eventId) {
+      return {
+        success: false,
+        error: 'Missing event ID for enrollment',
+      };
+    }
+    
+    return {
+      success: true,
+      payload: {
+        type: 'enrollment', // Identifies which API call to make
+        eventId,
+        memberId,
+      },
+    };
+  }
+  
+  /**
+   * Execute a pre-built booking payload
+   * 
+   * Called at confirm time - just sends the payload as-is.
+   * No ID resolution or transformation needed.
+   */
+  async executeBookingPayload(
+    payload: Record<string, unknown>
+  ): Promise<BookingResult> {
+    const payloadType = payload.type as string;
+    
+    if (payloadType === 'appointment') {
+      // Create appointment from availability
+      const result = await this.adapter.createAppointment({
+        employeeId: payload.employeeId as string,
+        eventTypeId: payload.eventTypeId as string,
+        levelId: payload.levelId as string,
+        startTime: payload.startTime as string,
+        memberId: payload.memberId as string,
+      });
+      
+      if (!result.success) {
+        return {
+          success: false,
+          message: result.error || 'Failed to create appointment',
+          error: result.error,
+        };
+      }
+      
+      return {
+        success: true,
+        bookingId: result.data?.eventId,
+        message: 'Appointment booked successfully',
+      };
+    }
+    
+    if (payloadType === 'enrollment') {
+      // Enroll in pre-scheduled event
+      const eventId = payload.eventId as string;
+      const memberId = payload.memberId as string;
+      
+      const result = await this.adapter.enrollMember(eventId, memberId);
+      
+      if (!result.success) {
+        return {
+          success: false,
+          message: result.error || 'Failed to enroll in event',
+          error: result.error,
+        };
+      }
+      
+      return {
+        success: true,
+        bookingId: `${eventId}-${memberId}`,
+        message: 'Successfully enrolled in event',
+      };
+    }
+    
+    return {
+      success: false,
+      message: `Unknown payload type: ${payloadType}`,
+      error: `Unknown payload type: ${payloadType}`,
+    };
+  }
+  
   /**
    * Format ISO datetime to ABC API format
-   * ABC API expects: "YYYY-MM-DD HH:mm:ss"
+   * ABC API expects: "YYYY-MM-DD HH:mm:ss" in UTC
+   * Uses UTC methods to ensure consistent behavior regardless of server timezone
    */
   private formatDateTimeForApi(isoDateTime: string): string {
     const date = new Date(isoDateTime);
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const hh = String(date.getHours()).padStart(2, '0');
-    const min = String(date.getMinutes()).padStart(2, '0');
-    const ss = String(date.getSeconds()).padStart(2, '0');
+    const yyyy = date.getUTCFullYear();
+    const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(date.getUTCDate()).padStart(2, '0');
+    const hh = String(date.getUTCHours()).padStart(2, '0');
+    const min = String(date.getUTCMinutes()).padStart(2, '0');
+    const ss = String(date.getUTCSeconds()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
   }
   
@@ -492,5 +630,23 @@ export class AbcIgniteBookingProvider implements BookingProvider {
     const start = new Date(startTime);
     const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
     return end.toISOString();
+  }
+  
+  // ===========================================================================
+  // EMPLOYEE ID RESOLUTION
+  // ===========================================================================
+  
+  /**
+   * Resolve an internal employee key to the ABC employee ID
+   * 
+   * The client sends internal keys like "sam_rosen" but ABC needs the actual
+   * employee ID like "12d0d1472b314a95b4e53b08b20d8769".
+   * 
+   * @param employeeKey - Internal key (e.g., "sam_rosen")
+   * @returns ABC employee ID or null if not found
+   */
+  resolveEmployeeId(employeeKey: string): string | null {
+    const config = this.adapter.getEmployeeConfig(employeeKey);
+    return config?.id || null;
   }
 }

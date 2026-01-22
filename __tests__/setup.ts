@@ -3,26 +3,21 @@
  * 
  * Configures the test environment with:
  * - Environment variables
- * - Database connection (test DB)
+ * - Worker-specific database connection (for parallel execution)
  * - Cleanup between tests
  * - Global test utilities
  * 
+ * PARALLEL TEST EXECUTION:
+ * Each Vitest worker gets its own isolated database (test_db_0, test_db_1, etc.)
+ * Databases are created by globalSetup.ts and dropped by globalTeardown.ts
+ * 
  * DATABASE SETUP:
- * Set TEST_DATABASE_URL in your environment before running tests:
- * 
- * Windows:
- *   set TEST_DATABASE_URL=postgresql://user:pass@host:port/testdb
- *   npm run test
- * 
- * Linux/Mac:
- *   TEST_DATABASE_URL=postgresql://user:pass@host:port/testdb npm run test
- * 
- * Or add TEST_DATABASE_URL to your .env.local file.
+ * Set TEST_DATABASE_URL in your environment or .env.local file.
+ * The globalSetup will create worker-specific databases from this base URL.
  */
 
 import { beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
-import { execSync } from 'child_process';
 
 // IMPORTANT: Capture TEST_DATABASE_URL from shell FIRST before anything else
 const testDbUrlFromEnv = process.env.TEST_DATABASE_URL;
@@ -39,18 +34,28 @@ process.env.REVLINE_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789
 // Set test Stripe API key (required for Stripe adapter initialization)
 process.env.STRIPE_API_KEY = process.env.STRIPE_API_KEY || 'sk_test_fake_key_for_testing';
 
-// Use TEST_DATABASE_URL from shell if set (takes precedence over .env files)
-// This MUST happen before creating any Prisma clients
-const testDbUrl = testDbUrlFromEnv || process.env.TEST_DATABASE_URL;
-if (!testDbUrl) {
+// Get base database URL
+const baseDbUrl = testDbUrlFromEnv || process.env.TEST_DATABASE_URL;
+if (!baseDbUrl) {
   console.error('ERROR: TEST_DATABASE_URL not set.');
-  console.error('Set TEST_DATABASE_URL in your environment before running tests.');
+  console.error('Set TEST_DATABASE_URL in your environment or .env.local file.');
   process.exit(1);
 }
 
+// Get worker ID for parallel execution (each worker gets its own database)
+// VITEST_POOL_ID is set by Vitest for each worker, but can exceed maxThreads
+// when workers are recycled, so we use modulo to stay within bounds
+const rawWorkerId = parseInt(process.env.VITEST_POOL_ID || '0', 10);
+const numWorkers = parseInt(process.env.VITEST_MAX_THREADS || '4', 10);
+const workerId = rawWorkerId % numWorkers;
+
+// Build worker-specific database URL
+// Replaces the database name in the URL with test_db_{workerId}
+const testDbUrl = baseDbUrl.replace(/\/([^/?]+)(\?|$)/, `/test_db_${workerId}$2`);
+
 // Override DATABASE_URL for all Prisma operations
 process.env.DATABASE_URL = testDbUrl;
-console.log('Test database URL set:', testDbUrl.replace(/:[^:@]+@/, ':****@'));
+console.log(`Worker ${workerId} using database:`, testDbUrl.replace(/:[^:@]+@/, ':****@'));
 
 // Create test Prisma client directly here (not from separate file)
 // This ensures it uses the correct DATABASE_URL we just set
@@ -103,46 +108,16 @@ vi.mock('next/headers', () => ({
 }));
 
 beforeAll(async () => {
-  // Run migrations on test database before connecting
-  console.log('Running migrations on test database...');
-  try {
-    execSync('npx prisma migrate deploy', {
-      stdio: 'inherit',
-      env: {
-        ...process.env,
-        DATABASE_URL: testDbUrl,
-      },
-    });
-    console.log('Migrations completed');
-  } catch (error) {
-    console.error('Migration failed:', error);
-    throw error;
-  }
-
-  // Generate Prisma client to ensure it's up to date
-  // Note: This may fail if client is already generated and locked - that's OK
-  try {
-    execSync('npx prisma generate', {
-      stdio: 'pipe', // Use pipe instead of inherit to avoid noise
-      env: {
-        ...process.env,
-        DATABASE_URL: testDbUrl,
-      },
-    });
-  } catch {
-    // Ignore - Prisma client is likely already generated
-    // This is non-critical since migrations ensure schema is up to date
-  }
-
   // Connect to test database
+  // Note: Migrations are handled by globalSetup.ts before any tests run
   await testPrisma.$connect();
-  console.log('Connected to test database');
+  console.log(`Worker ${workerId} connected to test database`);
 });
 
 afterAll(async () => {
   // Disconnect from test database
   await testPrisma.$disconnect();
-  console.log('Disconnected from test database');
+  console.log(`Worker ${workerId} disconnected from test database`);
 });
 
 afterEach(async () => {
@@ -154,6 +129,7 @@ afterEach(async () => {
   await testPrisma.workflow.deleteMany();
   await testPrisma.event.deleteMany();
   await testPrisma.lead.deleteMany();
+  await testPrisma.pendingBooking.deleteMany();
   await testPrisma.workspaceIntegration.deleteMany();
   await testPrisma.session.deleteMany();
   await testPrisma.workspaceMember.deleteMany();
@@ -191,7 +167,7 @@ export const createTestClient = createTestWorkspace;
  */
 export async function createTestIntegration(
   workspaceId: string,
-  integration: 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE',
+  integration: 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND',
   secret: string,
   meta?: Record<string, unknown>
 ) {
@@ -230,6 +206,7 @@ export async function createAbcIgniteIntegration(
     clubNumber: string;
     defaultEventTypeId?: string;
     eventTypes?: Record<string, { id: string; name: string; category: string; duration?: number }>;
+    employees?: Record<string, { id: string; name: string; title?: string }>;
   }
 ) {
   const { encryptSecret } = await import('@/app/_lib/crypto');
@@ -258,6 +235,43 @@ export async function createAbcIgniteIntegration(
     data: {
       workspaceId,
       integration: 'ABC_IGNITE',
+      secrets: secrets as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['secrets'],
+      meta: meta as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['meta'],
+    },
+  });
+}
+
+/**
+ * Test helper: Create Resend integration
+ * Resend requires API Key secret and fromEmail in meta
+ */
+export async function createResendIntegration(
+  workspaceId: string,
+  apiKey: string,
+  meta?: {
+    fromEmail: string;
+    fromName?: string;
+    replyTo?: string;
+  }
+) {
+  const { encryptSecret } = await import('@/app/_lib/crypto');
+  const { randomUUID } = await import('crypto');
+  
+  const apiKeyEncrypted = encryptSecret(apiKey);
+  
+  const secrets = [
+    {
+      id: randomUUID(),
+      name: 'API Key',
+      encryptedValue: apiKeyEncrypted.encryptedSecret,
+      keyVersion: apiKeyEncrypted.keyVersion,
+    },
+  ];
+  
+  return testPrisma.workspaceIntegration.create({
+    data: {
+      workspaceId,
+      integration: 'RESEND',
       secrets: secrets as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['secrets'],
       meta: meta as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['meta'],
     },
@@ -398,6 +412,7 @@ export async function cleanupTestData() {
   await testPrisma.workflow.deleteMany();
   await testPrisma.event.deleteMany();
   await testPrisma.lead.deleteMany();
+  await testPrisma.pendingBooking.deleteMany();
   await testPrisma.workspaceIntegration.deleteMany();
   await testPrisma.session.deleteMany();
   await testPrisma.workspaceMember.deleteMany();

@@ -9,6 +9,7 @@ import { ActionExecutor } from '../types';
 import { mailerliteExecutors } from './mailerlite';
 import { revlineExecutors } from './revline';
 import { abcIgniteExecutors } from './abc-ignite';
+import { resendExecutors } from './resend';
 
 // =============================================================================
 // EXECUTOR REGISTRY
@@ -21,6 +22,7 @@ const EXECUTORS: Record<string, Record<string, ActionExecutor>> = {
   mailerlite: mailerliteExecutors,
   revline: revlineExecutors,
   abc_ignite: abcIgniteExecutors,
+  resend: resendExecutors,
   // Future: Add more adapters here
   // manychat: manychatExecutors,
 };

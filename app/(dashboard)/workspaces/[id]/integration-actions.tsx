@@ -7,8 +7,9 @@ import { MailerLiteConfigEditor } from './mailerlite-config-editor';
 import { StripeConfigEditor } from './stripe-config-editor';
 import { AbcIgniteConfigEditor } from './abc-ignite-config-editor';
 import { RevlineConfigEditor } from './revline-config-editor';
+import { ResendConfigEditor } from './resend-config-editor';
 
-type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE';
+type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND';
 
 // Available secret names by integration type
 const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
@@ -18,6 +19,7 @@ const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
   MANYCHAT: ['API Key'],
   ABC_IGNITE: ['App ID', 'App Key'],
   REVLINE: [], // No secrets - internal system
+  RESEND: ['API Key'],
 };
 
 interface SecretSummary {
@@ -66,6 +68,7 @@ export function IntegrationActions({ integration, workspaceId, dependentWorkflow
   const isStripe = integrationType === 'STRIPE';
   const isAbcIgnite = integrationType === 'ABC_IGNITE';
   const isRevline = integrationType === 'REVLINE';
+  const isResend = integrationType === 'RESEND';
   
   // Check if this integration has dependent workflows
   const hasDependents = dependentWorkflows.length > 0;
@@ -262,7 +265,7 @@ export function IntegrationActions({ integration, workspaceId, dependentWorkflow
 
   // Edit Meta Modal
   if (showEditMeta) {
-    const hasStructuredEditor = isMailerLite || isStripe || isAbcIgnite || isRevline;
+    const hasStructuredEditor = isMailerLite || isStripe || isAbcIgnite || isRevline || isResend;
     const modalTitle = isMailerLite 
       ? 'MailerLite Configuration' 
       : isStripe 
@@ -271,7 +274,9 @@ export function IntegrationActions({ integration, workspaceId, dependentWorkflow
           ? 'ABC Ignite Configuration'
           : isRevline
             ? 'RevLine Configuration'
-            : 'Meta Config';
+            : isResend
+              ? 'Resend Configuration'
+              : 'Meta Config';
     const modalDescription = isMailerLite 
       ? 'Configure MailerLite groups. Use the Workflows tab to set up automations.'
       : isStripe
@@ -280,7 +285,9 @@ export function IntegrationActions({ integration, workspaceId, dependentWorkflow
           ? 'Configure club settings and sync event types from ABC Ignite.'
           : isRevline
             ? 'Enable forms and configure trigger operations for this client.'
-            : 'Update non-sensitive configuration (group IDs, product maps, etc.)';
+            : isResend
+              ? 'Configure sender settings for transactional emails.'
+              : 'Update non-sensitive configuration (group IDs, product maps, etc.)';
 
     return (
       <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-0 sm:p-4 z-50">
@@ -323,6 +330,13 @@ export function IntegrationActions({ integration, workspaceId, dependentWorkflow
               error={error}
               integrationId={integration.id}
               workspaceId={workspaceId}
+            />
+          ) : isResend ? (
+            <ResendConfigEditor
+              value={metaText}
+              onChange={setMetaText}
+              error={error}
+              integrationId={integration.id}
             />
           ) : (
             <>
