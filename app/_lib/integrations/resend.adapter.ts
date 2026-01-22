@@ -1,0 +1,232 @@
+/**
+ * Resend Integration Adapter
+ * 
+ * Handles Resend API operations for a specific workspace.
+ * Configuration includes sender settings stored in integration meta.
+ * 
+ * Secret names:
+ * - "API Key" - Required for all operations
+ * 
+ * STANDARDS:
+ * - All operations auto-update health status
+ * - Returns structured IntegrationResult for all operations
+ * - Never exposes API key outside this module
+ */
+
+import { IntegrationType } from '@prisma/client';
+import { Resend } from 'resend';
+import { BaseIntegrationAdapter } from './base';
+import { ResendMeta, IntegrationResult } from '@/app/_lib/types';
+
+/** Default secret name for Resend API key */
+export const RESEND_API_KEY_SECRET = 'API Key';
+
+/**
+ * Result of sending an email
+ */
+export interface SendEmailResult {
+  messageId: string;
+}
+
+/**
+ * Parameters for sending an email
+ */
+export interface SendEmailParams {
+  to: string | string[];
+  subject: string;
+  html: string;
+  text?: string;
+  replyTo?: string;
+  /** Override from email (uses config default if not provided) */
+  fromEmail?: string;
+  /** Override from name (uses config default if not provided) */
+  fromName?: string;
+}
+
+/**
+ * Resend adapter for workspace-scoped operations
+ * 
+ * @example
+ * const adapter = await ResendAdapter.forWorkspace(workspaceId);
+ * if (!adapter) return ApiResponse.configError();
+ * 
+ * const result = await adapter.sendEmail({
+ *   to: 'user@example.com',
+ *   subject: 'Confirm your booking',
+ *   html: '<p>Click to confirm...</p>',
+ * });
+ */
+export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
+  readonly type = IntegrationType.RESEND;
+
+  /** Cached Resend client instance */
+  private resendClient: Resend | null = null;
+
+  /**
+   * Load Resend adapter for a workspace
+   */
+  static async forWorkspace(workspaceId: string): Promise<ResendAdapter | null> {
+    const data = await BaseIntegrationAdapter.loadAdapter<ResendMeta>(
+      workspaceId,
+      IntegrationType.RESEND
+    );
+    
+    if (!data) {
+      return null;
+    }
+
+    // Ensure API key secret exists
+    if (data.secrets.length === 0) {
+      console.warn('Resend integration has no secrets configured:', { workspaceId });
+      return null;
+    }
+    
+    return new ResendAdapter(workspaceId, data.secrets, data.meta);
+  }
+
+  /**
+   * Alias for forWorkspace for consistency with other adapters
+   */
+  static async forClient(clientId: string): Promise<ResendAdapter | null> {
+    return ResendAdapter.forWorkspace(clientId);
+  }
+
+  /**
+   * Get the API key for Resend operations
+   */
+  private getApiKey(): string {
+    const apiKey = this.getSecret(RESEND_API_KEY_SECRET) || this.getPrimarySecret();
+    return apiKey;
+  }
+
+  /**
+   * Get or create the Resend client instance
+   */
+  private getClient(): Resend {
+    if (!this.resendClient) {
+      this.resendClient = new Resend(this.getApiKey());
+    }
+    return this.resendClient;
+  }
+
+  /**
+   * Get the configured from email address
+   */
+  getFromEmail(): string | null {
+    return this.meta?.fromEmail || null;
+  }
+
+  /**
+   * Get the configured from name
+   */
+  getFromName(): string | null {
+    return this.meta?.fromName || null;
+  }
+
+  /**
+   * Get the configured reply-to address
+   */
+  getReplyTo(): string | null {
+    return this.meta?.replyTo || null;
+  }
+
+  /**
+   * Build the full "from" address with name
+   * @returns Format: "Name <email@domain.com>" or just "email@domain.com"
+   */
+  buildFromAddress(overrideEmail?: string, overrideName?: string): string {
+    const email = overrideEmail || this.getFromEmail();
+    const name = overrideName || this.getFromName();
+
+    if (!email) {
+      throw new Error('fromEmail is not configured in Resend integration');
+    }
+
+    if (name) {
+      return `${name} <${email}>`;
+    }
+    return email;
+  }
+
+  /**
+   * Send an email via Resend
+   */
+  async sendEmail(params: SendEmailParams): Promise<IntegrationResult<SendEmailResult>> {
+    const { to, subject, html, text, replyTo, fromEmail, fromName } = params;
+
+    try {
+      // Build from address
+      const from = this.buildFromAddress(fromEmail, fromName);
+
+      // Use override reply-to or fall back to config
+      const effectiveReplyTo = replyTo || this.getReplyTo() || undefined;
+
+      const client = this.getClient();
+      const { data, error } = await client.emails.send({
+        from,
+        to: Array.isArray(to) ? to : [to],
+        subject,
+        html,
+        text,
+        replyTo: effectiveReplyTo,
+      });
+
+      if (error) {
+        console.error('Resend API error:', {
+          workspaceId: this.workspaceId,
+          error: error.message,
+        });
+        await this.markUnhealthy();
+        return this.error(error.message, false);
+      }
+
+      await this.touch();
+      return this.success({
+        messageId: data?.id || 'unknown',
+      });
+
+    } catch (error) {
+      console.error('Resend sendEmail error:', {
+        workspaceId: this.workspaceId,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      await this.markUnhealthy();
+      return this.error(
+        error instanceof Error ? error.message : 'Network error or API unavailable',
+        true
+      );
+    }
+  }
+
+  /**
+   * Check if the integration is properly configured
+   */
+  isConfigured(): boolean {
+    return !!this.getFromEmail();
+  }
+
+  /**
+   * Validate the meta configuration
+   */
+  validateConfig(): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    
+    if (!this.meta?.fromEmail) {
+      errors.push('fromEmail is required');
+    }
+
+    // Basic email format validation
+    if (this.meta?.fromEmail && !this.meta.fromEmail.includes('@')) {
+      errors.push('fromEmail must be a valid email address');
+    }
+
+    if (this.meta?.replyTo && !this.meta.replyTo.includes('@')) {
+      errors.push('replyTo must be a valid email address');
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+    };
+  }
+}

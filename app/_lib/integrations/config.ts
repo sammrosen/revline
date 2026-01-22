@@ -22,6 +22,7 @@ export const INTEGRATION_TYPES = [
   'MANYCHAT',
   'ABC_IGNITE',
   'REVLINE',
+  'RESEND',
 ] as const;
 
 export type IntegrationTypeId = typeof INTEGRATION_TYPES[number];
@@ -251,6 +252,41 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
     tips: [
       'Enable forms by adding them to the forms object',
       'Each form can specify its own trigger operation for workflow routing',
+    ],
+  },
+
+  RESEND: {
+    id: 'RESEND',
+    name: 'resend',
+    displayName: 'Resend',
+    color: 'text-indigo-400',
+    hasStructuredEditor: true,
+    secrets: [
+      {
+        name: 'API Key',
+        placeholder: 're_xxxxxxxxxxxxx',
+        description: 'Get from Resend dashboard → API Keys',
+        required: true,
+      },
+    ],
+    metaTemplate: {
+      fromEmail: '',
+      fromName: '',
+      replyTo: '',
+    },
+    metaDescription: 'Configure sender settings for transactional emails',
+    metaFields: [
+      { key: 'fromEmail', description: 'Verified sender email address', required: true },
+      { key: 'fromName', description: 'Sender display name (e.g., "Sports West")' },
+      { key: 'replyTo', description: 'Default reply-to address' },
+    ],
+    tips: [
+      'Verify your sending domain in Resend before configuring',
+      'Use fromName for branded emails: e.g., "Sports West <bookings@gym.com>"',
+      'The from address must use a verified domain',
+    ],
+    warnings: [
+      'Emails will fail if the domain is not verified in Resend',
     ],
   },
 };

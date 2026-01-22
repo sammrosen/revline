@@ -26,7 +26,7 @@ import { PendingBookingStatus } from '@prisma/client';
 
 /**
  * Build workspace-specific redirect URL
- * Redirects to workspace's booking pages for Sports West style
+ * Redirects to public booking pages at /public/[slug]/book
  */
 function buildRedirectUrl(
   workspaceSlug: string | null, 
@@ -35,17 +35,17 @@ function buildRedirectUrl(
 ): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   
-  // Build path based on type
+  // Build path based on type - use /public/[slug]/book for public-facing pages
   let pagePath: string;
   if (path === 'success') {
-    // Success page - workspace specific
+    // Success page - public path
     pagePath = workspaceSlug 
-      ? `/workspaces/${workspaceSlug}/book/success`
+      ? `/public/${workspaceSlug}/book/success`
       : '/book/success';
   } else {
     // Error - redirect back to booking page with error param
     pagePath = workspaceSlug 
-      ? `/workspaces/${workspaceSlug}/book`
+      ? `/public/${workspaceSlug}/book`
       : '/book';
   }
   

@@ -6,28 +6,31 @@
  * 
  * Features:
  * - Transactional email delivery
- * - Workspace-scoped sender addresses
+ * - Workspace-scoped sender addresses (via Resend integration)
+ * - Fallback to environment variables if no workspace integration
  * - Event logging for debugging
  * 
  * STANDARDS:
  * - Never log email content
  * - Return IntegrationResult for consistency
  * - Emit events for audit trail
+ * - Try workspace Resend integration first, then fall back to env vars
  */
 
 import { Resend } from 'resend';
 import { IntegrationResult } from '@/app/_lib/types';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { bookingConfirmationTemplate } from './templates/booking-confirm';
+import { ResendAdapter } from '@/app/_lib/integrations';
 
-// Initialize Resend client
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize fallback Resend client (uses env var)
+const fallbackResend = new Resend(process.env.RESEND_API_KEY);
 
 /** Default sender for RevLine emails */
 const DEFAULT_SENDER = 'RevLine <onboarding@resend.dev>';
 
-/** Environment-based sender (can be overridden per workspace in future) */
-const SENDER_ADDRESS = process.env.EMAIL_FROM || DEFAULT_SENDER;
+/** Environment-based sender (used when no workspace integration) */
+const FALLBACK_SENDER = process.env.EMAIL_FROM || DEFAULT_SENDER;
 
 /**
  * Result of sending an email
@@ -107,19 +110,49 @@ export class EmailService {
 
   /**
    * Send a generic email
+   * 
+   * Priority:
+   * 1. Use workspace Resend integration if configured
+   * 2. Fall back to RESEND_API_KEY and EMAIL_FROM env vars
    */
   static async send(params: SendEmailParams): Promise<IntegrationResult<SendEmailResult>> {
     const { workspaceId, to, subject, html, text, replyTo } = params;
 
-    // Check if Resend is configured
+    // Try workspace-scoped Resend integration first
+    const adapter = await ResendAdapter.forWorkspace(workspaceId);
+    if (adapter && adapter.isConfigured()) {
+      // Use workspace integration
+      const result = await adapter.sendEmail({
+        to,
+        subject,
+        html,
+        text,
+        replyTo,
+      });
+
+      // Emit event using RESEND system (adapter already logs internally)
+      // We emit an additional backend event for the email service layer
+      if (result.success) {
+        await emitEvent({
+          workspaceId,
+          system: EventSystem.BACKEND,
+          eventType: 'email_sent',
+          success: true,
+        });
+      }
+
+      return result;
+    }
+
+    // Fall back to environment variable configuration
     if (!process.env.RESEND_API_KEY) {
-      console.warn('RESEND_API_KEY not configured, email not sent');
+      console.warn('RESEND_API_KEY not configured and no workspace Resend integration, email not sent');
       await emitEvent({
         workspaceId,
         system: EventSystem.BACKEND,
         eventType: 'email_send_skipped',
         success: false,
-        errorMessage: 'RESEND_API_KEY not configured',
+        errorMessage: 'Email service not configured (no RESEND_API_KEY or workspace integration)',
       });
       return {
         success: false,
@@ -128,8 +161,8 @@ export class EmailService {
     }
 
     try {
-      const { data, error } = await resend.emails.send({
-        from: SENDER_ADDRESS,
+      const { data, error } = await fallbackResend.emails.send({
+        from: FALLBACK_SENDER,
         to,
         subject,
         html,
@@ -194,7 +227,22 @@ export class EmailService {
   }
 
   /**
-   * Check if email service is configured
+   * Check if email service is configured for a workspace
+   * Returns true if either workspace integration or env var is configured
+   */
+  static async isConfiguredForWorkspace(workspaceId: string): Promise<boolean> {
+    // Check workspace integration first
+    const adapter = await ResendAdapter.forWorkspace(workspaceId);
+    if (adapter && adapter.isConfigured()) {
+      return true;
+    }
+    // Fall back to env var check
+    return !!process.env.RESEND_API_KEY;
+  }
+
+  /**
+   * Check if email service is configured (env var only)
+   * @deprecated Use isConfiguredForWorkspace for workspace-aware check
    */
   static isConfigured(): boolean {
     return !!process.env.RESEND_API_KEY;

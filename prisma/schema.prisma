@@ -68,6 +68,7 @@ enum IntegrationType {
   MANYCHAT
   ABC_IGNITE
   REVLINE
+  RESEND
 }
 
 enum HealthStatus {
@@ -135,6 +136,7 @@ enum EventSystem {
   CALENDLY
   MANYCHAT
   ABC_IGNITE
+  RESEND
   CRON
   WORKFLOW
 }

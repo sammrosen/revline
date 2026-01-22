@@ -192,7 +192,7 @@ export const createTestClient = createTestWorkspace;
  */
 export async function createTestIntegration(
   workspaceId: string,
-  integration: 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE',
+  integration: 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND',
   secret: string,
   meta?: Record<string, unknown>
 ) {
@@ -259,6 +259,43 @@ export async function createAbcIgniteIntegration(
     data: {
       workspaceId,
       integration: 'ABC_IGNITE',
+      secrets: secrets as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['secrets'],
+      meta: meta as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['meta'],
+    },
+  });
+}
+
+/**
+ * Test helper: Create Resend integration
+ * Resend requires API Key secret and fromEmail in meta
+ */
+export async function createResendIntegration(
+  workspaceId: string,
+  apiKey: string,
+  meta?: {
+    fromEmail: string;
+    fromName?: string;
+    replyTo?: string;
+  }
+) {
+  const { encryptSecret } = await import('@/app/_lib/crypto');
+  const { randomUUID } = await import('crypto');
+  
+  const apiKeyEncrypted = encryptSecret(apiKey);
+  
+  const secrets = [
+    {
+      id: randomUUID(),
+      name: 'API Key',
+      encryptedValue: apiKeyEncrypted.encryptedSecret,
+      keyVersion: apiKeyEncrypted.keyVersion,
+    },
+  ];
+  
+  return testPrisma.workspaceIntegration.create({
+    data: {
+      workspaceId,
+      integration: 'RESEND',
       secrets: secrets as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['secrets'],
       meta: meta as Parameters<typeof testPrisma.workspaceIntegration.create>[0]['data']['meta'],
     },

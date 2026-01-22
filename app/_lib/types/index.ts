@@ -192,6 +192,26 @@ export interface RevlineMeta {
 }
 
 /**
+ * Resend integration metadata
+ * Configuration for transactional email sending
+ * 
+ * @example
+ * {
+ *   "fromEmail": "bookings@yourdomain.com",
+ *   "fromName": "Sports West",
+ *   "replyTo": "support@yourdomain.com"
+ * }
+ */
+export interface ResendMeta {
+  /** Verified sender email address (required) */
+  fromEmail: string;
+  /** Display name for sender (e.g., "Sports West") */
+  fromName?: string;
+  /** Default reply-to address */
+  replyTo?: string;
+}
+
+/**
  * Union of all integration meta types
  */
 export type IntegrationMeta = 
@@ -201,6 +221,7 @@ export type IntegrationMeta =
   | ManyChatMeta 
   | AbcIgniteMeta
   | RevlineMeta
+  | ResendMeta
   | Record<string, unknown>;
 
 /**
