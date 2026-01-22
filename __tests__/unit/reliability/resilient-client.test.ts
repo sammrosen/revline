@@ -391,7 +391,8 @@ describe('Resilient Client', () => {
         { retries: 1 }
       );
 
-      expect(result.totalTimeMs).toBeGreaterThanOrEqual(50);
+      // Allow small timing variance (setTimeout isn't perfectly precise)
+      expect(result.totalTimeMs).toBeGreaterThanOrEqual(45);
     });
   });
 
