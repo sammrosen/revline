@@ -82,7 +82,6 @@ const sendEmail: ActionExecutor = {
       return { 
         success: false, 
         error: result.error,
-        retryable: result.retryable,
       };
     }
 

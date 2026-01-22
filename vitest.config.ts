@@ -22,8 +22,9 @@ export default defineConfig({
     },
     // Increase timeout for database operations
     testTimeout: 30000,
-    // Retry flaky tests once (helps with transient DB issues)
-    retry: 1,
+    // Don't retry tests - afterEach cleanup causes issues with retry
+    // If a test fails, it should be fixed rather than retried
+    retry: 0,
   },
   resolve: {
     alias: {

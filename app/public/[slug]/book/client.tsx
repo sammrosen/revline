@@ -223,6 +223,8 @@ export function MagicLinkBookingClient({
           serviceId: selectedSlot.providerData?.eventTypeId,
           serviceName: selectedSlot.title,
           staffName: selectedEmployee?.name || selectedSlot.staffName,
+          // Pass full provider data - used to build exact API payload at request time
+          slotProviderData: selectedSlot.providerData,
         }),
       });
       

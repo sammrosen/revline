@@ -36,6 +36,7 @@ describe('Resend Adapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.resetModules();
     mockFetch.mockReset();
   });
 
@@ -285,6 +286,7 @@ describe('Resend Executor', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.resetModules();
     mockFetch.mockReset();
   });
 
@@ -302,7 +304,10 @@ describe('Resend Executor', () => {
       const result = await resendExecutors.send_email.execute(
         {
           workspaceId: workspace.id,
+          clientId: workspace.id,
           email: 'recipient@example.com',
+          trigger: { adapter: 'test', operation: 'test', payload: {} },
+          actionData: {},
         },
         {
           subject: 'Test Subject',
@@ -326,7 +331,10 @@ describe('Resend Executor', () => {
       const result = await resendExecutors.send_email.execute(
         {
           workspaceId: workspace.id,
+          clientId: workspace.id,
           email: 'recipient@example.com',
+          trigger: { adapter: 'test', operation: 'test', payload: {} },
+          actionData: {},
         },
         {
           subject: 'Test Subject',
@@ -350,7 +358,10 @@ describe('Resend Executor', () => {
       const result = await resendExecutors.send_email.execute(
         {
           workspaceId: workspace.id,
-          // No email in context
+          clientId: workspace.id,
+          email: '', // Empty email
+          trigger: { adapter: 'test', operation: 'test', payload: {} },
+          actionData: {},
         },
         {
           subject: 'Test Subject',
@@ -374,7 +385,10 @@ describe('Resend Executor', () => {
       const result = await resendExecutors.send_email.execute(
         {
           workspaceId: workspace.id,
+          clientId: workspace.id,
           email: 'recipient@example.com',
+          trigger: { adapter: 'test', operation: 'test', payload: {} },
+          actionData: {},
         },
         {
           // No subject
@@ -398,7 +412,10 @@ describe('Resend Executor', () => {
       const result = await resendExecutors.send_email.execute(
         {
           workspaceId: workspace.id,
+          clientId: workspace.id,
           email: 'recipient@example.com',
+          trigger: { adapter: 'test', operation: 'test', payload: {} },
+          actionData: {},
         },
         {
           subject: 'Test Subject',

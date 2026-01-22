@@ -231,6 +231,7 @@ export async function createAbcIgniteIntegration(
     clubNumber: string;
     defaultEventTypeId?: string;
     eventTypes?: Record<string, { id: string; name: string; category: string; duration?: number }>;
+    employees?: Record<string, { id: string; name: string; title?: string }>;
   }
 ) {
   const { encryptSecret } = await import('@/app/_lib/crypto');

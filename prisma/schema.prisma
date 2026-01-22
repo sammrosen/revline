@@ -354,10 +354,15 @@ model PendingBooking {
   serviceName   String?              @map("service_name")
   scheduledAt   DateTime             @map("scheduled_at")
 
-  // Provider-specific data (JSON blob for flexibility)
-  // e.g., { eventTypeId, levelId, clubNumber } for ABC
-  // e.g., { eventUri, inviteeUri } for Calendly
+  // Provider-specific context data (JSON blob for flexibility)
+  // e.g., { barcode, homeClub } for ABC member context
+  // e.g., { inviteeUri } for Calendly
   providerData  Json?                @map("provider_data")
+
+  // The EXACT payload to send to the provider API
+  // Built at request time when all context is available
+  // This is what gets POSTed - no transformation needed at confirm time
+  providerPayload Json?              @map("provider_payload")
 
   // Magic link security (SHA-256 hash of token)
   tokenHash     String               @unique @map("token_hash")

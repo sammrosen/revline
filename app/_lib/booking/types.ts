@@ -203,6 +203,51 @@ export interface BookingProvider {
    * @returns Email address or null if not available
    */
   getCustomerEmail?(customer: BookingCustomer): string | null;
+  
+  /**
+   * Resolve an internal employee key to the provider's employee ID (optional)
+   * Used during booking confirmation when the staffId stored is an internal key
+   * @param employeeKey - Internal key (e.g., "sam_rosen")
+   * @returns Provider employee ID (e.g., "12d0d1472b314a95b4e53b08b20d8769") or null
+   */
+  resolveEmployeeId?(employeeKey: string): string | null;
+  
+  /**
+   * Build the exact payload needed to create a booking (optional)
+   * Called at request time when all context is available.
+   * The payload is stored and sent as-is during confirmation.
+   * 
+   * @param slot - The time slot being booked
+   * @param customer - Customer information
+   * @returns Payload to store, or error if payload can't be built
+   */
+  buildBookingPayload?(
+    slot: TimeSlot,
+    customer: BookingCustomer
+  ): Promise<BookingPayloadResult>;
+  
+  /**
+   * Execute a pre-built booking payload (optional)
+   * Called at confirm time - just sends the payload as-is.
+   * 
+   * @param payload - The stored payload from buildBookingPayload
+   * @returns Booking result
+   */
+  executeBookingPayload?(
+    payload: Record<string, unknown>
+  ): Promise<BookingResult>;
+}
+
+/**
+ * Result of building a booking payload
+ */
+export interface BookingPayloadResult {
+  /** Whether the payload was built successfully */
+  success: boolean;
+  /** The payload to store and send (if successful) */
+  payload?: Record<string, unknown>;
+  /** Error message (if failed) */
+  error?: string;
 }
 
 // =============================================================================

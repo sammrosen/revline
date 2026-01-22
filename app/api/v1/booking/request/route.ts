@@ -23,9 +23,9 @@ import { prisma } from '@/app/_lib/db';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { getBookingProvider } from '@/app/_lib/booking/get-provider';
 import { generateMagicLink, buildConfirmationUrl } from '@/app/_lib/booking/magic-link';
+import { TimeSlot } from '@/app/_lib/booking/types';
 import { EmailService } from '@/app/_lib/email';
 import { checkBookingRateLimit, getClientIP, getRateLimitHeaders } from '@/app/_lib/middleware/rate-limit';
-import { ApiResponse } from '@/app/_lib/utils/api-response';
 
 // Request validation schema
 const BookingRequestSchema = z.object({
@@ -38,6 +38,9 @@ const BookingRequestSchema = z.object({
   serviceId: z.string().optional(),   // Event type/service ID
   serviceName: z.string().optional(), // Display name for email
   staffName: z.string().optional(),   // Display name for email
+  // Slot provider data (from availability response)
+  // Contains provider-specific IDs needed for booking (e.g., employeeId, levelId)
+  slotProviderData: z.record(z.string(), z.any()).optional(),
 });
 
 type BookingRequest = z.infer<typeof BookingRequestSchema>;
@@ -87,7 +90,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     
     const data: BookingRequest = parseResult.data;
-    const { workspaceSlug, identifier, staffId, slotTime, email, serviceId, serviceName, staffName } = data;
+    const { workspaceSlug, identifier, staffId, slotTime, email, serviceId, serviceName, staffName, slotProviderData } = data;
     
     // Rate limit check
     const ip = getClientIP(request.headers);
@@ -190,7 +193,42 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const confirmUrl = buildConfirmationUrl(baseUrl, token);
     
-    // Create pending booking
+    // Build the slot object for payload building
+    const scheduledAt = new Date(slotTime);
+    const slot: TimeSlot = {
+      id: `pending-${Date.now()}`,
+      startTime: slotTime,
+      endTime: new Date(scheduledAt.getTime() + 60 * 60 * 1000).toISOString(), // Default 1 hour
+      duration: 60,
+      title: serviceName || 'Session',
+      staffName: staffName || undefined,
+      providerData: slotProviderData || {},
+    };
+    
+    // Build provider-specific payload if provider supports it
+    // This is the exact payload that will be sent to the provider API at confirm time
+    let providerPayload: Prisma.InputJsonValue | undefined = undefined;
+    
+    if (provider.buildBookingPayload) {
+      const payloadResult = await provider.buildBookingPayload(slot, customer);
+      
+      if (!payloadResult.success) {
+        // Payload build failed - log but don't reveal to user
+        await emitEvent({
+          workspaceId: workspace.id,
+          system: EventSystem.BACKEND,
+          eventType: 'booking_request_payload_build_failed',
+          success: false,
+          errorMessage: payloadResult.error,
+        });
+        await normalizeResponseTime(startTime);
+        return NextResponse.json(GENERIC_RESPONSE);
+      }
+      
+      providerPayload = payloadResult.payload as Prisma.InputJsonValue;
+    }
+    
+    // Create pending booking with the pre-built payload
     await prisma.pendingBooking.create({
       data: {
         workspaceId: workspace.id,
@@ -202,10 +240,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         staffName: staffName || null,
         serviceId: serviceId || null,
         serviceName: serviceName || null,
-        scheduledAt: new Date(slotTime),
+        scheduledAt,
         providerData: customer.providerData 
           ? (customer.providerData as unknown as Prisma.InputJsonValue) 
           : Prisma.JsonNull,
+        providerPayload,
         tokenHash: hash,
         expiresAt,
       },

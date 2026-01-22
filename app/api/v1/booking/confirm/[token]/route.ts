@@ -208,28 +208,46 @@ export async function GET(
       }
     }
     
-    // Build time slot for booking
-    // Use provider data if available, otherwise construct minimal slot
-    const providerData = pendingBooking.providerData as Record<string, unknown> | null;
+    // Execute the booking using the stored payload (preferred) or fall back to createBooking
+    let bookingResult;
     
-    const slot: TimeSlot = {
-      id: providerData?.slotId as string || `pending-${pendingBooking.id}`,
-      startTime: pendingBooking.scheduledAt.toISOString(),
-      endTime: new Date(pendingBooking.scheduledAt.getTime() + 60 * 60 * 1000).toISOString(), // Default 1 hour
-      duration: (providerData?.duration as number) || 60,
-      title: pendingBooking.serviceName || 'Session',
-      staffName: pendingBooking.staffName || undefined,
-      providerData: {
-        // Pass through all provider data for the booking
-        ...providerData,
-        employeeId: pendingBooking.staffId,
-        eventTypeId: pendingBooking.serviceId,
-        isAvailabilitySlot: providerData?.isAvailabilitySlot ?? true,
-      },
-    };
+    const storedPayload = pendingBooking.providerPayload as Record<string, unknown> | null;
     
-    // Create the actual booking
-    const bookingResult = await provider.createBooking(slot, customer);
+    if (storedPayload && provider.executeBookingPayload) {
+      // New approach: Execute the pre-built payload directly
+      // No ID resolution or transformation needed - just send it
+      bookingResult = await provider.executeBookingPayload(storedPayload);
+    } else {
+      // Legacy fallback: Build slot and use createBooking
+      // This supports existing pending bookings without providerPayload
+      const providerData = pendingBooking.providerData as Record<string, unknown> | null;
+      
+      // Resolve the actual provider employee ID
+      let resolvedEmployeeId = pendingBooking.staffId;
+      if (provider.resolveEmployeeId && pendingBooking.staffId) {
+        const resolved = provider.resolveEmployeeId(pendingBooking.staffId);
+        if (resolved) {
+          resolvedEmployeeId = resolved;
+        }
+      }
+      
+      const slot: TimeSlot = {
+        id: providerData?.slotId as string || `pending-${pendingBooking.id}`,
+        startTime: pendingBooking.scheduledAt.toISOString(),
+        endTime: new Date(pendingBooking.scheduledAt.getTime() + 60 * 60 * 1000).toISOString(),
+        duration: (providerData?.duration as number) || 60,
+        title: pendingBooking.serviceName || 'Session',
+        staffName: pendingBooking.staffName || undefined,
+        providerData: {
+          ...providerData,
+          employeeId: resolvedEmployeeId,
+          eventTypeId: pendingBooking.serviceId,
+          isAvailabilitySlot: providerData?.isAvailabilitySlot ?? true,
+        },
+      };
+      
+      bookingResult = await provider.createBooking(slot, customer);
+    }
     
     if (!bookingResult.success) {
       await prisma.pendingBooking.update({
