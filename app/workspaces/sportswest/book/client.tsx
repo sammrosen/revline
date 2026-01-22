@@ -248,6 +248,14 @@ export function SportsWestBookingClient({
           </div>
         )}
       </main>
+
+      {/* RevLine Footer */}
+      <footer className="py-6 text-center">
+        <p className="text-xs text-gray-400">Powered by RevLine</p>
+        <a href="mailto:hi@revlineops.com" className="text-xs text-gray-400 hover:text-gray-500">
+          hi@revlineops.com
+        </a>
+      </footer>
     </div>
   );
 }

@@ -110,6 +110,18 @@ export function bookingConfirmationTemplate(
               </p>
             </td>
           </tr>
+          
+          <!-- RevLine Footer -->
+          <tr>
+            <td style="padding: 16px 32px 24px; text-align: center;">
+              <p style="margin: 0 0 4px; font-size: 11px; color: #a1a1aa;">
+                Powered by RevLine
+              </p>
+              <a href="mailto:hi@revlineops.com" style="font-size: 11px; color: #a1a1aa; text-decoration: none;">
+                hi@revlineops.com
+              </a>
+            </td>
+          </tr>
         </table>
       </td>
     </tr>
@@ -133,6 +145,10 @@ Confirm your session: ${confirmUrl}
 This link expires in ${expiryMinutes} minutes.
 
 If you didn't request this booking, you can safely ignore this email.
+
+---
+Powered by RevLine
+hi@revlineops.com
 `.trim();
 
   return { subject, html, text };
