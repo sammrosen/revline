@@ -443,6 +443,7 @@ function SelectStep({
             onClick={goToPreviousWeek}
             disabled={!canGoPrevious || loading}
             className="p-2 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            style={{ color: BRAND.text }}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -457,6 +458,7 @@ function SelectStep({
             onClick={goToNextWeek}
             disabled={loading}
             className="p-2 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            style={{ color: BRAND.text }}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -585,9 +587,9 @@ function SubmitStep({
             type="text"
             value={barcode}
             onChange={(e) => onBarcodeChange(e.target.value)}
-            placeholder="Enter your barcode"
+            placeholder="fgj6"
             className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-            style={{ borderColor: BRAND.border }}
+            style={{ borderColor: BRAND.border, backgroundColor: BRAND.card, color: BRAND.text }}
             disabled={loading}
           />
         </div>
@@ -602,7 +604,7 @@ function SubmitStep({
             onChange={(e) => onEmailChange(e.target.value)}
             placeholder="you@example.com"
             className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-            style={{ borderColor: BRAND.border }}
+            style={{ borderColor: BRAND.border, backgroundColor: BRAND.card, color: BRAND.text }}
             disabled={loading}
           />
           <p className="text-xs mt-1" style={{ color: BRAND.textMuted }}>
@@ -621,7 +623,7 @@ function SubmitStep({
             placeholder="1234"
             maxLength={4}
             className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-            style={{ borderColor: BRAND.border }}
+            style={{ borderColor: BRAND.border, backgroundColor: BRAND.card, color: BRAND.text }}
             disabled={loading}
           />
           <p className="text-xs mt-1" style={{ color: BRAND.textMuted }}>
