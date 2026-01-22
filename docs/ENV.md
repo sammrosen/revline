@@ -76,6 +76,27 @@ CRON_SECRET=ee2b99f3d87aecfd196f67f773e00c51a3bae73cd19d08b37dfb126b966fa31d
 
 ## 🟢 Optional
 
+### Sentry Error Tracking
+
+```bash
+SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
+NEXT_PUBLIC_SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
+SENTRY_AUTH_TOKEN=sntrys_xxx
+```
+
+**`SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN`**
+- **What:** Sentry Data Source Name for error tracking
+- **Used for:** Automatic error capture, stack traces, performance monitoring
+- **Get from:** https://sentry.io → Project Settings → Client Keys (DSN)
+- **Note:** Both server and client need the DSN. `NEXT_PUBLIC_` prefix exposes it to the browser.
+- **Optional:** Only needed if you want error tracking (highly recommended for production)
+
+**`SENTRY_AUTH_TOKEN`**
+- **What:** Auth token for uploading source maps during build
+- **Used for:** Better stack traces in production (maps minified code back to source)
+- **Get from:** https://sentry.io/settings/auth-tokens/
+- **Optional:** Errors work without this, but stack traces will show minified code
+
 ### Application URL
 
 ```bash
@@ -171,6 +192,11 @@ RESEND_API_KEY=re_<your_key>
 ADMIN_ALERT_EMAIL=ops@yourcompany.com
 CRON_SECRET=<unique_production_secret>
 NEXT_PUBLIC_APP_URL=https://yourdomain.com
+
+# Sentry error tracking (recommended)
+SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
+NEXT_PUBLIC_SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
+SENTRY_AUTH_TOKEN=sntrys_xxx
 
 # Auto-set by Railway
 NODE_ENV=production
