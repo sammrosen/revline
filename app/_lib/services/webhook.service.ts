@@ -67,7 +67,6 @@ export class WebhookService {
     } catch (error) {
       console.error('Failed to upsert lead:', {
         workspaceId,
-        email,
         error: error instanceof Error ? error.message : 'Unknown',
       });
       return {
@@ -143,7 +142,6 @@ export class WebhookService {
     } catch (error) {
       console.error('Failed to upsert lead:', {
         workspaceId,
-        email,
         error: error instanceof Error ? error.message : 'Unknown',
       });
       return {
@@ -208,7 +206,6 @@ export class WebhookService {
     } catch (error) {
       console.error('Failed to update lead:', {
         workspaceId,
-        email,
         error: error instanceof Error ? error.message : 'Unknown',
       });
       return {

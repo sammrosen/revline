@@ -73,7 +73,6 @@ export class CaptureService {
     } catch (error) {
       console.error('Failed to upsert lead:', {
         workspaceId,
-        email,
         error: error instanceof Error ? error.message : 'Unknown',
       });
       return {

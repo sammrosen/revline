@@ -129,6 +129,7 @@ export default async function WorkspaceDetailPage({
         {/* Tabbed Content */}
         <WorkspaceTabs
           workspaceId={workspace.id}
+          workspaceSlug={workspace.slug}
           integrations={workspace.integrations.map((i) => ({
             id: i.id,
             integration: i.integration,

@@ -30,13 +30,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { tempToken, code, useRecoveryCode } = body;
 
-    console.log('[2FA Verify] Received request');
-    console.log('[2FA Verify] Has tempToken:', !!tempToken);
-    console.log('[2FA Verify] Code length:', code?.length);
-
     // Validate temp token
     if (!tempToken || typeof tempToken !== 'string') {
-      console.log('[2FA Verify] No temp token provided');
       return NextResponse.json(
         { error: 'Invalid request. Please start login again.' },
         { status: 400 }
@@ -44,10 +39,8 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = await validateTempToken(tempToken);
-    console.log('[2FA Verify] User ID from token:', userId);
     
     if (!userId) {
-      console.log('[2FA Verify] Token validation failed');
       return NextResponse.json(
         { error: 'Session expired. Please start login again.' },
         { status: 401 }
@@ -109,11 +102,8 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // Verify TOTP code
-      console.log('[2FA Verify] Verifying TOTP code:', code);
       const secret = decryptTOTPSecret(user.totpSecret, user.totpKeyVersion);
-      console.log('[2FA Verify] Decrypted secret length:', secret?.length);
       isValid = verifyTOTP(secret, code);
-      console.log('[2FA Verify] TOTP valid:', isValid);
     }
 
     if (!isValid) {

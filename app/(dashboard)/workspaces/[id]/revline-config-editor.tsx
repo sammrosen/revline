@@ -3,6 +3,13 @@
 import { useState, useEffect } from 'react';
 
 /**
+ * Resolve a path template by replacing {slug} with actual workspace slug
+ */
+function resolveFormPath(pathTemplate: string, workspaceSlug: string): string {
+  return pathTemplate.replace(/{slug}/g, workspaceSlug);
+}
+
+/**
  * RevLine configuration editor.
  * 
  * Allows enabling/disabling forms for a workspace.
@@ -42,6 +49,8 @@ export interface RevlineConfigEditorProps {
   integrationId?: string;
   /** Current workspace ID - used to exclude self from duplicate checks */
   workspaceId?: string;
+  /** Current workspace slug - used for resolving form path templates */
+  workspaceSlug?: string;
 }
 
 const DEFAULT_CONFIG: RevlineMeta = {
@@ -73,6 +82,7 @@ export function RevlineConfigEditor({
   value, 
   onChange, 
   error,
+  workspaceSlug,
 }: RevlineConfigEditorProps) {
   const [isJsonMode, setIsJsonMode] = useState(false);
   const [meta, setMeta] = useState<RevlineMeta>(() => parseMeta(value));
@@ -267,9 +277,9 @@ export function RevlineConfigEditor({
                             )}
                           </div>
                           {/* Form URL */}
-                          {registeredForm?.path && (
+                          {registeredForm?.path && workspaceSlug && (
                             <a
-                              href={registeredForm.path}
+                              href={resolveFormPath(registeredForm.path, workspaceSlug)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-[11px] text-zinc-500 hover:text-amber-400 transition-colors flex items-center gap-1 mt-0.5"
@@ -278,7 +288,7 @@ export function RevlineConfigEditor({
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                               </svg>
-                              {registeredForm.path}
+                              {resolveFormPath(registeredForm.path, workspaceSlug)}
                             </a>
                           )}
                         </div>

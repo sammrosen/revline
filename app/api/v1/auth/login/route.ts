@@ -32,23 +32,15 @@ function verifySignedTempToken(token: string): string | null {
     const decoded = Buffer.from(token, 'base64').toString('utf8');
     const parts = decoded.split(':');
     
-    console.log('[2FA Debug] Token parts count:', parts.length);
-    
     if (parts.length !== 3) {
-      console.log('[2FA Debug] Invalid parts count, expected 3');
       return null;
     }
     
     const [userId, expiresAtStr, signature] = parts;
     const expiresAt = parseInt(expiresAtStr, 10);
     
-    console.log('[2FA Debug] User ID:', userId);
-    console.log('[2FA Debug] Expires at:', new Date(expiresAt).toISOString());
-    console.log('[2FA Debug] Now:', new Date().toISOString());
-    
     // Check expiry
     if (Date.now() > expiresAt) {
-      console.log('[2FA Debug] Token expired');
       return null;
     }
     
@@ -57,17 +49,12 @@ function verifySignedTempToken(token: string): string | null {
     const secret = process.env.REVLINE_ENCRYPTION_KEY || 'dev-secret-key';
     const expectedSignature = crypto.createHmac('sha256', secret).update(data).digest('hex');
     
-    console.log('[2FA Debug] Signature match:', signature === expectedSignature);
-    
     if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
-      console.log('[2FA Debug] Signature mismatch');
       return null;
     }
     
-    console.log('[2FA Debug] Token valid!');
     return userId;
-  } catch (err) {
-    console.log('[2FA Debug] Error verifying token:', err);
+  } catch {
     return null;
   }
 }
