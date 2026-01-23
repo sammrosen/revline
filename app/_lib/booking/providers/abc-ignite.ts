@@ -218,6 +218,10 @@ export class AbcIgniteBookingProvider implements BookingProvider {
   
   /**
    * Split a time block into individual bookable slots based on duration
+   * 
+   * IMPORTANT: ABC API expects local time in POST /calendars/events.
+   * We store the pre-formatted local datetime string in providerData.abcLocalStartTime
+   * so it can be used directly when building the booking payload.
    */
   private splitTimeBlockIntoSlots(
     timeBlock: AbcIgniteAvailabilityTimeBlock,
@@ -232,10 +236,22 @@ export class AbcIgniteBookingProvider implements BookingProvider {
     const blockEnd = new Date(timeBlock.utcEndDateTime);
     const durationMs = durationMinutes * 60 * 1000;
     
+    // Parse block's local start time (HH:MM format from ABC availability API)
+    const [blockLocalHours, blockLocalMinutes] = timeBlock.startTime.split(':').map(Number);
+    
     let slotStart = blockStart;
     
     while (slotStart.getTime() + durationMs <= blockEnd.getTime()) {
       const slotEnd = new Date(slotStart.getTime() + durationMs);
+      
+      // Calculate this slot's local time based on offset from block start
+      const offsetMinutes = Math.round((slotStart.getTime() - blockStart.getTime()) / 60000);
+      const slotLocalTotalMinutes = blockLocalHours * 60 + blockLocalMinutes + offsetMinutes;
+      const slotLocalHours = Math.floor(slotLocalTotalMinutes / 60) % 24;
+      const slotLocalMins = slotLocalTotalMinutes % 60;
+      
+      // Format as "YYYY-MM-DD HH:mm:ss" for ABC API (local time)
+      const abcLocalStartTime = this.formatAbcLocalDateTime(date, slotLocalHours, slotLocalMins);
       
       slots.push({
         id: `${employee.id}-${slotStart.toISOString()}`,
@@ -250,8 +266,9 @@ export class AbcIgniteBookingProvider implements BookingProvider {
           eventTypeId: eventType.id,
           employeeId: employee.id,
           levelId: eventType.levelId,
-          date, // Original date from API
-          localStartTime: timeBlock.startTime,
+          date, // Original date from API (MM/DD/YYYY)
+          localStartTime: timeBlock.startTime, // Block start time (HH:MM) - kept for reference
+          abcLocalStartTime, // Pre-formatted local datetime for ABC API
           isAvailabilitySlot: true,
         },
       });
@@ -288,6 +305,9 @@ export class AbcIgniteBookingProvider implements BookingProvider {
    * Handles two scenarios:
    * - Availability slots: Creates a new appointment via POST /calendars/events
    * - Pre-scheduled events: Enrolls member in existing event
+   * 
+   * IMPORTANT: For availability slots, we use abcLocalStartTime from providerData.
+   * ABC API expects LOCAL time, not UTC.
    */
   async createBooking(
     slot: TimeSlot,
@@ -298,12 +318,23 @@ export class AbcIgniteBookingProvider implements BookingProvider {
     // Check if this is an availability slot (needs appointment creation)
     // vs a pre-scheduled event (needs enrollment)
     if (slot.providerData?.isAvailabilitySlot) {
-      // Create appointment from availability
+      const abcLocalStartTime = slot.providerData.abcLocalStartTime as string;
+      
+      // Validate local start time exists
+      if (!abcLocalStartTime) {
+        return {
+          success: false,
+          message: 'Missing local start time for ABC booking',
+          error: 'Missing abcLocalStartTime in slot providerData',
+        };
+      }
+      
+      // Create appointment from availability using LOCAL time
       const result = await this.adapter.createAppointment({
         employeeId: slot.providerData.employeeId as string,
         eventTypeId: slot.providerData.eventTypeId as string,
         levelId: slot.providerData.levelId as string,
-        startTime: this.formatDateTimeForApi(slot.startTime),
+        startTime: abcLocalStartTime, // Use pre-calculated local time, NOT UTC
         memberId,
       });
       
@@ -366,6 +397,9 @@ export class AbcIgniteBookingProvider implements BookingProvider {
    * Called at request time when all slot context is available.
    * The payload is stored in JSONB and sent as-is during confirmation.
    * This eliminates the need for ID resolution at confirm time.
+   * 
+   * IMPORTANT: For availability slots, we use the pre-calculated abcLocalStartTime
+   * from providerData. ABC API expects LOCAL time, not UTC.
    */
   async buildBookingPayload(
     slot: TimeSlot,
@@ -378,12 +412,21 @@ export class AbcIgniteBookingProvider implements BookingProvider {
       const employeeId = slot.providerData.employeeId as string;
       const eventTypeId = slot.providerData.eventTypeId as string;
       const levelId = slot.providerData.levelId as string;
+      const abcLocalStartTime = slot.providerData.abcLocalStartTime as string;
       
       // Validate required fields
       if (!employeeId || !eventTypeId || !levelId) {
         return {
           success: false,
           error: 'Missing required slot data (employeeId, eventTypeId, or levelId)',
+        };
+      }
+      
+      // Validate local start time exists (required for correct timezone handling)
+      if (!abcLocalStartTime) {
+        return {
+          success: false,
+          error: 'Missing local start time for ABC booking (abcLocalStartTime)',
         };
       }
       
@@ -394,7 +437,7 @@ export class AbcIgniteBookingProvider implements BookingProvider {
           employeeId,
           eventTypeId,
           levelId,
-          startTime: this.formatDateTimeForApi(slot.startTime),
+          startTime: abcLocalStartTime, // Use pre-calculated local time, NOT UTC
           memberId,
         },
       };
@@ -485,9 +528,11 @@ export class AbcIgniteBookingProvider implements BookingProvider {
   }
   
   /**
-   * Format ISO datetime to ABC API format
-   * ABC API expects: "YYYY-MM-DD HH:mm:ss" in UTC
-   * Uses UTC methods to ensure consistent behavior regardless of server timezone
+   * Format ISO datetime to ABC API format (DEPRECATED - use abcLocalStartTime from providerData)
+   * 
+   * WARNING: This method incorrectly uses UTC time. ABC API expects LOCAL time.
+   * Keep for backwards compatibility with pre-scheduled events that use eventTimestamp.
+   * For availability slots, use providerData.abcLocalStartTime instead.
    */
   private formatDateTimeForApi(isoDateTime: string): string {
     const date = new Date(isoDateTime);
@@ -498,6 +543,25 @@ export class AbcIgniteBookingProvider implements BookingProvider {
     const min = String(date.getUTCMinutes()).padStart(2, '0');
     const ss = String(date.getUTCSeconds()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+  }
+  
+  /**
+   * Format local date and time for ABC API
+   * 
+   * ABC API expects startTime in LOCAL time format: "YYYY-MM-DD HH:mm:ss"
+   * This method converts the availability API's date (MM/DD/YYYY) and time (hours, minutes)
+   * to the format ABC expects for POST /calendars/events.
+   * 
+   * @param date - Date in MM/DD/YYYY format (from ABC availability API)
+   * @param hours - Local hours (0-23)
+   * @param minutes - Local minutes (0-59)
+   * @returns "YYYY-MM-DD HH:mm:ss" format for ABC POST /calendars/events
+   */
+  private formatAbcLocalDateTime(date: string, hours: number, minutes: number): string {
+    const [month, day, year] = date.split('/');
+    const hh = String(hours).padStart(2, '0');
+    const mm = String(minutes).padStart(2, '0');
+    return `${year}-${month}-${day} ${hh}:${mm}:00`;
   }
   
   /**

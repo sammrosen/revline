@@ -1053,6 +1053,203 @@ describe('ABC Ignite Booking Provider', () => {
     mockFetch.mockReset();
   });
 
+  describe('timezone handling (local time for ABC API)', () => {
+    it('should use abcLocalStartTime from providerData in buildBookingPayload', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-tz-payload' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      const { AbcIgniteBookingProvider } = await import('@/app/_lib/booking/providers/abc-ignite');
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      const provider = new AbcIgniteBookingProvider(adapter!);
+      
+      // Simulate a slot from availability API:
+      // UTC: 17:00 (5pm UTC) = 9:00 AM Pacific
+      // The abcLocalStartTime should be "2026-01-24 09:00:00" (local time)
+      const slot = {
+        id: 'slot-123',
+        startTime: '2026-01-24T17:00:00.000Z', // 5pm UTC = 9am Pacific
+        endTime: '2026-01-24T18:00:00.000Z',
+        duration: 60,
+        title: 'PT Session',
+        providerData: {
+          employeeId: '12d0d1472b314a95b4e53b08b20d8769',
+          eventTypeId: 'e97a362c66fe4b4683a36852eba33e5b',
+          levelId: 'xzxxxxxxxxxxxxxxxxxxxxxxxxxxx001',
+          isAvailabilitySlot: true,
+          date: '01/24/2026', // ABC format MM/DD/YYYY
+          localStartTime: '09:00', // Block start time (for reference)
+          abcLocalStartTime: '2026-01-24 09:00:00', // Pre-calculated local time
+        },
+      };
+      
+      const customer = { id: 'member-abc123', name: 'John Doe' };
+      const result = await provider.buildBookingPayload(slot, customer);
+      
+      expect(result.success).toBe(true);
+      // Should use the LOCAL time (9:00), NOT the UTC time (17:00)
+      expect(result.payload?.startTime).toBe('2026-01-24 09:00:00');
+    });
+
+    it('should fail buildBookingPayload when abcLocalStartTime is missing', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-tz-missing' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      const { AbcIgniteBookingProvider } = await import('@/app/_lib/booking/providers/abc-ignite');
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      const provider = new AbcIgniteBookingProvider(adapter!);
+      
+      // Slot WITHOUT abcLocalStartTime (legacy format or error)
+      const slot = {
+        id: 'slot-123',
+        startTime: '2026-01-24T17:00:00.000Z',
+        endTime: '2026-01-24T18:00:00.000Z',
+        duration: 60,
+        title: 'PT Session',
+        providerData: {
+          employeeId: 'emp-123',
+          eventTypeId: 'evt-456',
+          levelId: 'level-789',
+          isAvailabilitySlot: true,
+          // abcLocalStartTime is MISSING
+        },
+      };
+      
+      const customer = { id: 'member-abc123', name: 'John Doe' };
+      const result = await provider.buildBookingPayload(slot, customer);
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('abcLocalStartTime');
+    });
+
+    it('should calculate correct abcLocalStartTime for multiple slots in a time block', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-tz-multi-slots' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+        defaultEventTypeId: 'pt_session',
+        eventTypes: {
+          pt_session: {
+            id: 'evt-123',
+            name: 'Personal Training',
+            category: 'Appointment',
+            duration: 30, // 30-minute slots
+          },
+        },
+        defaultEmployeeId: 'trainer1',
+        employees: {
+          trainer1: {
+            id: 'emp-456',
+            name: 'John Trainer',
+          },
+        },
+      });
+      
+      // Mock availability API response:
+      // A 2-hour block from 9:00-11:00 local (17:00-19:00 UTC for Pacific)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          availabilities: [
+            {
+              date: '01/24/2026',
+              times: [
+                {
+                  startTime: '09:00', // Local time
+                  endTime: '11:00',   // Local time
+                  utcStartDateTime: '2026-01-24T17:00:00.000Z',
+                  utcEndDateTime: '2026-01-24T19:00:00.000Z',
+                },
+              ],
+            },
+          ],
+        }),
+      });
+      
+      const { AbcIgniteBookingProvider } = await import('@/app/_lib/booking/providers/abc-ignite');
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      const provider = new AbcIgniteBookingProvider(adapter!);
+      
+      const slots = await provider.getAvailability({
+        startDate: '2026-01-24',
+        endDate: '2026-01-24',
+      });
+      
+      // With 30-min duration, a 2-hour block should produce 4 slots:
+      // 9:00, 9:30, 10:00, 10:30
+      expect(slots.length).toBe(4);
+      
+      // Verify each slot has the correct LOCAL time
+      expect(slots[0].providerData?.abcLocalStartTime).toBe('2026-01-24 09:00:00');
+      expect(slots[1].providerData?.abcLocalStartTime).toBe('2026-01-24 09:30:00');
+      expect(slots[2].providerData?.abcLocalStartTime).toBe('2026-01-24 10:00:00');
+      expect(slots[3].providerData?.abcLocalStartTime).toBe('2026-01-24 10:30:00');
+    });
+
+    it('should send correct local time to ABC API when creating booking', async () => {
+      const client = await createTestWorkspace({ slug: 'abc-tz-create' });
+      await createAbcIgniteIntegration(client.id, TEST_APP_ID, TEST_APP_KEY, {
+        clubNumber: TEST_CLUB_NUMBER,
+      });
+      
+      // Mock successful ABC response
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: { message: 'success', count: '1' },
+          result: {
+            links: [{ rel: 'events', href: `/rest/${TEST_CLUB_NUMBER}/calendars/events/new-event-123` }],
+          },
+        }),
+      });
+      
+      const { AbcIgniteBookingProvider } = await import('@/app/_lib/booking/providers/abc-ignite');
+      const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
+      
+      const adapter = await AbcIgniteAdapter.forClient(client.id);
+      const provider = new AbcIgniteBookingProvider(adapter!);
+      
+      const slot = {
+        id: 'slot-123',
+        startTime: '2026-01-24T17:00:00.000Z', // 5pm UTC
+        endTime: '2026-01-24T18:00:00.000Z',
+        duration: 60,
+        title: 'PT Session',
+        providerData: {
+          employeeId: 'emp-123',
+          eventTypeId: 'evt-456',
+          levelId: 'level-789',
+          isAvailabilitySlot: true,
+          abcLocalStartTime: '2026-01-24 09:00:00', // 9am LOCAL
+        },
+      };
+      
+      const customer = { id: 'member-abc', name: 'John' };
+      await provider.createBooking(slot, customer);
+      
+      // Verify ABC API was called with LOCAL time, not UTC
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/calendars/events'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('09:00:00'), // Should contain local time
+        })
+      );
+      
+      // Also verify it does NOT contain the UTC time
+      const requestBody = mockFetch.mock.calls[0][1].body;
+      expect(requestBody).not.toContain('17:00:00'); // UTC time should NOT be present
+    });
+  });
+
   describe('buildBookingPayload', () => {
     it('should build appointment payload from availability slot', async () => {
       const client = await createTestWorkspace({ slug: 'abc-build-payload-appt' });
@@ -1077,6 +1274,7 @@ describe('ABC Ignite Booking Provider', () => {
           eventTypeId: 'e97a362c66fe4b4683a36852eba33e5b',
           levelId: 'xzxxxxxxxxxxxxxxxxxxxxxxxxxxx001',
           isAvailabilitySlot: true,
+          abcLocalStartTime: '2026-01-24 10:00:00', // Added required field
         },
       };
       
@@ -1095,7 +1293,7 @@ describe('ABC Ignite Booking Provider', () => {
       expect(result.payload?.eventTypeId).toBe('e97a362c66fe4b4683a36852eba33e5b');
       expect(result.payload?.levelId).toBe('xzxxxxxxxxxxxxxxxxxxxxxxxxxxx001');
       expect(result.payload?.memberId).toBe('member-abc123');
-      expect(result.payload?.startTime).toBe('2026-01-24 18:00:00');
+      expect(result.payload?.startTime).toBe('2026-01-24 10:00:00'); // Uses local time now
     });
 
     it('should build enrollment payload from pre-scheduled event', async () => {
