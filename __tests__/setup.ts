@@ -205,7 +205,8 @@ export async function createAbcIgniteIntegration(
   meta?: {
     clubNumber: string;
     defaultEventTypeId?: string;
-    eventTypes?: Record<string, { id: string; name: string; category: string; duration?: number }>;
+    defaultEmployeeId?: string;
+    eventTypes?: Record<string, { id: string; name: string; category: string; duration?: number; levelId?: string }>;
     employees?: Record<string, { id: string; name: string; title?: string }>;
   }
 ) {
