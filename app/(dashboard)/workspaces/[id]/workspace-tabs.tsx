@@ -69,6 +69,7 @@ interface Workflow {
 
 interface WorkspaceTabsProps {
   workspaceId: string;
+  workspaceSlug: string;
   integrations: Integration[];
   events: Event[];
   eventCount?: number; // Total event count for "X of Y" display
@@ -127,7 +128,7 @@ function getInitialTab(): TabType {
   return hash && validTabs.includes(hash) ? hash : 'workflows';
 }
 
-export function WorkspaceTabs({ workspaceId, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York' }: WorkspaceTabsProps) {
+export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York' }: WorkspaceTabsProps) {
   const [activeTab, setActiveTab] = useState<TabType>(getInitialTab);
   const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
 
@@ -289,6 +290,7 @@ export function WorkspaceTabs({ workspaceId, integrations, events, eventCount, l
                             secrets: parseSecrets(integration.secrets),
                           }}
                           workspaceId={workspaceId}
+                          workspaceSlug={workspaceSlug}
                           dependentWorkflows={dependentWorkflows}
                         />
                       </div>

@@ -151,7 +151,7 @@ const addTag: ActionExecutor = {
 
     // TODO: Implement addTag in MailerLiteAdapter
     // For now, log and return success (no-op)
-    console.warn(`[Workflow] add_tag not implemented: ${tag} for ${ctx.email}`);
+    console.warn(`[Workflow] add_tag not implemented: ${tag} for leadId=${ctx.leadId}`);
 
     await emitEvent({
       workspaceId: ctx.workspaceId,

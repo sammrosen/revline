@@ -45,7 +45,7 @@ export const FORM_REGISTRY: FormRegistryEntry[] = [
     id: 'sportswest-booking',
     name: 'Sports West Booking',
     description: 'Personal training session booking for Sports West Athletic Club',
-    path: '/public/sportswest/book',
+    path: '/public/{slug}/book',
     type: 'booking',
     triggers: [
       {
@@ -109,4 +109,15 @@ export function getFormTriggers(formId: string): FormTrigger[] {
 export function isValidFormTrigger(formId: string, triggerId: string): boolean {
   const triggers = getFormTriggers(formId);
   return triggers.some(t => t.id === triggerId);
+}
+
+/**
+ * Resolve a path template by replacing {slug} with actual workspace slug
+ * 
+ * @param pathTemplate - Path with {slug} placeholder (e.g., '/public/{slug}/book')
+ * @param workspaceSlug - The workspace slug to substitute
+ * @returns Resolved path (e.g., '/public/sportswest/book')
+ */
+export function resolveFormPath(pathTemplate: string, workspaceSlug: string): string {
+  return pathTemplate.replace(/{slug}/g, workspaceSlug);
 }

@@ -43,11 +43,13 @@ export interface IntegrationActionsProps {
   integration: Integration;
   /** Workspace ID - used for formId duplicate checking */
   workspaceId?: string;
+  /** Workspace slug - used for resolving form path templates */
+  workspaceSlug?: string;
   /** Workflows that depend on this integration */
   dependentWorkflows?: WorkflowDependency[];
 }
 
-export function IntegrationActions({ integration, workspaceId, dependentWorkflows = [] }: IntegrationActionsProps) {
+export function IntegrationActions({ integration, workspaceId, workspaceSlug, dependentWorkflows = [] }: IntegrationActionsProps) {
   const [showEditMeta, setShowEditMeta] = useState(false);
   const [showManageSecrets, setShowManageSecrets] = useState(false);
   const [metaText, setMetaText] = useState(JSON.stringify(integration.meta || {}, null, 2));
@@ -330,6 +332,7 @@ export function IntegrationActions({ integration, workspaceId, dependentWorkflow
               error={error}
               integrationId={integration.id}
               workspaceId={workspaceId}
+              workspaceSlug={workspaceSlug}
             />
           ) : isResend ? (
             <ResendConfigEditor
