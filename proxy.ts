@@ -1,21 +1,77 @@
 /**
  * Next.js Proxy
  * 
- * Handles two main responsibilities:
- * 1. Protects app routes (workspaces, settings, etc.) with authentication.
+ * Handles three main responsibilities:
+ * 1. Global rate limiting safety net for API routes
+ * 2. Protects app routes (workspaces, settings, etc.) with authentication.
  *    Checks session cookie and redirects to login if not authenticated.
- * 2. Routes custom domains to specific pages.
+ * 3. Routes custom domains to specific pages.
  * 
  * STANDARDS:
  * - All app routes protected automatically
  * - No manual auth checks needed in pages
  * - Passes userId via x-user-id header for server components
  * - /setup only accessible when no users exist (checked in the route itself)
+ * - Global rate limit is a safety net; routes implement their own specific limits
  */
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { validateSession } from './app/_lib/auth';
+
+// =============================================================================
+// GLOBAL RATE LIMITING (Safety Net)
+// =============================================================================
+// In-memory store - resets on server restart (acceptable for safety net)
+// For production multi-instance, route-level limits with Redis would be needed
+const GLOBAL_RATE_LIMIT_STORE = new Map<string, { count: number; resetAt: number }>();
+const GLOBAL_RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
+const GLOBAL_RATE_LIMIT_MAX = 100; // 100 requests per minute per IP
+
+/**
+ * Get client IP from request headers
+ */
+function getClientIP(request: NextRequest): string {
+  const forwarded = request.headers.get('x-forwarded-for');
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
+  }
+  const realIP = request.headers.get('x-real-ip');
+  if (realIP) {
+    return realIP;
+  }
+  return 'unknown';
+}
+
+/**
+ * Check global rate limit for an IP
+ * Returns true if allowed, false if rate limited
+ */
+function checkGlobalRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = GLOBAL_RATE_LIMIT_STORE.get(ip);
+  
+  // Clean up expired entries periodically (every 100th request)
+  if (Math.random() < 0.01) {
+    for (const [key, val] of GLOBAL_RATE_LIMIT_STORE.entries()) {
+      if (val.resetAt < now) {
+        GLOBAL_RATE_LIMIT_STORE.delete(key);
+      }
+    }
+  }
+  
+  if (!entry || entry.resetAt < now) {
+    GLOBAL_RATE_LIMIT_STORE.set(ip, { count: 1, resetAt: now + GLOBAL_RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  
+  if (entry.count >= GLOBAL_RATE_LIMIT_MAX) {
+    return false;
+  }
+  
+  entry.count++;
+  return true;
+}
 
 // Domain to route mapping
 const DOMAIN_ROUTES: Record<string, string> = {
@@ -61,7 +117,25 @@ const PUBLIC_AUTH_PATHS = [
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Check if this is a protected page
+  // 1. Global rate limiting for API routes (safety net)
+  if (pathname.startsWith('/api/')) {
+    const clientIP = getClientIP(request);
+    if (!checkGlobalRateLimit(clientIP)) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please slow down.' },
+        { 
+          status: 429, 
+          headers: {
+            'Retry-After': '60',
+            'X-RateLimit-Limit': String(GLOBAL_RATE_LIMIT_MAX),
+            'X-RateLimit-Remaining': '0',
+          }
+        }
+      );
+    }
+  }
+
+  // 2. Check if this is a protected page
   const isProtectedPage = PROTECTED_PAGE_PREFIXES.some(prefix => 
     pathname.startsWith(prefix)
   );
@@ -128,7 +202,7 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  // 2. Handle domain routing
+  // 3. Handle domain routing
   const hostname = request.headers.get('host') || '';
   
   // Check if this hostname should be routed to a specific page

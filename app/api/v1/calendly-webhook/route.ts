@@ -14,7 +14,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { getClientBySlug } from '@/app/_lib/client-gate';
 import { getClientIntegration, touchIntegration } from '@/app/_lib/integrations';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
@@ -314,8 +314,12 @@ function verifyCalendlySignature(
     hmac.update(signedPayload);
     const expectedSignature = hmac.digest('hex');
 
-    // Verify signatures match (timing-safe comparison would be better)
-    if (expectedSignature !== providedSignature) {
+    // Timing-safe comparison to prevent timing attacks
+    const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+    const providedBuffer = Buffer.from(providedSignature, 'hex');
+    
+    if (expectedBuffer.length !== providedBuffer.length || 
+        !timingSafeEqual(expectedBuffer, providedBuffer)) {
       return false;
     }
 

@@ -12,6 +12,10 @@ import {
   validateTempToken,
   clearTempTokenCookie,
 } from '../route';
+import { rateLimitByIP, getClientIP, getRateLimitHeaders } from '@/app/_lib/middleware';
+
+// Strict rate limit for 2FA verification: 5 attempts per 5 minutes
+const VERIFY_2FA_RATE_LIMIT = { requests: 5, windowMs: 300000 };
 
 /**
  * POST /api/v1/auth/login/verify-2fa
@@ -27,6 +31,17 @@ import {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit check - prevent brute force attacks on 2FA
+    const clientIP = getClientIP(request.headers);
+    const rateLimit = rateLimitByIP(clientIP || 'unknown', VERIFY_2FA_RATE_LIMIT);
+    
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many verification attempts. Please try again later.' },
+        { status: 429, headers: getRateLimitHeaders(rateLimit) }
+      );
+    }
+
     const body = await request.json();
     const { tempToken, code, useRecoveryCode } = body;
 

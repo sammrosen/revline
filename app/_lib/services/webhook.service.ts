@@ -13,6 +13,7 @@ import { emitTrigger } from '@/app/_lib/workflow';
 import { MailerLiteAdapter } from '@/app/_lib/integrations/mailerlite.adapter';
 import { CheckoutData } from '@/app/_lib/integrations/stripe.adapter';
 import { IntegrationResult, WebhookResult } from '@/app/_lib/types';
+import { withTransaction } from '@/app/_lib/utils/transaction';
 
 /**
  * Input parameters for processing Stripe checkout
@@ -55,15 +56,27 @@ export class WebhookService {
     const { workspaceId, checkoutData } = params;
     const { email, name, program, amountTotal } = checkoutData;
 
-    // Step 1: Create/update lead and mark as paid
+    // Step 1 & 2: Create/update lead, update stage, and emit event atomically
     let leadId: string;
     try {
-      leadId = await upsertLead({
-        workspaceId,
-        email,
-        source: 'stripe',
+      leadId = await withTransaction(async (tx) => {
+        const id = await upsertLead({
+          workspaceId,
+          email,
+          source: 'stripe',
+          tx,
+        });
+        await updateLeadStage(id, 'PAID', tx);
+        await emitEvent({
+          workspaceId,
+          leadId: id,
+          system: EventSystem.STRIPE,
+          eventType: 'stripe_payment_succeeded',
+          success: true,
+          tx,
+        });
+        return id;
       });
-      await updateLeadStage(leadId, 'PAID');
     } catch (error) {
       console.error('Failed to upsert lead:', {
         workspaceId,
@@ -74,15 +87,6 @@ export class WebhookService {
         error: 'Failed to create lead record',
       };
     }
-
-    // Step 2: Emit payment success event
-    await emitEvent({
-      workspaceId,
-      leadId,
-      system: EventSystem.STRIPE,
-      eventType: 'stripe_payment_succeeded',
-      success: true,
-    });
 
     // Step 3: Emit trigger to workflow engine
     const result = await emitTrigger(
@@ -130,15 +134,27 @@ export class WebhookService {
   ): Promise<IntegrationResult<WebhookResult>> {
     const { workspaceId, email, name, eventType } = params;
 
-    // Step 1: Create/update lead and mark as booked
+    // Step 1 & 2: Create/update lead, update stage, and emit event atomically
     let leadId: string;
     try {
-      leadId = await upsertLead({
-        workspaceId,
-        email,
-        source: 'calendly',
+      leadId = await withTransaction(async (tx) => {
+        const id = await upsertLead({
+          workspaceId,
+          email,
+          source: 'calendly',
+          tx,
+        });
+        await updateLeadStage(id, 'BOOKED', tx);
+        await emitEvent({
+          workspaceId,
+          leadId: id,
+          system: EventSystem.CALENDLY,
+          eventType: 'calendly_booking_created',
+          success: true,
+          tx,
+        });
+        return id;
       });
-      await updateLeadStage(leadId, 'BOOKED');
     } catch (error) {
       console.error('Failed to upsert lead:', {
         workspaceId,
@@ -149,15 +165,6 @@ export class WebhookService {
         error: 'Failed to create lead record',
       };
     }
-
-    // Step 2: Emit booking created event
-    await emitEvent({
-      workspaceId,
-      leadId,
-      system: EventSystem.CALENDLY,
-      eventType: 'calendly_booking_created',
-      success: true,
-    });
 
     // Step 3: Emit trigger to workflow engine
     const result = await emitTrigger(
@@ -194,15 +201,27 @@ export class WebhookService {
   ): Promise<IntegrationResult<WebhookResult>> {
     const { workspaceId, email, name } = params;
 
-    // Step 1: Find lead and revert to captured
+    // Step 1 & 2: Update lead stage and emit event atomically
     let leadId: string;
     try {
-      leadId = await upsertLead({
-        workspaceId,
-        email,
-        source: 'calendly',
+      leadId = await withTransaction(async (tx) => {
+        const id = await upsertLead({
+          workspaceId,
+          email,
+          source: 'calendly',
+          tx,
+        });
+        await updateLeadStage(id, 'CAPTURED', tx);
+        await emitEvent({
+          workspaceId,
+          leadId: id,
+          system: EventSystem.CALENDLY,
+          eventType: 'calendly_booking_canceled',
+          success: true,
+          tx,
+        });
+        return id;
       });
-      await updateLeadStage(leadId, 'CAPTURED');
     } catch (error) {
       console.error('Failed to update lead:', {
         workspaceId,
@@ -213,15 +232,6 @@ export class WebhookService {
         error: 'Failed to update lead record',
       };
     }
-
-    // Step 2: Emit booking canceled event
-    await emitEvent({
-      workspaceId,
-      leadId,
-      system: EventSystem.CALENDLY,
-      eventType: 'calendly_booking_canceled',
-      success: true,
-    });
 
     // Step 3: Emit trigger to workflow engine
     const result = await emitTrigger(

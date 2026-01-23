@@ -7,6 +7,10 @@ import {
   getUserByEmail,
 } from '@/app/_lib/auth';
 import * as crypto from 'crypto';
+import { rateLimitByIP, getClientIP, getRateLimitHeaders } from '@/app/_lib/middleware';
+
+// Strict rate limit for login: 5 attempts per 5 minutes
+const LOGIN_RATE_LIMIT = { requests: 5, windowMs: 300000 };
 
 const TEMP_TOKEN_COOKIE = 'revline_2fa_temp';
 const TEMP_TOKEN_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
@@ -61,6 +65,17 @@ function verifySignedTempToken(token: string): string | null {
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit check - prevent brute force attacks
+    const clientIP = getClientIP(request.headers);
+    const rateLimit = rateLimitByIP(clientIP || 'unknown', LOGIN_RATE_LIMIT);
+    
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many login attempts. Please try again later.' },
+        { status: 429, headers: getRateLimitHeaders(rateLimit) }
+      );
+    }
+
     const body = await request.json();
     const { email, password } = body;
 

@@ -16,16 +16,16 @@ Route Handler → Service Layer → Integration Adapter → External API
 
 **Why:** Allows swapping integrations, consistent error handling, centralized logging, and easier testing.
 
-### 2. Client Isolation
+### 2. Workspace Isolation
 
-All operations MUST be scoped to a specific client. Never allow cross-client data access.
+All operations MUST be scoped to a specific workspace. Never allow cross-workspace data access.
 
 ```typescript
-// ✅ CORRECT: Always pass clientId
-await getClientIntegration(clientId, IntegrationType.MAILERLITE);
+// ✅ CORRECT: Always pass workspaceId
+await getWorkspaceIntegration(workspaceId, IntegrationType.MAILERLITE);
 
-// ❌ WRONG: Global operations without client scope
-await getMailerLiteConfig(); // Where's the client?
+// ❌ WRONG: Global operations without workspace scope
+await getMailerLiteConfig(); // Where's the workspace?
 ```
 
 ### 3. Event-Driven Debugging
@@ -76,11 +76,11 @@ app/
 │   │   ├── api-response.ts
 │   │   └── validation.ts
 │   ├── auth.ts              # Authentication
-│   ├── client-gate.ts       # Client lookup + execution gating
+│   ├── workspace-gate.ts    # Workspace lookup + execution gating
 │   ├── db.ts                # Prisma client
 │   └── event-logger.ts      # Event emission
 ├── _components/             # Shared React components
-├── admin/                   # Admin dashboard (internal only)
+├── (dashboard)/             # Workspaces dashboard (internal only)
 ├── api/                     # API routes
 │   └── v1/                  # API v1 (all versioned endpoints)
 │       ├── subscribe/       # Lead capture endpoint
@@ -120,7 +120,7 @@ export async function captureEmail(params: any) {
 
 - **Never throw raw errors** in API routes - always return structured responses
 - **Catch at the boundary** - Let errors bubble up to route handlers
-- **Log with context** - Include clientId, leadId, integration type
+- **Log with context** - Include workspaceId, leadId, integration type
 
 ```typescript
 // ✅ CORRECT
@@ -129,7 +129,7 @@ try {
   return ApiResponse.success(result);
 } catch (error) {
   console.error('Webhook processing failed:', {
-    clientId: params.clientId,
+    workspaceId: params.workspaceId,
     error: error instanceof Error ? error.message : 'Unknown',
   });
   return ApiResponse.error('Processing failed', 500);
@@ -170,28 +170,54 @@ health_status_changed
 
 ### 1. Webhook Security
 
-All webhooks MUST verify signatures before processing:
+All webhooks MUST:
+1. Verify signatures before processing
+2. Use timing-safe comparison (`crypto.timingSafeEqual`) to prevent timing attacks
+3. Validate timestamp to prevent replay attacks (within 3-5 minute window)
 
 ```typescript
-// ✅ REQUIRED: Verify before any processing
-const isValid = await verifyWebhookSignature(payload, signature, secret);
-if (!isValid) {
+import { timingSafeEqual } from 'crypto';
+
+// ✅ REQUIRED: Timing-safe signature comparison
+const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+const providedBuffer = Buffer.from(providedSignature, 'hex');
+
+if (expectedBuffer.length !== providedBuffer.length || 
+    !timingSafeEqual(expectedBuffer, providedBuffer)) {
   await emitEvent({ eventType: 'webhook_invalid_signature', success: false });
   return ApiResponse.error('Invalid signature', 400);
 }
+
+// ❌ WRONG: Regular string comparison (vulnerable to timing attacks)
+if (expectedSignature !== providedSignature) { ... }
 ```
 
 ### 2. Input Validation
 
-All external input MUST be validated:
+All external input MUST be validated using Zod schemas:
 
 ```typescript
-// ✅ REQUIRED: Validate all inputs
-const validated = validateCaptureInput(body);
-if (!validated.success) {
-  return ApiResponse.error(validated.error, 400);
+import { z } from 'zod';
+import { validateBody } from '@/app/_lib/utils/validation';
+
+// Define schema
+const BookingSchema = z.object({
+  email: z.string().email(),
+  name: z.string().optional(),
+  slotId: z.string().uuid(),
+});
+
+// ✅ REQUIRED: Validate with Zod in route handlers
+export async function POST(request: NextRequest) {
+  const validation = await validateBody(request, BookingSchema);
+  if (!validation.success) return validation.response;
+  
+  const { email, name, slotId } = validation.data;
+  // Now type-safe and validated
 }
 ```
+
+For existing code, manual validators in `@/app/_lib/utils/validation` are also acceptable.
 
 ### 3. Secret Management
 
@@ -212,8 +238,13 @@ console.log('Using API key:', apiKey.substring(0, 10) + '...');
 
 Public endpoints MUST implement rate limiting:
 
+- `/api/v1/auth/login`: 5 requests per 5 minutes per IP (strict - prevents brute force)
+- `/api/v1/auth/login/verify-2fa`: 5 requests per 5 minutes per IP
 - `/api/v1/subscribe`: 10 requests per minute per IP
-- `/api/v1/*/webhook`: 100 requests per minute per client
+- `/api/v1/*/webhook`: 100 requests per minute per workspace
+- `/api/v1/booking/*`: 3 requests per minute per identifier
+
+A global rate limit (100 req/min per IP) is enforced in `proxy.ts` as a safety net.
 
 ### 5. Security Headers
 
@@ -307,11 +338,11 @@ Before deploying any integration change:
 
 - [ ] Test with valid input
 - [ ] Test with invalid input
-- [ ] Test with missing client
-- [ ] Test with paused client
+- [ ] Test with missing workspace
+- [ ] Test with paused workspace
 - [ ] Test with invalid signature (webhooks)
 - [ ] Verify events are emitted correctly
-- [ ] Check admin dashboard shows events
+- [ ] Check workspaces dashboard shows events
 
 ---
 
@@ -322,6 +353,27 @@ Before deploying any integration change:
 - **Index all foreign keys** and frequently queried columns
 - **Avoid N+1 queries** - Use includes/joins
 - **Paginate large results** - Never load unbounded lists
+
+### Database Transactions
+
+Multi-step operations MUST use transactions to ensure atomicity:
+
+```typescript
+import { withTransaction } from '@/app/_lib/utils/transaction';
+
+// ✅ REQUIRED: Wrap related operations in a transaction
+const leadId = await withTransaction(async (tx) => {
+  const id = await upsertLead({ workspaceId, email, tx });
+  await updateLeadStage(id, 'PAID', tx);
+  await emitEvent({ workspaceId, leadId: id, ..., tx });
+  return id;
+});
+```
+
+Use transactions when:
+- Creating a lead AND updating its stage
+- Multiple database writes that must succeed together
+- Any operation where partial failure would leave inconsistent state
 
 ### External APIs
 
@@ -365,9 +417,9 @@ Before deploying any integration change:
 
 ### When Something Breaks
 
-1. **Check admin dashboard** - Recent events show what happened
+1. **Check workspaces dashboard** - Recent events show what happened
 2. **Check logs** - Railway logs for errors
-3. **Check integrations** - Health status in admin
+3. **Check integrations** - Health status in workspace
 4. **Pause if needed** - Stop the bleeding
 5. **Fix and verify** - Don't rush
 6. **Emit incident event** - For audit trail
@@ -376,10 +428,10 @@ Before deploying any integration change:
 
 | Symptom | Likely Cause | Action |
 |---------|--------------|--------|
-| Events not appearing | Client paused | Check client status |
+| Events not appearing | Workspace paused | Check workspace status |
 | "Invalid signature" | Secret rotated | Update integration secret |
 | Rate limit errors | Too many requests | Wait or upgrade plan |
-| 503 responses | Client not found | Check slug matches |
+| 503 responses | Workspace not found | Check slug matches |
 
 ---
 
@@ -388,5 +440,6 @@ Before deploying any integration change:
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2024-01 | Initial standards document |
+| 1.1 | 2026-01 | Updated "client" → "workspace" terminology, added timing-safe comparison guidance, Zod validation, database transactions, rate limiting for auth routes |
 
 

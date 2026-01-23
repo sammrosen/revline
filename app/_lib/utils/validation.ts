@@ -198,3 +198,81 @@ export function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+// =============================================================================
+// ZOD-BASED VALIDATION (Recommended for new code)
+// =============================================================================
+
+import { z, ZodSchema } from 'zod';
+import { NextRequest, NextResponse } from 'next/server';
+import { ApiResponse } from './api-response';
+
+/**
+ * Result type for validateBody
+ */
+export type ValidateBodyResult<T> = 
+  | { success: true; data: T }
+  | { success: false; response: NextResponse };
+
+/**
+ * Validate request body against a Zod schema
+ * 
+ * Use this for type-safe validation in API routes:
+ * 
+ * @example
+ * ```typescript
+ * const LoginSchema = z.object({
+ *   email: z.string().email(),
+ *   password: z.string().min(1),
+ * });
+ * 
+ * export async function POST(request: NextRequest) {
+ *   const validation = await validateBody(request, LoginSchema);
+ *   if (!validation.success) return validation.response;
+ *   
+ *   const { email, password } = validation.data;
+ *   // Now type-safe and validated
+ * }
+ * ```
+ */
+export async function validateBody<T>(
+  request: NextRequest,
+  schema: ZodSchema<T>
+): Promise<ValidateBodyResult<T>> {
+  try {
+    const body = await request.json();
+    const result = schema.safeParse(body);
+    
+    if (!result.success) {
+      const errorMessages = result.error.issues.map((issue) => {
+        const path = issue.path.join('.');
+        return path ? `${path}: ${issue.message}` : issue.message;
+      }).join(', ');
+      
+      return {
+        success: false,
+        response: ApiResponse.error(errorMessages, 400),
+      };
+    }
+    
+    return { success: true, data: result.data };
+  } catch {
+    return {
+      success: false,
+      response: ApiResponse.error('Invalid JSON body', 400),
+    };
+  }
+}
+
+/**
+ * Common Zod schemas for reuse
+ */
+export const CommonSchemas = {
+  email: z.string().email('Invalid email format').max(254, 'Email too long'),
+  password: z.string().min(1, 'Password is required'),
+  uuid: z.string().uuid('Invalid ID format'),
+  slug: z.string()
+    .min(1, 'Slug is required')
+    .max(50, 'Slug too long')
+    .regex(/^[a-z][a-z0-9_]*$/, 'Slug must start with a letter and contain only lowercase letters, numbers, and underscores'),
+};
+
