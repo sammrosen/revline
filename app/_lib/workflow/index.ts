@@ -10,7 +10,7 @@ import { isValidFormTrigger, getFormTriggers } from '@/app/_lib/forms/registry';
 import type { TriggerEmitResult } from './types';
 
 // Core engine
-export { emitTrigger } from './engine';
+export { emitTrigger, executeWorkflowSync } from './engine';
 
 /**
  * @deprecated Use submitCaptureTrigger() from capture.service.ts instead.
@@ -73,6 +73,7 @@ export {
   REVLINE_ADAPTER,
   MANYCHAT_ADAPTER,
   CAPTURE_ADAPTER,
+  BOOKING_ADAPTER,
 } from './registry';
 
 // Executors
@@ -120,6 +121,8 @@ export type {
   ValidationErrorCode,
   AdapterValidator,
   WorkflowConfig,
+  SyncWorkflowResult,
+  SyncWorkflowOptions,
 } from './types';
 
 // Payload schemas
@@ -130,5 +133,16 @@ export {
   CapturePayloadSchema,
   LeadStageSchema,
 } from './types';
+
+// Templates
+export {
+  ABC_IGNITE_BOOKING_TEMPLATE,
+  WORKFLOW_TEMPLATES,
+  createWorkflowFromTemplate,
+  getAvailableTemplates,
+  createAllAvailableTemplates,
+  ensureAbcIgniteBookingWorkflow,
+} from './templates';
+export type { WorkflowTemplate } from './templates';
 
 

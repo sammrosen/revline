@@ -22,6 +22,8 @@ import {
   WorkflowTrigger,
   WorkflowContextLead,
   WorkflowContextWorkspace,
+  SyncWorkflowResult,
+  SyncWorkflowOptions,
 } from './types';
 import { getActionExecutor } from './executors';
 import { 
@@ -124,6 +126,178 @@ export async function emitTrigger(
     workflowsFound: workflows.length,
     workflowsExecuted,
     executions,
+  };
+}
+
+// =============================================================================
+// SYNC WORKFLOW EXECUTION
+// =============================================================================
+
+/**
+ * Execute a single workflow synchronously and return results
+ * 
+ * Unlike emitTrigger (fire-and-forget), this waits for completion
+ * and returns the final action's result to the caller.
+ * 
+ * Use for user-facing flows that need a response (e.g., booking).
+ * 
+ * @param workspaceId - Workspace ID
+ * @param trigger - Trigger info (adapter + operation)
+ * @param payload - Trigger payload
+ * @param options - Execution options (timeout, idempotency)
+ * @returns Result from the workflow execution
+ * 
+ * @example
+ * const result = await executeWorkflowSync(
+ *   workspaceId,
+ *   { adapter: 'booking', operation: 'create_booking' },
+ *   { slotId, memberId, employeeId, ... }
+ * );
+ * if (!result.success) {
+ *   return ApiResponse.error(result.error);
+ * }
+ */
+export async function executeWorkflowSync(
+  workspaceId: string,
+  trigger: WorkflowTrigger,
+  payload: Record<string, unknown>,
+  options: SyncWorkflowOptions = {}
+): Promise<SyncWorkflowResult> {
+  const { timeoutMs = 30000, allowNoWorkflow = false } = options;
+
+  // Create a timeout promise
+  const timeoutPromise = new Promise<SyncWorkflowResult>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`Workflow execution timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  // Execute with timeout
+  try {
+    const executionPromise = executeWorkflowSyncInternal(
+      workspaceId,
+      trigger,
+      payload,
+      allowNoWorkflow
+    );
+
+    return await Promise.race([executionPromise, timeoutPromise]);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'sync_workflow_error',
+      workspaceId,
+      success: false,
+      error: errorMessage,
+      metadata: { trigger },
+    });
+
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Internal sync execution (without timeout wrapper)
+ */
+async function executeWorkflowSyncInternal(
+  workspaceId: string,
+  trigger: WorkflowTrigger,
+  payload: Record<string, unknown>,
+  allowNoWorkflow: boolean
+): Promise<SyncWorkflowResult> {
+  // 1. Find enabled workflows matching this trigger
+  const workflows = await prisma.workflow.findMany({
+    where: {
+      workspaceId,
+      enabled: true,
+      triggerAdapter: trigger.adapter,
+      triggerOperation: trigger.operation,
+    },
+  });
+
+  // 2. Handle no workflow found
+  if (workflows.length === 0) {
+    if (allowNoWorkflow) {
+      return {
+        success: true,
+        data: { noWorkflow: true },
+      };
+    }
+    return {
+      success: false,
+      error: `No workflow configured for trigger ${trigger.adapter}.${trigger.operation}`,
+    };
+  }
+
+  // 3. For sync execution, we expect exactly one workflow
+  // Multiple workflows would be ambiguous - which result to return?
+  if (workflows.length > 1) {
+    return {
+      success: false,
+      error: `Multiple workflows (${workflows.length}) found for trigger ${trigger.adapter}.${trigger.operation}. Sync execution requires exactly one.`,
+    };
+  }
+
+  const workflow = workflows[0];
+
+  // 4. Check trigger filter
+  const filter = workflow.triggerFilter as Record<string, unknown> | null;
+  if (!matchesFilter(filter, payload)) {
+    return {
+      success: false,
+      error: `Payload does not match workflow filter`,
+    };
+  }
+
+  // 5. Load workspace data for context
+  const workspaceData = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { id: true, name: true, slug: true },
+  });
+
+  const workspaceContext: WorkflowContextWorkspace | undefined = workspaceData
+    ? { id: workspaceData.id, name: workspaceData.name, slug: workspaceData.slug }
+    : undefined;
+
+  // 6. Build context
+  const baseContext: WorkflowContext = {
+    trigger: { ...trigger, payload },
+    email: extractEmail(payload),
+    name: extractName(payload),
+    workspaceId,
+    clientId: workspaceId,
+    workspace: workspaceContext,
+    actionData: {},
+    leadId: undefined,
+    lead: undefined,
+  };
+
+  // 7. Execute workflow
+  const result = await executeWorkflow(
+    {
+      id: workflow.id,
+      name: workflow.name,
+      actions: workflow.actions as unknown as WorkflowAction[],
+    },
+    baseContext
+  );
+
+  // 8. Return sync result
+  // Get the last action's result data (the "primary" result)
+  const lastActionResult = result.results[result.results.length - 1]?.result;
+
+  return {
+    success: result.status === 'completed',
+    data: lastActionResult?.data,
+    error: result.error,
+    executionId: result.workflowId, // Note: This should be execution ID but we don't expose it yet
+    workflowId: result.workflowId,
+    workflowName: result.workflowName,
   };
 }
 

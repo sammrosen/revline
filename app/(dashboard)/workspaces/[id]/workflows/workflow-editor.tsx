@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Trash2 } from 'lucide-react';
 
 interface WorkflowAction {
   adapter: string;
@@ -95,6 +95,11 @@ export function WorkflowEditor({
   const [showDisableModal, setShowDisableModal] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
   
+  // Delete workflow state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  
   // Check if workflow is active and being edited
   const isEditingActiveWorkflow = workflowId && initialData?.enabled;
 
@@ -139,6 +144,40 @@ export function WorkflowEditor({
       setError('Failed to disable workflow');
     } finally {
       setIsDisabling(false);
+    }
+  };
+
+  // Handle deleting workflow
+  const handleDeleteWorkflow = async () => {
+    if (!workflowId) return;
+    
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      const response = await fetch(`/api/v1/workflows/${workflowId}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        // Close modal and refresh
+        if (onSave) {
+          onSave();
+        }
+        if (onClose) {
+          onClose();
+        } else {
+          router.push(`/workspaces/${workspaceId}`);
+        }
+        router.refresh();
+      } else {
+        const data = await response.json();
+        setDeleteError(data.error || 'Failed to delete workflow');
+      }
+    } catch (err) {
+      console.error('Failed to delete workflow:', err);
+      setDeleteError('Failed to delete workflow');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -566,6 +605,68 @@ export function WorkflowEditor({
           </div>
         )}
       </div>
+
+      {/* Danger Zone - Only show when editing existing workflow */}
+      {workflowId && (
+        <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <Trash2 className="w-5 h-5 text-red-400" />
+            <h3 className="text-lg font-semibold text-red-400">Danger Zone</h3>
+          </div>
+          
+          {!showDeleteConfirm ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-zinc-400">
+                  Permanently delete this workflow
+                </p>
+                <p className="text-xs text-zinc-500 mt-1">
+                  This action cannot be undone. All execution history will be preserved.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="px-4 py-2 bg-red-500/10 text-red-400 text-sm rounded border border-red-500/30 hover:bg-red-500/20 transition-colors"
+              >
+                Delete Workflow
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-red-400">
+                Are you sure you want to delete &quot;{name || 'this workflow'}&quot;? This cannot be undone.
+              </p>
+              {deleteError && (
+                <p className="text-sm text-red-400 bg-red-500/10 p-2 rounded">
+                  {deleteError}
+                </p>
+              )}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleDeleteWorkflow}
+                  disabled={isDeleting}
+                  className="px-4 py-2 bg-red-500 text-white text-sm rounded hover:bg-red-600 disabled:opacity-50 transition-colors"
+                >
+                  {isDeleting ? 'Deleting...' : 'Yes, Delete Workflow'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeleteError(null);
+                  }}
+                  disabled={isDeleting}
+                  className="px-4 py-2 text-zinc-400 hover:text-white text-sm disabled:opacity-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Submit */}
       <div className={onClose ? "flex gap-3 pt-4 border-t border-zinc-800" : "flex items-center justify-end gap-4"}>

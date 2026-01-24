@@ -25,6 +25,27 @@ interface WorkflowTemplate {
 
 // Default workflow templates
 const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
+  // ABC Ignite Booking Flow (Sync Workflow)
+  {
+    name: 'ABC Ignite Booking',
+    description: 'Creates appointments in ABC Ignite when a booking is requested (sync workflow)',
+    triggerAdapter: 'booking',
+    triggerOperation: 'create_booking',
+    actions: [
+      {
+        adapter: 'abc_ignite',
+        operation: 'create_appointment',
+        params: {
+          employeeId: '{{trigger.payload.employeeId}}',
+          eventTypeId: '{{trigger.payload.eventTypeId}}',
+          levelId: '{{trigger.payload.levelId}}',
+          startTime: '{{trigger.payload.startTime}}',
+          memberId: '{{trigger.payload.memberId}}',
+        },
+      },
+    ],
+    requiresIntegration: IntegrationType.ABC_IGNITE,
+  },
   // Email Capture Flow
   {
     name: 'Email Capture Flow',

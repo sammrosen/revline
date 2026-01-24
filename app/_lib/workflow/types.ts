@@ -225,6 +225,41 @@ export interface TriggerEmitResult {
 }
 
 // =============================================================================
+// SYNC WORKFLOW EXECUTION
+// =============================================================================
+
+/**
+ * Result from synchronous workflow execution
+ * Returns action results to the caller (unlike fire-and-forget emitTrigger)
+ */
+export interface SyncWorkflowResult {
+  /** Whether the workflow completed successfully */
+  success: boolean;
+  /** Data from the final action (or specified action) */
+  data?: Record<string, unknown>;
+  /** Error message if failed */
+  error?: string;
+  /** Execution ID for audit trail */
+  executionId?: string;
+  /** Workflow ID that was executed */
+  workflowId?: string;
+  /** Workflow name */
+  workflowName?: string;
+}
+
+/**
+ * Options for synchronous workflow execution
+ */
+export interface SyncWorkflowOptions {
+  /** Timeout for workflow execution in milliseconds (default: 30000) */
+  timeoutMs?: number;
+  /** Optional caller-provided idempotency key */
+  idempotencyKey?: string;
+  /** If true, don't fail when no workflow is configured */
+  allowNoWorkflow?: boolean;
+}
+
+// =============================================================================
 // ACTION EXECUTOR INTERFACE
 // =============================================================================
 

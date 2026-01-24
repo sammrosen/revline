@@ -12,6 +12,10 @@ import {
   Zap,
   MessageCircle,
   LucideIcon,
+  CalendarCheck,
+  Send,
+  FileText,
+  Dumbbell,
 } from 'lucide-react';
 
 export interface IntegrationStyle {
@@ -70,6 +74,38 @@ export const INTEGRATION_CONFIG: Record<string, IntegrationStyle> = {
     textClass: 'text-pink-400',
     icon: MessageCircle,
   },
+  abc_ignite: {
+    name: 'ABC Ignite',
+    color: '#EF4444',
+    bgClass: 'bg-red-500/20',
+    borderClass: 'border-red-500/40',
+    textClass: 'text-red-400',
+    icon: Dumbbell,
+  },
+  resend: {
+    name: 'Resend',
+    color: '#000000',
+    bgClass: 'bg-zinc-600/20',
+    borderClass: 'border-zinc-500/40',
+    textClass: 'text-zinc-300',
+    icon: Send,
+  },
+  capture: {
+    name: 'Form Capture',
+    color: '#8B5CF6',
+    bgClass: 'bg-purple-500/20',
+    borderClass: 'border-purple-500/40',
+    textClass: 'text-purple-400',
+    icon: FileText,
+  },
+  booking: {
+    name: 'Booking System',
+    color: '#10B981',
+    bgClass: 'bg-emerald-500/20',
+    borderClass: 'border-emerald-500/40',
+    textClass: 'text-emerald-400',
+    icon: CalendarCheck,
+  },
 };
 
 /**
@@ -93,22 +129,42 @@ export function getIntegrationStyle(adapterId: string): IntegrationStyle {
  * Operation display names
  */
 export const OPERATION_LABELS: Record<string, string> = {
-  // Triggers
+  // Triggers - Calendly
   booking_created: 'Booking Created',
   booking_canceled: 'Booking Canceled',
+  // Triggers - Stripe
   payment_succeeded: 'Payment Succeeded',
   subscription_created: 'Subscription Created',
   subscription_canceled: 'Subscription Canceled',
+  // Triggers - RevLine
   email_captured: 'Email Captured',
+  // Triggers - ManyChat
   dm_received: 'DM Received',
-  // Actions
+  // Triggers - Booking System (sync)
+  create_booking: 'Create Booking',
+  add_to_waitlist: 'Add to Waitlist',
+  // Triggers - Capture
+  booking_confirmed: 'Booking Confirmed',
+  booking_waitlisted: 'Booking Waitlisted',
+  form_captured: 'Form Captured',
+  // Actions - MailerLite
   add_to_group: 'Add to Group',
   remove_from_group: 'Remove from Group',
   add_tag: 'Add Tag',
+  // Actions - RevLine
   create_lead: 'Create Lead',
   update_lead_stage: 'Update Lead Stage',
   emit_event: 'Emit Event',
+  // Actions - ManyChat
   trigger_flow: 'Trigger Flow',
+  // Actions - ABC Ignite
+  lookup_member: 'Lookup Member',
+  check_availability: 'Check Availability',
+  create_appointment: 'Create Appointment',
+  enroll_member: 'Enroll Member',
+  unenroll_member: 'Unenroll Member',
+  // Actions - Resend
+  send_email: 'Send Email',
 };
 
 /**

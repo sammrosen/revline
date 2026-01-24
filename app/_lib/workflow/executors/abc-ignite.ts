@@ -161,6 +161,87 @@ const checkAvailability: ActionExecutor = {
 // Re-add when that endpoint is activated in ABC Ignite
 
 // =============================================================================
+// APPOINTMENT CREATION
+// =============================================================================
+
+/**
+ * Create a new appointment from employee availability
+ * 
+ * This creates a new calendar event (appointment) rather than enrolling
+ * in an existing event. Use this for booking from availability slots.
+ */
+const createAppointment: ActionExecutor = {
+  async execute(
+    ctx: WorkflowContext,
+    params: Record<string, unknown>
+  ): Promise<ActionResult> {
+    const adapter = await AbcIgniteAdapter.forClient(ctx.workspaceId);
+    if (!adapter) {
+      return { success: false, error: 'ABC Ignite not configured for this client' };
+    }
+
+    // Required params
+    const employeeId = params.employeeId as string;
+    if (!employeeId) {
+      return { success: false, error: 'Missing employeeId parameter' };
+    }
+
+    const eventTypeId = params.eventTypeId as string;
+    if (!eventTypeId) {
+      return { success: false, error: 'Missing eventTypeId parameter' };
+    }
+
+    const startTime = params.startTime as string;
+    if (!startTime) {
+      return { success: false, error: 'Missing startTime parameter (local time format: YYYY-MM-DD HH:MM:SS)' };
+    }
+
+    const memberId = params.memberId as string;
+    if (!memberId) {
+      return { success: false, error: 'Missing memberId parameter' };
+    }
+
+    // Optional params
+    const levelId = params.levelId as string | undefined;
+
+    // Create the appointment
+    const result = await adapter.createAppointment({
+      employeeId,
+      eventTypeId,
+      levelId,
+      startTime,
+      memberId,
+    });
+
+    await emitEvent({
+      workspaceId: ctx.workspaceId,
+      leadId: ctx.leadId,
+      system: EventSystem.ABC_IGNITE,
+      eventType: result.success
+        ? 'abc_ignite_appointment_created'
+        : 'abc_ignite_appointment_create_failed',
+      success: result.success,
+      errorMessage: result.error,
+    });
+
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+
+    return {
+      success: true,
+      data: {
+        eventId: result.data?.eventId,
+        bookingId: result.data?.eventId,
+        memberId,
+        employeeId,
+        startTime,
+      },
+    };
+  },
+};
+
+// =============================================================================
 // ENROLLMENT ACTIONS
 // =============================================================================
 
@@ -391,6 +472,7 @@ const removeFromWaitlist: ActionExecutor = {
 export const abcIgniteExecutors: Record<string, ActionExecutor> = {
   lookup_member: lookupMember,
   check_availability: checkAvailability,
+  create_appointment: createAppointment,
   // check_session_balance: removed - requires /session-balance endpoint
   enroll_member: enrollMember,
   unenroll_member: unenrollMember,

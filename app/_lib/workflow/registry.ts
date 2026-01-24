@@ -352,6 +352,29 @@ export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
     // check_session_balance: removed - requires /session-balance endpoint
 
     // =========================================================================
+    // APPOINTMENT CREATION
+    // =========================================================================
+    create_appointment: {
+      name: 'create_appointment',
+      label: 'Create Appointment',
+      description: 'Create a new appointment from employee availability',
+      payloadSchema: z.object({
+        employeeId: z.string().describe('ABC employee ID'),
+        eventTypeId: z.string().describe('ABC event type ID'),
+        startTime: z.string().describe('Appointment start time (local time: YYYY-MM-DD HH:MM:SS)'),
+        memberId: z.string().describe('ABC member ID'),
+        levelId: z.string().optional().describe('ABC level ID'),
+      }),
+      paramsSchema: z.object({
+        employeeId: z.string().describe('ABC employee ID'),
+        eventTypeId: z.string().describe('ABC event type ID'),
+        startTime: z.string().describe('Appointment start time (local time: YYYY-MM-DD HH:MM:SS)'),
+        memberId: z.string().describe('ABC member ID'),
+        levelId: z.string().optional().describe('ABC level ID'),
+      }),
+    },
+
+    // =========================================================================
     // ENROLLMENT ACTIONS
     // =========================================================================
     enroll_member: {
@@ -451,6 +474,60 @@ export const CAPTURE_ADAPTER: AdapterDefinition = {
   actions: {}, // No actions - capture only emits triggers
 };
 
+/**
+ * Booking Adapter
+ * 
+ * Handles sync workflow triggers for the booking system.
+ * These triggers are used with executeWorkflowSync() for user-facing flows
+ * that need synchronous results (e.g., booking form returns success/failure).
+ * 
+ * Triggers:
+ * - create_booking: Create a new appointment from employee availability
+ * - add_to_waitlist: Add member to event waitlist
+ */
+export const BOOKING_ADAPTER: AdapterDefinition = {
+  id: 'booking',
+  name: 'Booking System',
+  requiresIntegration: false, // Built-in system
+  triggers: {
+    create_booking: {
+      name: 'create_booking',
+      label: 'Create Booking',
+      description: 'When a booking is requested (sync workflow)',
+      payloadSchema: z.object({
+        slotId: z.string().optional().describe('Slot identifier'),
+        employeeId: z.string().describe('ABC employee ID'),
+        eventTypeId: z.string().describe('ABC event type ID'),
+        levelId: z.string().optional().describe('ABC level ID'),
+        startTime: z.string().describe('Appointment start time (local time)'),
+        memberId: z.string().describe('ABC member ID'),
+        customerEmail: z.string().email().optional().describe('Customer email'),
+        customerName: z.string().optional().describe('Customer name'),
+      }),
+      testFields: [
+        { name: 'employeeId', label: 'Employee ID', type: 'text', required: true },
+        { name: 'eventTypeId', label: 'Event Type ID', type: 'text', required: true },
+        { name: 'startTime', label: 'Start Time', type: 'text', required: true, placeholder: '2026-01-24 09:00:00' },
+        { name: 'memberId', label: 'Member ID', type: 'text', required: true },
+      ],
+    },
+    add_to_waitlist: {
+      name: 'add_to_waitlist',
+      label: 'Add to Waitlist',
+      description: 'When adding to event waitlist (sync workflow)',
+      payloadSchema: z.object({
+        eventId: z.string().describe('ABC event ID'),
+        memberId: z.string().describe('ABC member ID'),
+      }),
+      testFields: [
+        { name: 'eventId', label: 'Event ID', type: 'text', required: true },
+        { name: 'memberId', label: 'Member ID', type: 'text', required: true },
+      ],
+    },
+  },
+  actions: {}, // Booking is trigger-only - actions are in ABC Ignite adapter
+};
+
 // =============================================================================
 // REGISTRY
 // =============================================================================
@@ -467,6 +544,7 @@ export const ADAPTER_REGISTRY: Record<string, AdapterDefinition> = {
   abc_ignite: ABC_IGNITE_ADAPTER,
   resend: RESEND_ADAPTER,
   capture: CAPTURE_ADAPTER,
+  booking: BOOKING_ADAPTER,
 };
 
 // =============================================================================

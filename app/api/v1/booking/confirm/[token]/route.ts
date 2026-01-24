@@ -10,6 +10,10 @@
  * - Expiry check before processing
  * - Re-verification with provider before booking
  * 
+ * SYNC WORKFLOW EXECUTION:
+ * First attempts to use sync workflow (booking.create_booking trigger).
+ * Falls back to direct provider call if no workflow is configured.
+ * 
  * STANDARDS:
  * - Provider-agnostic (works with any BookingProvider)
  * - Redirects (not JSON) for browser experience
@@ -23,6 +27,7 @@ import { getBookingProvider } from '@/app/_lib/booking/get-provider';
 import { hashToken, isTokenExpired } from '@/app/_lib/booking/magic-link';
 import { BookingCustomer, TimeSlot } from '@/app/_lib/booking/types';
 import { PendingBookingStatus } from '@prisma/client';
+import { executeWorkflowSync } from '@/app/_lib/workflow';
 
 /**
  * Build workspace-specific redirect URL
@@ -208,46 +213,14 @@ export async function GET(
       }
     }
     
-    // Execute the booking using the stored payload (preferred) or fall back to createBooking
-    let bookingResult;
-    
-    const storedPayload = pendingBooking.providerPayload as Record<string, unknown> | null;
-    
-    if (storedPayload && provider.executeBookingPayload) {
-      // New approach: Execute the pre-built payload directly
-      // No ID resolution or transformation needed - just send it
-      bookingResult = await provider.executeBookingPayload(storedPayload);
-    } else {
-      // Legacy fallback: Build slot and use createBooking
-      // This supports existing pending bookings without providerPayload
-      const providerData = pendingBooking.providerData as Record<string, unknown> | null;
-      
-      // Resolve the actual provider employee ID
-      let resolvedEmployeeId = pendingBooking.staffId;
-      if (provider.resolveEmployeeId && pendingBooking.staffId) {
-        const resolved = provider.resolveEmployeeId(pendingBooking.staffId);
-        if (resolved) {
-          resolvedEmployeeId = resolved;
-        }
-      }
-      
-      const slot: TimeSlot = {
-        id: providerData?.slotId as string || `pending-${pendingBooking.id}`,
-        startTime: pendingBooking.scheduledAt.toISOString(),
-        endTime: new Date(pendingBooking.scheduledAt.getTime() + 60 * 60 * 1000).toISOString(),
-        duration: (providerData?.duration as number) || 60,
-        title: pendingBooking.serviceName || 'Session',
-        staffName: pendingBooking.staffName || undefined,
-        providerData: {
-          ...providerData,
-          employeeId: resolvedEmployeeId,
-          eventTypeId: pendingBooking.serviceId,
-          isAvailabilitySlot: providerData?.isAvailabilitySlot ?? true,
-        },
-      };
-      
-      bookingResult = await provider.createBooking(slot, customer);
-    }
+    // Execute the booking
+    // Priority: 1. Sync workflow, 2. Provider executeBookingPayload, 3. Provider createBooking
+    const bookingResult = await executeBookingWithWorkflowOrProvider(
+      workspaceId,
+      pendingBooking,
+      provider,
+      customer
+    );
     
     if (!bookingResult.success) {
       await prisma.pendingBooking.update({
@@ -308,4 +281,120 @@ export async function GET(
     // Can't determine workspace in catch block, use generic error page
     return NextResponse.redirect(buildRedirectUrl(null, 'error', { error: 'failed' }));
   }
+}
+
+/**
+ * Execute booking via sync workflow or fallback to direct provider
+ */
+async function executeBookingWithWorkflowOrProvider(
+  workspaceId: string,
+  pendingBooking: {
+    id: string;
+    customerId: string;
+    staffId: string;
+    serviceId: string | null;
+    staffName: string | null;
+    serviceName: string | null;
+    scheduledAt: Date;
+    providerPayload: unknown;
+    providerData: unknown;
+  },
+  provider: Awaited<ReturnType<typeof getBookingProvider>>,
+  customer: BookingCustomer
+): Promise<{ success: boolean; bookingId?: string; error?: string }> {
+  const storedPayload = pendingBooking.providerPayload as Record<string, unknown> | null;
+  const providerData = pendingBooking.providerData as Record<string, unknown> | null;
+
+  // Try sync workflow first if we have the required data
+  if (storedPayload) {
+    // The stored payload contains ABC-specific fields
+    const employeeId = storedPayload.employeeId as string;
+    const eventTypeId = storedPayload.eventTypeId as string;
+    const startTime = storedPayload.startTime as string;
+    const memberId = storedPayload.memberId as string;
+    const levelId = storedPayload.levelId as string | undefined;
+
+    if (employeeId && eventTypeId && startTime && memberId) {
+      const workflowResult = await executeWorkflowSync(
+        workspaceId,
+        { adapter: 'booking', operation: 'create_booking' },
+        {
+          slotId: pendingBooking.id,
+          employeeId,
+          eventTypeId,
+          levelId,
+          startTime,
+          memberId,
+          customerEmail: customer.email,
+          customerName: customer.name,
+        },
+        { allowNoWorkflow: true }
+      );
+
+      // If workflow executed successfully (not just "no workflow found")
+      if (workflowResult.success && !workflowResult.data?.noWorkflow) {
+        return {
+          success: true,
+          bookingId: (workflowResult.data?.bookingId || workflowResult.data?.eventId) as string | undefined,
+        };
+      }
+
+      // If workflow failed (not "no workflow"), return the error
+      if (!workflowResult.success && !workflowResult.error?.includes('No workflow configured')) {
+        return {
+          success: false,
+          error: workflowResult.error,
+        };
+      }
+    }
+  }
+
+  // Fallback to provider
+  if (!provider) {
+    return {
+      success: false,
+      error: 'No booking provider configured',
+    };
+  }
+
+  // Try executeBookingPayload first (new approach with stored payload)
+  if (storedPayload && provider.executeBookingPayload) {
+    const result = await provider.executeBookingPayload(storedPayload);
+    return {
+      success: result.success,
+      bookingId: result.bookingId,
+      error: result.error,
+    };
+  }
+
+  // Legacy fallback: Build slot and use createBooking
+  let resolvedEmployeeId = pendingBooking.staffId;
+  if (provider.resolveEmployeeId && pendingBooking.staffId) {
+    const resolved = provider.resolveEmployeeId(pendingBooking.staffId);
+    if (resolved) {
+      resolvedEmployeeId = resolved;
+    }
+  }
+
+  const slot: TimeSlot = {
+    id: providerData?.slotId as string || `pending-${pendingBooking.id}`,
+    startTime: pendingBooking.scheduledAt.toISOString(),
+    endTime: new Date(pendingBooking.scheduledAt.getTime() + 60 * 60 * 1000).toISOString(),
+    duration: (providerData?.duration as number) || 60,
+    title: pendingBooking.serviceName || 'Session',
+    staffName: pendingBooking.staffName || undefined,
+    providerData: {
+      ...providerData,
+      employeeId: resolvedEmployeeId,
+      eventTypeId: pendingBooking.serviceId,
+      isAvailabilitySlot: providerData?.isAvailabilitySlot ?? true,
+    },
+  };
+
+  const result = await provider.createBooking(slot, customer);
+  return {
+    success: result.success,
+    bookingId: result.bookingId,
+    error: result.error,
+  };
 }
