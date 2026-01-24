@@ -697,8 +697,8 @@ describe('ABC Ignite Adapter', () => {
         clubNumber: TEST_CLUB_NUMBER,
       });
       
-      // Mock network failure
-      mockFetch.mockRejectedValueOnce(new Error('Connection refused'));
+      // Mock network failure for all retry attempts (resilientFetch retries 3 times)
+      mockFetch.mockRejectedValue(new Error('Connection refused'));
       
       const { AbcIgniteAdapter } = await import('@/app/_lib/integrations');
       const adapter = await AbcIgniteAdapter.forClient(client.id);

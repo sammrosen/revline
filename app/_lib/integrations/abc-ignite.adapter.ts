@@ -19,6 +19,7 @@
 import { IntegrationType } from '@prisma/client';
 import { BaseIntegrationAdapter } from './base';
 import { AbcIgniteMeta, IntegrationResult } from '@/app/_lib/types';
+import { resilientFetch, logStructured } from '@/app/_lib/reliability';
 
 /** Secret names for ABC Ignite API */
 export const ABC_IGNITE_APP_ID = 'App ID';
@@ -567,7 +568,13 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   }
 
   /**
-   * Make an authenticated API request
+   * Make an authenticated API request with resilient retry logic
+   * 
+   * Uses resilientFetch for:
+   * - Automatic retries on 5xx errors and network failures
+   * - Exponential backoff with jitter
+   * - Rate limit (429) handling with Retry-After support
+   * - Per-request timeouts
    */
   private async apiRequest<T>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
@@ -576,29 +583,30 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   ): Promise<IntegrationResult<T>> {
     const clubNumber = this.getClubNumber();
     const url = `${ABC_IGNITE_API_BASE}/${clubNumber}${endpoint}`;
-    const startTime = Date.now();
+    const correlationId = crypto.randomUUID();
     
     // Structured request log (no secrets, no PII)
-    console.log(JSON.stringify({
-      timestamp: new Date().toISOString(),
+    logStructured({
+      correlationId,
       event: 'abc_api_request',
       workspaceId: this.workspaceId,
-      method,
-      endpoint,
-    }));
+      metadata: { method, endpoint },
+    });
     
     try {
       const headers = this.getAuthHeaders();
       
-      const response = await fetch(url, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-      });
+      const { response, attempts, totalTimeMs } = await resilientFetch(
+        url,
+        {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+        },
+        { timeout: 10000, deadline: 30000, retries: 3 }
+      );
 
-      const duration_ms = Date.now() - startTime;
-
-      // Handle non-OK responses
+      // Handle non-OK responses (after retries exhausted)
       if (!response.ok) {
         const errorText = await response.text();
         let errorMessage = `ABC Ignite API error: ${response.status}`;
@@ -613,15 +621,19 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
         }
         
         // Structured error response log
-        console.log(JSON.stringify({
-          timestamp: new Date().toISOString(),
+        logStructured({
+          correlationId,
           event: 'abc_api_response',
           workspaceId: this.workspaceId,
-          endpoint,
-          status: response.status,
-          success: false,
-          duration_ms,
-        }));
+          error: errorMessage,
+          metadata: {
+            endpoint,
+            status: response.status,
+            success: false,
+            duration_ms: totalTimeMs,
+            attempts,
+          },
+        });
         
         // 5xx errors are retryable, 4xx are not
         const isRetryable = response.status >= 500;
@@ -632,38 +644,38 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
       const data = await response.json() as T;
       
       // Structured success response log (safe IDs only, no PII)
-      console.log(JSON.stringify({
-        timestamp: new Date().toISOString(),
+      logStructured({
+        correlationId,
         event: 'abc_api_response',
         workspaceId: this.workspaceId,
-        endpoint,
-        status: response.status,
-        success: true,
-        duration_ms,
-        // Safe to log: IDs and counts only
-        responseId: (data as Record<string, unknown>)?.eventId || (data as Record<string, unknown>)?.memberId,
-        memberCount: Array.isArray((data as Record<string, unknown>)?.members) ? ((data as Record<string, unknown>).members as unknown[]).length : undefined,
-        eventCount: Array.isArray((data as Record<string, unknown>)?.events) ? ((data as Record<string, unknown>).events as unknown[]).length : undefined,
-        employeeCount: Array.isArray((data as Record<string, unknown>)?.employees) ? ((data as Record<string, unknown>).employees as unknown[]).length : undefined,
-      }));
+        metadata: {
+          endpoint,
+          status: response.status,
+          success: true,
+          duration_ms: totalTimeMs,
+          attempts,
+          // Safe to log: IDs and counts only
+          responseId: (data as Record<string, unknown>)?.eventId || (data as Record<string, unknown>)?.memberId,
+          memberCount: Array.isArray((data as Record<string, unknown>)?.members) ? ((data as Record<string, unknown>).members as unknown[]).length : undefined,
+          eventCount: Array.isArray((data as Record<string, unknown>)?.events) ? ((data as Record<string, unknown>).events as unknown[]).length : undefined,
+          employeeCount: Array.isArray((data as Record<string, unknown>)?.employees) ? ((data as Record<string, unknown>).employees as unknown[]).length : undefined,
+        },
+      });
       
       await this.touch();
       return this.success(data);
       
     } catch (error) {
-      const duration_ms = Date.now() - startTime;
       const message = error instanceof Error ? error.message : 'Unknown error';
       
       // Structured error log
-      console.log(JSON.stringify({
-        timestamp: new Date().toISOString(),
+      logStructured({
+        correlationId,
         event: 'abc_api_error',
         workspaceId: this.workspaceId,
-        method,
-        endpoint,
-        duration_ms,
         error: message,
-      }));
+        metadata: { method, endpoint },
+      });
       
       return this.error(message, true);
     }
@@ -673,39 +685,42 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
    * Raw API request for testing/debugging
    * Used by the Testing tab to make arbitrary API calls
    * 
+   * Uses resilientFetch for automatic retries and rate limit handling.
+   * 
    * @param method - HTTP method
    * @param endpoint - API endpoint path (without club number prefix)
    * @param body - Optional request body for POST/PUT
-   * @returns Response with status, data, and timing
+   * @returns Response with status, data, timing, and retry attempts
    */
   async rawRequest(
     method: string,
     endpoint: string,
     body?: unknown
-  ): Promise<{ status: number; data: unknown; duration_ms: number; error?: string }> {
+  ): Promise<{ status: number; data: unknown; duration_ms: number; attempts: number; error?: string }> {
     const clubNumber = this.getClubNumber();
     const url = `${ABC_IGNITE_API_BASE}/${clubNumber}${endpoint}`;
-    const startTime = Date.now();
+    const correlationId = crypto.randomUUID();
     
     // Structured request log
-    console.log(JSON.stringify({
-      timestamp: new Date().toISOString(),
+    logStructured({
+      correlationId,
       event: 'abc_raw_request',
       workspaceId: this.workspaceId,
-      method,
-      endpoint,
-    }));
+      metadata: { method, endpoint },
+    });
     
     try {
       const headers = this.getAuthHeaders();
       
-      const response = await fetch(url, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-
-      const duration_ms = Date.now() - startTime;
+      const { response, attempts, totalTimeMs } = await resilientFetch(
+        url,
+        {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+        },
+        { timeout: 10000, deadline: 30000, retries: 3 }
+      );
       
       // Try to parse as JSON, fall back to text
       let data: unknown;
@@ -717,46 +732,48 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
       }
       
       // Structured response log
-      console.log(JSON.stringify({
-        timestamp: new Date().toISOString(),
+      logStructured({
+        correlationId,
         event: 'abc_raw_response',
         workspaceId: this.workspaceId,
-        endpoint,
-        status: response.status,
-        success: response.ok,
-        duration_ms,
-      }));
+        metadata: {
+          endpoint,
+          status: response.status,
+          success: response.ok,
+          duration_ms: totalTimeMs,
+          attempts,
+        },
+      });
       
       if (!response.ok) {
         return {
           status: response.status,
           data,
-          duration_ms,
+          duration_ms: totalTimeMs,
+          attempts,
           error: typeof data === 'string' ? data : (data as Record<string, unknown>)?.message as string || `HTTP ${response.status}`,
         };
       }
       
       await this.touch();
-      return { status: response.status, data, duration_ms };
+      return { status: response.status, data, duration_ms: totalTimeMs, attempts };
       
     } catch (error) {
-      const duration_ms = Date.now() - startTime;
       const message = error instanceof Error ? error.message : 'Unknown error';
       
-      console.log(JSON.stringify({
-        timestamp: new Date().toISOString(),
+      logStructured({
+        correlationId,
         event: 'abc_raw_error',
         workspaceId: this.workspaceId,
-        method,
-        endpoint,
-        duration_ms,
         error: message,
-      }));
+        metadata: { method, endpoint },
+      });
       
       return {
         status: 0,
         data: null,
-        duration_ms,
+        duration_ms: 0,
+        attempts: 0,
         error: message,
       };
     }
