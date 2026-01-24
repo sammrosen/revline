@@ -1,11 +1,12 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { prisma } from '@/app/_lib/db';
 import Link from 'next/link';
 import { WorkspaceActionsDropdown } from './workspace-actions-dropdown';
 import { WorkspaceTabs } from './workspace-tabs';
-import { WorkspaceSettingsButton } from './workspace-settings-button';
-import { IntegrationType } from '@prisma/client';
+import { IntegrationType, WorkspaceRole } from '@prisma/client';
 import { MailerLiteMeta, isMailerLiteMeta, StripeMeta } from '@/app/_lib/types';
+import { getAuthenticatedUser } from '@/app/_lib/auth';
+import { getWorkspaceAccess } from '@/app/_lib/workspace-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,11 +63,26 @@ export default async function WorkspaceDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  
+  // Get authenticated user
+  const userId = await getAuthenticatedUser();
+  if (!userId) {
+    redirect('/login');
+  }
+
+  // Get user's access to this workspace
+  const access = await getWorkspaceAccess(userId, id);
+  if (!access) {
+    notFound();
+  }
+
   const workspace = await getWorkspace(id);
 
   if (!workspace) {
     notFound();
   }
+
+  const userRole = access.role;
 
 
   // Get MailerLite groups if configured
@@ -109,10 +125,6 @@ export default async function WorkspaceDetailPage({
               </Link>
             </div>
             <div className="flex items-center gap-2">
-              <WorkspaceSettingsButton 
-                workspaceId={workspace.id}
-                currentTimezone={workspace.timezone}
-              />
               <WorkspaceActionsDropdown 
                 workspaceId={workspace.id} 
                 workspaceName={workspace.name}
@@ -159,6 +171,7 @@ export default async function WorkspaceDetailPage({
           mailerliteGroups={mailerliteGroups}
           stripeProducts={stripeProducts}
           timezone={workspace.timezone}
+          userRole={userRole}
         />
       </div>
     </div>

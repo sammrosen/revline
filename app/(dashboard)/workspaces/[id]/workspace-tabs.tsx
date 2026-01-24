@@ -5,14 +5,14 @@ import { HealthStatus, LeadStage } from '@prisma/client';
 import { IntegrationActions } from './integration-actions';
 import { AddIntegrationForm } from './add-integration-form';
 import { LeadsView } from './leads-view';
-import MailerLiteInsights from './mailerlite-insights';
 import { WorkflowList } from './workflows/workflow-list';
 import { TestingTab } from './testing-tab';
 import { WorkspaceSettings } from './workspace-settings';
+import { CaptureFormsSection } from './capture-forms-section';
 import { Workflow as WorkflowIcon, FlaskConical, Settings } from 'lucide-react';
 import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
 
-type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'insights' | 'testing' | 'settings';
+type TabType = 'workflows' | 'integrations' | 'capture' | 'leads' | 'events' | 'testing' | 'settings';
 
 interface SecretSummary {
   id: string;
@@ -79,6 +79,7 @@ interface WorkspaceTabsProps {
   mailerliteGroups?: Record<string, { id: string; name: string }>;
   stripeProducts?: Record<string, string>;
   timezone?: string; // Workspace timezone for settings
+  userRole?: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER'; // User's role in this workspace
 }
 
 // Parse secrets from JSON, returning only id and name (never values)
@@ -120,16 +121,18 @@ interface IntegrationDependency {
   usedBy: Array<{ workflowId: string; workflowName: string }>;
 }
 
-// Get initial tab from URL hash (runs only on client)
-function getInitialTab(): TabType {
-  if (typeof window === 'undefined') return 'workflows';
-  const hash = window.location.hash.slice(1) as TabType;
-  const validTabs: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'insights', 'testing', 'settings'];
-  return hash && validTabs.includes(hash) ? hash : 'workflows';
-}
+const VALID_TABS: TabType[] = ['workflows', 'integrations', 'capture', 'leads', 'events', 'testing', 'settings'];
 
-export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York' }: WorkspaceTabsProps) {
-  const [activeTab, setActiveTab] = useState<TabType>(getInitialTab);
+export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York', userRole = 'VIEWER' }: WorkspaceTabsProps) {
+  const [activeTab, setActiveTab] = useState<TabType>('workflows');
+
+  // Read hash after hydration to avoid SSR mismatch
+  useEffect(() => {
+    const hash = window.location.hash.slice(1) as TabType;
+    if (hash && VALID_TABS.includes(hash)) {
+      setActiveTab(hash);
+    }
+  }, []);
   const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
 
   // Update URL hash when tab changes (without triggering navigation)
@@ -179,9 +182,9 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
   const tabs: { id: TabType; label: string; count?: number }[] = [
     { id: 'workflows', label: 'Workflows', count: workflows.length },
     { id: 'integrations', label: 'Integrations', count: integrations.length },
+    { id: 'capture', label: 'Capture' },
     { id: 'leads', label: 'Leads', count: leads.length },
-    { id: 'insights', label: 'Insights' },
-    { id: 'events', label: 'Events', count: events.length },
+    { id: 'events', label: 'Events' },
     { id: 'testing', label: 'Testing' },
     { id: 'settings', label: 'Settings' },
   ];
@@ -219,6 +222,11 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
               {tab.id === 'workflows' && (
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                </svg>
+              )}
+              {tab.id === 'capture' && (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                 </svg>
               )}
               {tab.id === 'testing' && (
@@ -338,9 +346,11 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
           </div>
         )}
 
-        {activeTab === 'leads' && <LeadsView leads={leads} />}
+        {activeTab === 'capture' && (
+          <CaptureFormsSection workspaceId={workspaceId} userRole={userRole} />
+        )}
 
-        {activeTab === 'insights' && <MailerLiteInsights workspaceId={workspaceId} />}
+        {activeTab === 'leads' && <LeadsView leads={leads} workspaceId={workspaceId} userRole={userRole} />}
 
         {activeTab === 'events' && (
           <div>
@@ -402,7 +412,7 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
         )}
 
         {activeTab === 'settings' && (
-          <WorkspaceSettings workspaceId={workspaceId} currentTimezone={timezone} />
+          <WorkspaceSettings workspaceId={workspaceId} currentTimezone={timezone} userRole={userRole} />
         )}
       </div>
     </div>

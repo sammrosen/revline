@@ -23,15 +23,17 @@ model Workspace {
   createdById String?         @map("created_by_id") // User who created this workspace
   createdAt   DateTime        @default(now()) @map("created_at")
 
-  members            WorkspaceMember[]
-  integrations       WorkspaceIntegration[]
-  leads              Lead[]
-  events             Event[]
-  workflows          Workflow[]
-  workflowExecutions WorkflowExecution[]
-  webhookEvents      WebhookEvent[]
-  idempotencyKeys    IdempotencyKey[]
-  pendingBookings    PendingBooking[]
+  members                   WorkspaceMember[]
+  integrations              WorkspaceIntegration[]
+  leads                     Lead[]
+  events                    Event[]
+  workflows                 Workflow[]
+  workflowExecutions        WorkflowExecution[]
+  webhookEvents             WebhookEvent[]
+  idempotencyKeys           IdempotencyKey[]
+  pendingBookings           PendingBooking[]
+  customFieldDefinitions    LeadCustomFieldDefinition[]
+  captureForms              WorkspaceForm[]
 
   @@map("workspaces")
 }
@@ -88,6 +90,7 @@ model Lead {
   source      String? // e.g., "landing", "ig_dm"
   stage       LeadStage @default(CAPTURED)
   errorState  String?   @map("error_state")
+  customData  Json?     @map("custom_data") // Workspace-specific custom field values
   createdAt   DateTime  @default(now()) @map("created_at")
   lastEventAt DateTime  @default(now()) @map("last_event_at")
 
@@ -105,6 +108,77 @@ enum LeadStage {
   BOOKED
   PAID
   DEAD
+}
+
+// Custom field definitions per workspace
+// Allows workspaces to define their own fields for leads (e.g., barcode, membershipType)
+model LeadCustomFieldDefinition {
+  id           String   @id @default(uuid())
+  workspaceId  String   @map("workspace_id")
+  key          String   @db.VarChar(64) // Field key (e.g., "barcode", "membershipType")
+  label        String   @db.VarChar(128) // Display label (e.g., "Member Barcode")
+  fieldType    String   @default("TEXT") @map("field_type") @db.VarChar(16) // TEXT, NUMBER, DATE
+  required     Boolean  @default(false)
+  description  String? // Optional description for documentation
+  defaultValue String?  @map("default_value") // Optional default value
+  displayOrder Int      @default(0) @map("display_order") // For UI ordering
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, key])
+  @@index([workspaceId])
+  @@map("lead_custom_field_definitions")
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+}
+
+// =============================================================================
+// WORKSPACE FORMS (External Form Capture)
+// =============================================================================
+
+// Workspace-scoped form configuration for capturing external form submissions
+// Enables observational capture from client websites without blocking their flow
+model WorkspaceForm {
+  id          String   @id @default(uuid())
+  workspaceId String   @map("workspace_id")
+  name        String   @db.VarChar(128)
+  description String?
+  enabled     Boolean  @default(true)
+
+  // Security settings (JSON)
+  // Structure:
+  // {
+  //   "mode": "browser" | "server" | "both",
+  //   "allowedOrigins": ["https://example.com"],
+  //   "rateLimitPerIp": 10,
+  //   "signingSecret": "encrypted..." (server mode only)
+  // }
+  security Json @default("{\"mode\":\"browser\",\"allowedOrigins\":[],\"rateLimitPerIp\":10}")
+
+  // Allowed target fields (JSON array)
+  // ["email", "firstName", "custom.barcode", "custom.membershipType"]
+  allowedTargets Json @default("[\"email\"]") @map("allowed_targets")
+
+  // Workflow trigger to emit on capture
+  triggerName String @default("form_captured") @map("trigger_name")
+
+  // Capture stats
+  captureCount  Int       @default(0) @map("capture_count")
+  lastCaptureAt DateTime? @map("last_capture_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("workspace_forms")
 }
 
 // =============================================================================

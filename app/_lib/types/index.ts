@@ -16,6 +16,10 @@ import { IntegrationType, HealthStatus, LeadStage, EventSystem, WorkspaceStatus,
 // Re-export Prisma enums for convenience
 export { IntegrationType, HealthStatus, LeadStage, EventSystem, WorkspaceStatus, WorkspaceRole };
 
+// Re-export custom fields types
+export * from './custom-fields';
+export * from './capture';
+
 // =============================================================================
 // USER TYPES
 // =============================================================================
@@ -163,6 +167,18 @@ export interface AbcIgniteMeta {
 }
 
 /**
+ * Field mapping for form submission to custom field
+ */
+export interface RevlineFieldMapping {
+  /** Field name in form submission data */
+  formField: string;
+  /** Custom field key to store value in */
+  customFieldKey: string;
+  /** Optional transform to apply */
+  transform?: 'uppercase' | 'lowercase' | 'trim';
+}
+
+/**
  * RevLine integration metadata
  * Forms configuration and internal settings
  * 
@@ -172,7 +188,13 @@ export interface AbcIgniteMeta {
  * @example
  * {
  *   "forms": {
- *     "prospect-intake": { "enabled": true },
+ *     "prospect-intake": { 
+ *       "enabled": true,
+ *       "fieldMappings": [
+ *         { "formField": "barcode", "customFieldKey": "barcode" },
+ *         { "formField": "membership_type", "customFieldKey": "membershipType", "transform": "lowercase" }
+ *       ]
+ *     },
  *     "booking-form": { "enabled": true }
  *   },
  *   "settings": {
@@ -183,7 +205,9 @@ export interface AbcIgniteMeta {
 export interface RevlineMeta {
   /** Enabled forms - each becomes a workflow trigger (formId = trigger operation) */
   forms: Record<string, { 
-    enabled: boolean; 
+    enabled: boolean;
+    /** Optional field mappings from form fields to custom fields */
+    fieldMappings?: RevlineFieldMapping[];
   }>;
   /** General RevLine settings */
   settings: {
@@ -446,6 +470,9 @@ export const RATE_LIMITS = {
   // Booking rate limits - stricter to prevent abuse
   BOOKING_BY_IDENTIFIER: { requests: 3, windowMs: 15 * 60_000 },  // 3 per 15 minutes per identifier
   BOOKING_BY_IP: { requests: 5, windowMs: 10 * 60_000 },          // 5 per 10 minutes per IP
+  // Capture form rate limits
+  CAPTURE_BROWSER: { requests: 10, windowMs: 60_000 },  // 10 per minute per IP
+  CAPTURE_SERVER: { requests: 100, windowMs: 60_000 },  // 100 per minute per workspace
 } as const;
 
 export const TIMEOUTS = {

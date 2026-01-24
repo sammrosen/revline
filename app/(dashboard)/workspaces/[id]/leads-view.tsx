@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { LeadStage } from '@prisma/client';
+import { LeadDetailModal } from './lead-detail-modal';
 
 interface Lead {
   id: string;
@@ -14,6 +15,8 @@ interface Lead {
 
 interface LeadsViewProps {
   leads: Lead[];
+  workspaceId: string;
+  userRole: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
 }
 
 const STAGES: { value: LeadStage | 'ALL'; label: string }[] = [
@@ -48,8 +51,9 @@ function StageBadge({ stage }: { stage: LeadStage }) {
   );
 }
 
-export function LeadsView({ leads }: LeadsViewProps) {
+export function LeadsView({ leads, workspaceId, userRole }: LeadsViewProps) {
   const [selectedStage, setSelectedStage] = useState<LeadStage | 'ALL'>('ALL');
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   
   // Capture current time once using useState lazy initialization
   // This avoids calling Date.now() during render
@@ -122,7 +126,8 @@ export function LeadsView({ leads }: LeadsViewProps) {
                   return (
                     <tr 
                       key={lead.id} 
-                      className={`border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 ${
+                      onClick={() => setSelectedLeadId(lead.id)}
+                      className={`border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 cursor-pointer ${
                         isStale ? 'bg-yellow-500/5' : ''
                       }`}
                     >
@@ -150,6 +155,16 @@ export function LeadsView({ leads }: LeadsViewProps) {
           </div>
         )}
       </div>
+
+      {/* Lead Detail Modal */}
+      {selectedLeadId && (
+        <LeadDetailModal
+          leadId={selectedLeadId}
+          workspaceId={workspaceId}
+          userRole={userRole}
+          onClose={() => setSelectedLeadId(null)}
+        />
+      )}
     </div>
   );
 }

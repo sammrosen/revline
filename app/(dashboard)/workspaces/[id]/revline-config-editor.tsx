@@ -15,9 +15,19 @@ function resolveFormPath(pathTemplate: string, workspaceSlug: string): string {
  * Allows enabling/disabling forms for a workspace.
  * Forms are defined in the form registry - enable them here to activate their triggers.
  * Each form declares its triggers in the registry; enabling a form enables all its triggers.
+ * 
+ * Also allows configuring field mappings to store form data in lead custom fields.
  */
+
+interface FieldMapping {
+  formField: string;
+  customFieldKey: string;
+  transform?: 'uppercase' | 'lowercase' | 'trim';
+}
+
 interface FormConfig {
   enabled: boolean;
+  fieldMappings?: FieldMapping[];
 }
 
 interface RevlineMeta {
@@ -25,6 +35,13 @@ interface RevlineMeta {
   settings: {
     defaultSource?: string;
   };
+}
+
+interface CustomFieldDefinition {
+  key: string;
+  label: string;
+  fieldType: 'TEXT' | 'NUMBER' | 'DATE';
+  required: boolean;
 }
 
 interface FormTrigger {
@@ -64,8 +81,19 @@ function parseMeta(value: string): RevlineMeta {
   if (!value.trim()) return DEFAULT_CONFIG;
   try {
     const parsed = JSON.parse(value);
+    // Parse forms with fieldMappings
+    const forms: Record<string, FormConfig> = {};
+    if (parsed.forms) {
+      for (const [formId, config] of Object.entries(parsed.forms)) {
+        const formConfig = config as { enabled?: boolean; fieldMappings?: FieldMapping[] };
+        forms[formId] = {
+          enabled: formConfig.enabled ?? false,
+          fieldMappings: formConfig.fieldMappings || [],
+        };
+      }
+    }
     return {
-      forms: parsed.forms || {},
+      forms,
       settings: {
         defaultSource: parsed.settings?.defaultSource || '',
       },
@@ -82,6 +110,7 @@ export function RevlineConfigEditor({
   value, 
   onChange, 
   error,
+  workspaceId,
   workspaceSlug,
 }: RevlineConfigEditorProps) {
   const [isJsonMode, setIsJsonMode] = useState(false);
@@ -90,6 +119,9 @@ export function RevlineConfigEditor({
   
   // Form registry state
   const [registeredForms, setRegisteredForms] = useState<RegisteredForm[]>([]);
+  
+  // Custom fields state
+  const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([]);
 
   // Fetch available forms from registry on mount
   useEffect(() => {
@@ -104,6 +136,22 @@ export function RevlineConfigEditor({
         // Silent fail - forms list just won't show
       });
   }, []);
+
+  // Fetch custom field definitions for this workspace
+  useEffect(() => {
+    if (!workspaceId) return;
+    
+    fetch(`/api/v1/workspaces/${workspaceId}/custom-fields`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.fields) {
+          setCustomFields(data.fields);
+        }
+      })
+      .catch(() => {
+        // Silent fail - custom fields dropdown just won't populate
+      });
+  }, [workspaceId]);
 
   // Derive the display JSON from meta when in structured mode
   const displayJsonText = isJsonMode ? jsonText : JSON.stringify(meta, null, 2);
@@ -150,7 +198,7 @@ export function RevlineConfigEditor({
       ...meta,
       forms: {
         ...meta.forms,
-        [formId]: { enabled: true },
+        [formId]: { enabled: true, fieldMappings: [] },
       },
     });
   }
@@ -161,7 +209,10 @@ export function RevlineConfigEditor({
       ...meta,
       forms: {
         ...meta.forms,
-        [formId]: { enabled: !current?.enabled },
+        [formId]: { 
+          ...current,
+          enabled: !current?.enabled,
+        },
       },
     });
   }
@@ -170,6 +221,63 @@ export function RevlineConfigEditor({
     const newForms = { ...meta.forms };
     delete newForms[formId];
     updateMeta({ ...meta, forms: newForms });
+  }
+
+  // Field mapping management
+  function addFieldMapping(formId: string) {
+    const current = meta.forms[formId];
+    if (!current) return;
+    
+    updateMeta({
+      ...meta,
+      forms: {
+        ...meta.forms,
+        [formId]: {
+          ...current,
+          fieldMappings: [
+            ...(current.fieldMappings || []),
+            { formField: '', customFieldKey: '', transform: undefined },
+          ],
+        },
+      },
+    });
+  }
+
+  function updateFieldMapping(formId: string, index: number, mapping: Partial<FieldMapping>) {
+    const current = meta.forms[formId];
+    if (!current || !current.fieldMappings) return;
+    
+    const newMappings = [...current.fieldMappings];
+    newMappings[index] = { ...newMappings[index], ...mapping };
+    
+    updateMeta({
+      ...meta,
+      forms: {
+        ...meta.forms,
+        [formId]: {
+          ...current,
+          fieldMappings: newMappings,
+        },
+      },
+    });
+  }
+
+  function removeFieldMapping(formId: string, index: number) {
+    const current = meta.forms[formId];
+    if (!current || !current.fieldMappings) return;
+    
+    const newMappings = current.fieldMappings.filter((_, i) => i !== index);
+    
+    updateMeta({
+      ...meta,
+      forms: {
+        ...meta.forms,
+        [formId]: {
+          ...current,
+          fieldMappings: newMappings,
+        },
+      },
+    });
   }
 
   const enabledFormIds = Object.keys(meta.forms);
@@ -322,6 +430,82 @@ export function RevlineConfigEditor({
                           </div>
                         </div>
                       ) : null}
+
+                      {/* Field Mappings Section */}
+                      <div className="mt-3 pt-3 border-t border-zinc-800/50">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] text-zinc-500 uppercase tracking-wide">Field Mappings</span>
+                          <button
+                            type="button"
+                            onClick={() => addFieldMapping(formId)}
+                            className="text-[10px] px-2 py-0.5 text-amber-400 hover:text-amber-300 transition-colors"
+                          >
+                            + Add Mapping
+                          </button>
+                        </div>
+                        
+                        {(!form.fieldMappings || form.fieldMappings.length === 0) ? (
+                          <p className="text-[10px] text-zinc-600 italic">
+                            No field mappings. Form data won&apos;t be stored in custom fields.
+                          </p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {form.fieldMappings.map((mapping, idx) => (
+                              <div key={idx} className="flex items-center gap-2 text-xs">
+                                <input
+                                  type="text"
+                                  value={mapping.formField}
+                                  onChange={(e) => updateFieldMapping(formId, idx, { formField: e.target.value })}
+                                  placeholder="form field"
+                                  className="flex-1 px-2 py-1 bg-zinc-950 border border-zinc-700 rounded text-white font-mono text-[11px] focus:border-amber-500/50 outline-none"
+                                />
+                                <span className="text-zinc-600">→</span>
+                                <select
+                                  value={mapping.customFieldKey}
+                                  onChange={(e) => updateFieldMapping(formId, idx, { customFieldKey: e.target.value })}
+                                  className="flex-1 px-2 py-1 bg-zinc-950 border border-zinc-700 rounded text-white text-[11px] focus:border-amber-500/50 outline-none"
+                                >
+                                  <option value="">select field...</option>
+                                  {customFields.map(field => (
+                                    <option key={field.key} value={field.key}>
+                                      {field.label} ({field.key})
+                                    </option>
+                                  ))}
+                                </select>
+                                <select
+                                  value={mapping.transform || ''}
+                                  onChange={(e) => updateFieldMapping(formId, idx, { 
+                                    transform: e.target.value as 'uppercase' | 'lowercase' | 'trim' | undefined || undefined 
+                                  })}
+                                  className="w-20 px-1 py-1 bg-zinc-950 border border-zinc-700 rounded text-zinc-400 text-[10px] focus:border-amber-500/50 outline-none"
+                                  title="Optional transform"
+                                >
+                                  <option value="">none</option>
+                                  <option value="uppercase">UPPER</option>
+                                  <option value="lowercase">lower</option>
+                                  <option value="trim">trim</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => removeFieldMapping(formId, idx)}
+                                  className="p-1 text-zinc-600 hover:text-red-400 transition-colors"
+                                  title="Remove mapping"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {customFields.length === 0 && (
+                          <p className="text-[10px] text-zinc-600 mt-1">
+                            No custom fields defined. <span className="text-amber-400/70">Go to Settings → Custom Fields</span> to create fields.
+                          </p>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

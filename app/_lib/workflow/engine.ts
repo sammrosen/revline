@@ -20,6 +20,8 @@ import {
   TriggerEmitResult,
   ActionExecutionResult,
   WorkflowTrigger,
+  WorkflowContextLead,
+  WorkflowContextWorkspace,
 } from './types';
 import { getActionExecutor } from './executors';
 import { 
@@ -28,6 +30,7 @@ import {
   logStructured,
 } from '@/app/_lib/reliability';
 import { AlertService } from '@/app/_lib/alerts';
+import { LeadCustomData } from '@/app/_lib/types/custom-fields';
 
 // =============================================================================
 // MAIN ENTRY POINT
@@ -73,17 +76,28 @@ export async function emitTrigger(
     };
   }
 
-  // 2. Build base context
-  const baseContext: Omit<WorkflowContext, 'leadId'> = {
+  // 2. Load workspace data for context
+  const workspaceData = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { id: true, name: true, slug: true },
+  });
+
+  const workspaceContext: WorkflowContextWorkspace | undefined = workspaceData
+    ? { id: workspaceData.id, name: workspaceData.name, slug: workspaceData.slug }
+    : undefined;
+
+  // 3. Build base context
+  const baseContext: Omit<WorkflowContext, 'leadId' | 'lead'> = {
     trigger: { ...trigger, payload },
     email: extractEmail(payload),
     name: extractName(payload),
     workspaceId,
     clientId: workspaceId, // Legacy alias
+    workspace: workspaceContext,
     actionData: {},
   };
 
-  // 3. Execute each workflow that matches filters
+  // 4. Execute each workflow that matches filters
   const executions: WorkflowExecutionResult[] = [];
   let workflowsExecuted = 0;
 
@@ -101,7 +115,7 @@ export async function emitTrigger(
         name: workflow.name,
         actions: workflow.actions as unknown as WorkflowAction[],
       },
-      { ...baseContext, leadId: undefined }
+      { ...baseContext, leadId: undefined, lead: undefined }
     );
     executions.push(result);
   }
@@ -212,9 +226,12 @@ async function executeWorkflow(
         // Merge action output into context for subsequent actions
         if (result.data) {
           ctx.actionData = { ...ctx.actionData, ...result.data };
-          // Special case: if action created/found a lead, update context
+          // Special case: if action created/found a lead, update context with full lead data
           if (result.data.leadId) {
-            ctx.leadId = result.data.leadId as string;
+            const leadId = result.data.leadId as string;
+            ctx.leadId = leadId;
+            // Load full lead data including custom fields for interpolation
+            ctx.lead = await loadLeadContext(leadId);
           }
         }
       } else {
@@ -393,5 +410,40 @@ function extractName(payload: Record<string, unknown>): string | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Load lead data with custom fields for workflow context
+ * Used for variable interpolation: {{lead.email}}, {{lead.custom.barcode}}
+ */
+async function loadLeadContext(leadId: string): Promise<WorkflowContextLead | undefined> {
+  try {
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      select: {
+        id: true,
+        email: true,
+        stage: true,
+        source: true,
+        customData: true,
+      },
+    });
+
+    if (!lead) {
+      return undefined;
+    }
+
+    return {
+      id: lead.id,
+      email: lead.email,
+      stage: lead.stage,
+      source: lead.source,
+      custom: (lead.customData as LeadCustomData) || {},
+    };
+  } catch (error) {
+    // Fail-safe: if we can't load lead data, continue without it
+    console.error('Failed to load lead context:', error);
+    return undefined;
+  }
 }
 

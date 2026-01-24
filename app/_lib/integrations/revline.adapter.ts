@@ -15,7 +15,7 @@
 
 import { IntegrationType } from '@prisma/client';
 import { BaseIntegrationAdapter } from './base';
-import { RevlineMeta, IntegrationResult } from '@/app/_lib/types';
+import { RevlineMeta, RevlineFieldMapping, IntegrationResult } from '@/app/_lib/types';
 
 /**
  * Form configuration from RevLine meta
@@ -24,6 +24,8 @@ import { RevlineMeta, IntegrationResult } from '@/app/_lib/types';
 export interface FormConfig {
   formId: string;
   enabled: boolean;
+  /** Field mappings from form fields to custom fields */
+  fieldMappings?: RevlineFieldMapping[];
 }
 
 /**
@@ -96,6 +98,7 @@ export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
     return {
       formId,
       enabled: formMeta.enabled,
+      fieldMappings: formMeta.fieldMappings,
     };
   }
 
@@ -110,7 +113,16 @@ export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
     return Object.entries(this.meta.forms).map(([formId, config]) => ({
       formId,
       enabled: config.enabled,
+      fieldMappings: config.fieldMappings,
     }));
+  }
+
+  /**
+   * Get field mappings for a specific form
+   * Used to map form submission fields to lead custom data
+   */
+  getFieldMappings(formId: string): RevlineFieldMapping[] {
+    return this.meta?.forms?.[formId]?.fieldMappings ?? [];
   }
 
   // ===========================================================================

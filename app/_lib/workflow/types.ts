@@ -102,6 +102,29 @@ export interface WorkflowTrigger {
 // =============================================================================
 
 /**
+ * Lead data available in workflow context
+ * Used for variable interpolation in emails, etc.
+ */
+export interface WorkflowContextLead {
+  id: string;
+  email: string;
+  stage: string;
+  source: string | null;
+  /** Custom field values (populated from Lead.customData) */
+  custom: Record<string, unknown>;
+}
+
+/**
+ * Workspace data available in workflow context
+ * Used for variable interpolation
+ */
+export interface WorkflowContextWorkspace {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+/**
  * Runtime context passed through workflow execution
  */
 export interface WorkflowContext {
@@ -126,6 +149,18 @@ export interface WorkflowContext {
 
   /** Lead ID if a lead was created/found */
   leadId?: string;
+
+  /**
+   * Full lead object with custom data (populated when leadId is set)
+   * Used for variable interpolation: {{lead.email}}, {{lead.custom.barcode}}
+   */
+  lead?: WorkflowContextLead;
+
+  /**
+   * Workspace data (populated at workflow start)
+   * Used for variable interpolation: {{workspace.name}}, {{workspace.slug}}
+   */
+  workspace?: WorkflowContextWorkspace;
 
   /** Data accumulated from previous action executions */
   actionData: Record<string, unknown>;

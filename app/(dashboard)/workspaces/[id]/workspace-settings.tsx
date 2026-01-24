@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { CustomFieldsSection } from './custom-fields-section';
 
 /**
  * Workspace Settings Component
  * 
- * Allows editing workspace-level settings like timezone.
+ * Allows editing workspace-level settings like timezone and custom fields.
  */
 
 // Common US timezones
@@ -23,9 +24,10 @@ const TIMEZONES = [
 interface WorkspaceSettingsProps {
   workspaceId: string;
   currentTimezone: string;
+  userRole: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
 }
 
-export function WorkspaceSettings({ workspaceId, currentTimezone }: WorkspaceSettingsProps) {
+export function WorkspaceSettings({ workspaceId, currentTimezone, userRole }: WorkspaceSettingsProps) {
   const [timezone, setTimezone] = useState(currentTimezone);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -102,6 +104,9 @@ export function WorkspaceSettings({ workspaceId, currentTimezone }: WorkspaceSet
           <p className="mt-3 text-sm text-green-400">Settings saved successfully.</p>
         )}
       </div>
+
+      {/* Custom Fields Section */}
+      <CustomFieldsSection workspaceId={workspaceId} userRole={userRole} />
 
       {/* Info */}
       <div className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-lg">

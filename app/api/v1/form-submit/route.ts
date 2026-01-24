@@ -15,7 +15,7 @@
 
 import { NextRequest } from 'next/server';
 import { getActiveClient } from '@/app/_lib/client-gate';
-import { emitFormTrigger } from '@/app/_lib/workflow';
+import { emitFormTrigger, TriggerEmitResult } from '@/app/_lib/workflow';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
 import { 
   rateLimitByIP, 
@@ -27,7 +27,9 @@ import {
   WebhookProcessor,
   logStructured,
 } from '@/app/_lib/reliability';
-import { RevlineAdapter } from '@/app/_lib/integrations/revline.adapter';
+import { RevlineAdapter, FormConfig } from '@/app/_lib/integrations/revline.adapter';
+import { CustomFieldService } from '@/app/_lib/services';
+import { LeadCustomData, RevlineFieldMapping } from '@/app/_lib/types';
 
 /**
  * Form submission request body
@@ -38,6 +40,59 @@ interface FormSubmissionBody {
   trigger: string;
   source: string;
   data: Record<string, unknown>;
+}
+
+/**
+ * Extract lead ID from workflow execution results
+ * Scans action results for a leadId returned by create_lead action
+ */
+function extractLeadIdFromResults(result: TriggerEmitResult): string | null {
+  for (const execution of result.executions) {
+    for (const actionResult of execution.results) {
+      if (actionResult.result.success && actionResult.result.data?.leadId) {
+        return actionResult.result.data.leadId as string;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Apply field mappings to create custom data from form submission
+ */
+function applyFieldMappings(
+  formData: Record<string, unknown>,
+  mappings: RevlineFieldMapping[]
+): LeadCustomData {
+  const customData: LeadCustomData = {};
+
+  for (const mapping of mappings) {
+    const value = formData[mapping.formField];
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    let processedValue = value;
+
+    // Apply transform if specified
+    if (mapping.transform && typeof processedValue === 'string') {
+      switch (mapping.transform) {
+        case 'uppercase':
+          processedValue = processedValue.toUpperCase();
+          break;
+        case 'lowercase':
+          processedValue = processedValue.toLowerCase();
+          break;
+        case 'trim':
+          processedValue = processedValue.trim();
+          break;
+      }
+    }
+
+    customData[mapping.customFieldKey] = processedValue;
+  }
+
+  return customData;
 }
 
 /**
@@ -125,6 +180,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Load RevLine config and validate form is enabled
+    let formConfig: FormConfig | null = null;
     const revline = await RevlineAdapter.forClient(client.id);
     if (!revline) {
       // RevLine not configured - still allow form submission
@@ -146,6 +202,7 @@ export async function POST(request: NextRequest) {
           ErrorCodes.NOT_FOUND
         );
       }
+      formConfig = formValidation.data ?? null;
     }
 
     // 6. Trigger validation happens in emitFormTrigger
@@ -233,6 +290,43 @@ export async function POST(request: NextRequest) {
       await WebhookProcessor.markProcessed(registration.id);
     }
 
+    // 14. Apply field mappings to lead custom data (if configured)
+    if (formConfig?.fieldMappings && formConfig.fieldMappings.length > 0) {
+      const leadId = extractLeadIdFromResults(result);
+      
+      if (leadId) {
+        const customData = applyFieldMappings(data, formConfig.fieldMappings);
+        
+        if (Object.keys(customData).length > 0) {
+          const setResult = await CustomFieldService.setLeadCustomData(leadId, customData, {
+            validate: true,
+            merge: true,
+          });
+
+          if (!setResult.success) {
+            // Log but don't fail - field mappings are observational
+            logStructured({
+              correlationId: registration.correlationId,
+              event: 'form_submit_custom_data_failed',
+              workspaceId: client.id,
+              provider: 'revline',
+              error: setResult.error,
+              metadata: { formId, leadId, mappingsCount: formConfig.fieldMappings.length },
+            });
+          } else {
+            logStructured({
+              correlationId: registration.correlationId,
+              event: 'form_submit_custom_data_set',
+              workspaceId: client.id,
+              provider: 'revline',
+              success: true,
+              metadata: { formId, leadId, fieldsSet: Object.keys(customData).length },
+            });
+          }
+        }
+      }
+    }
+
     logStructured({
       correlationId: registration.correlationId,
       event: 'form_submit_processed',
@@ -247,7 +341,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 14. Return success response
+    // 15. Return success response
     const response = ApiResponse.success({
       message: result.workflowsExecuted > 0 
         ? 'Form submitted successfully' 
