@@ -10,12 +10,24 @@ function resolveFormPath(pathTemplate: string, workspaceSlug: string): string {
 }
 
 /**
- * RevLine configuration editor.
+ * @deprecated This component is deprecated. Use the Capture tab instead.
  * 
+ * RevLine configuration editor (LEGACY)
+ * 
+ * This component manages forms via WorkspaceIntegration.meta.forms and the
+ * code-based FORM_REGISTRY. It has been replaced by the Capture system:
+ * 
+ * - Forms are now created in the Capture tab (WorkspaceForm table)
+ * - Field mappings are configured in the Capture form editor
+ * - Triggers are 'capture.triggerName' instead of 'revline.triggerId'
+ * 
+ * This component is kept for backward compatibility. New workspaces should
+ * use the Capture tab for all form configuration.
+ * 
+ * ORIGINAL DESCRIPTION:
  * Allows enabling/disabling forms for a workspace.
  * Forms are defined in the form registry - enable them here to activate their triggers.
  * Each form declares its triggers in the registry; enabling a form enables all its triggers.
- * 
  * Also allows configuring field mappings to store form data in lead custom fields.
  */
 

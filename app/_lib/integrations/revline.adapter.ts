@@ -11,6 +11,15 @@
  * - Returns structured IntegrationResult for all operations
  * - Used to check form enablement for workflow triggers
  * - Each enabled form becomes a workflow trigger (formId = trigger operation)
+ * 
+ * @deprecated Form-related methods are deprecated.
+ * The form system has been replaced by the Capture system:
+ * - Forms are now stored in WorkspaceForm table (Capture tab)
+ * - Use submitCaptureTrigger() instead of emitFormTrigger()
+ * - Triggers are 'capture.triggerName' instead of 'revline.triggerId'
+ * 
+ * The adapter is kept for backward compatibility with existing workflows
+ * that use 'revline' triggers. New code should use the Capture system.
  */
 
 import { IntegrationType } from '@prisma/client';

@@ -4,6 +4,10 @@
  * POST /api/v1/booking/create
  * 
  * Creates a booking for the given time slot and customer.
+ * 
+ * UNIFIED CAPTURE:
+ * Uses submitCaptureTrigger() to fire workflow triggers via the capture system.
+ * Requires WorkspaceForms with 'booking-confirmed' and 'booking-waitlisted' triggers.
  */
 
 import { NextRequest } from 'next/server';
@@ -19,10 +23,7 @@ import {
   getClientIP, 
   RATE_LIMITS,
 } from '@/app/_lib/middleware';
-import { emitFormTrigger } from '@/app/_lib/workflow';
-
-// Form ID for booking - must match the form registry
-const BOOKING_FORM_ID = 'sportswest-booking';
+import { submitCaptureTrigger } from '@/app/_lib/services/capture.service';
 
 export async function POST(request: NextRequest) {
   // Rate limit
@@ -101,20 +102,19 @@ export async function POST(request: NextRequest) {
       const result = await provider.addToWaitlist(slot, customer);
       
       if (result.success) {
-        // Emit validated trigger for workflow execution
-        // Uses emitFormTrigger to ensure trigger is declared in form registry
-        await emitFormTrigger(
+        // Emit trigger via unified capture system
+        // Requires WorkspaceForm with triggerName: 'booking_waitlisted'
+        await submitCaptureTrigger(
           workspace.id,
-          BOOKING_FORM_ID,
-          'booking-waitlisted', // Must match form registry declaration
+          'booking_waitlisted',
           {
             email: customer.email,
+            firstName: customer.name, // Use built-in lead field
             source: 'booking',
-            customerId: customer.id,
-            customerName: customer.name,
-            slotId: slot.id,
-            slotTitle: slot.title,
-            slotTime: slot.startTime,
+            'custom.customerId': customer.id,
+            'custom.slotId': slot.id,
+            'custom.slotTitle': slot.title,
+            'custom.slotTime': slot.startTime,
           }
         );
       }
@@ -129,21 +129,20 @@ export async function POST(request: NextRequest) {
     const result = await provider.createBooking(slot, customer);
 
     if (result.success) {
-      // Emit validated trigger for workflow execution
-      // Uses emitFormTrigger to ensure trigger is declared in form registry
-      await emitFormTrigger(
+      // Emit trigger via unified capture system
+      // Requires WorkspaceForm with triggerName: 'booking_confirmed'
+      await submitCaptureTrigger(
         workspace.id,
-        BOOKING_FORM_ID,
-        'booking-confirmed', // Must match form registry declaration
+        'booking_confirmed',
         {
           email: customer.email,
+          firstName: customer.name, // Use built-in lead field
           source: 'booking',
-          customerId: customer.id,
-          customerName: customer.name,
-          slotId: slot.id,
-          slotTitle: slot.title,
-          slotTime: slot.startTime,
-          bookingId: result.bookingId,
+          'custom.customerId': customer.id,
+          'custom.slotId': slot.id,
+          'custom.slotTitle': slot.title,
+          'custom.slotTime': slot.startTime,
+          'custom.bookingId': result.bookingId,
         }
       );
     }

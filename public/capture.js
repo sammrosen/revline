@@ -218,10 +218,13 @@
 
   /**
    * Send captured data to RevLine
+   * 
+   * OBSERVATIONAL: Email is optional - capture accepts any data.
+   * Workflows decide what to do with incomplete data.
    */
   function sendCapture(data) {
-    // Email is required
-    if (!data.email) {
+    // Only skip if completely empty
+    if (Object.keys(data).length === 0) {
       return;
     }
 

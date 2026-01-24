@@ -216,8 +216,26 @@ export default function Home() {
         <div className="absolute bottom-1/4 left-1/3 w-[500px] h-[500px] blur-[100px] bg-violet-900/10 rounded-full" />
       </div>
 
+      {/* ============== HEADER ============== */}
+      <header className="relative z-10 px-6 py-4">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center">
+              <span className="text-white font-bold text-sm">R</span>
+            </div>
+            <span className="font-semibold text-lg">RevLine</span>
+          </div>
+          <a
+            href="/docs"
+            className="px-4 py-2 text-sm text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-700 rounded-lg transition-colors"
+          >
+            Documentation
+          </a>
+        </div>
+      </header>
+
       {/* ============== HERO SECTION ============== */}
-      <section className="relative min-h-screen flex items-center justify-center px-6 py-20">
+      <section className="relative min-h-[calc(100vh-72px)] flex items-center justify-center px-6 py-20">
         <div className="max-w-4xl mx-auto text-center space-y-8">
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
             Reliability-First{' '}

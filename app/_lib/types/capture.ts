@@ -85,10 +85,14 @@ export const AllowedTargetsSchema = z.array(AllowedTargetSchema).min(1, 'At leas
 
 /**
  * Capture request payload (after client-side mapping)
- * Email is required, other fields optional
+ * 
+ * OBSERVATIONAL: Capture accepts any data - email is optional.
+ * If email is present, a lead will be created/updated.
+ * If no email, trigger still fires with payload data.
+ * Workflows decide what to do with incomplete data.
  */
 export const CapturePayloadSchema = z.object({
-  email: z.string().email('Invalid email format'),
+  email: z.string().email('Invalid email format').optional(),
   firstName: z.string().max(100).optional(),
   lastName: z.string().max(100).optional(),
   phone: z.string().max(30).optional(),

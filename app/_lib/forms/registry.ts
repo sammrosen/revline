@@ -1,11 +1,18 @@
 /**
- * Form Registry
+ * @deprecated This file is deprecated. Use WorkspaceForm table instead.
  * 
- * Lists all available bespoke form IDs.
- * When creating a new bespoke form, add its ID here.
+ * Form Registry (LEGACY)
  * 
- * The admin UI uses this to validate form IDs and show warnings
- * if an unrecognized form ID is entered.
+ * This code-based registry has been replaced by the database-driven
+ * WorkspaceForm table and the Capture system.
+ * 
+ * Migration:
+ * - Instead of registering forms here, create them via Capture tab in the dashboard
+ * - Instead of emitFormTrigger(), use submitCaptureTrigger()
+ * - Triggers are now 'capture.triggerName' instead of 'revline.triggerId'
+ * 
+ * This file is kept for backward compatibility with existing code that
+ * references FORM_REGISTRY. New code should not use this file.
  */
 
 export interface FormTrigger {

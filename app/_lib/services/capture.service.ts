@@ -16,7 +16,7 @@ import { emitEvent, upsertLead } from '@/app/_lib/event-logger';
 import { EventSystem } from '@prisma/client';
 import { setLeadCustomData, getFieldDefinitions } from './custom-field.service';
 import { emitTrigger } from '@/app/_lib/workflow/engine';
-import { decryptSecret } from '@/app/_lib/crypto';
+import { decryptSecret, CURRENT_KEY_VERSION } from '@/app/_lib/crypto';
 import { createHmac, timingSafeEqual, randomUUID } from 'crypto';
 import {
   FormSecurity,
@@ -173,7 +173,7 @@ export async function validateCaptureRequest(
   // 4. Validate and sanitize payload
   const payloadResult = CapturePayloadSchema.safeParse(rawPayload);
   if (!payloadResult.success) {
-    const firstError = payloadResult.error.errors[0];
+    const firstError = payloadResult.error.issues[0];
     errors.push(`Invalid payload: ${firstError.path.join('.')}: ${firstError.message}`);
     return { valid: false, mode, errors };
   }
@@ -211,10 +211,10 @@ export async function validateCaptureRequest(
     }
   }
 
-  // 6. Ensure email is present
-  if (!sanitizedPayload.email) {
-    errors.push('Email is required');
-  }
+  // 6. OBSERVATIONAL: Email is optional
+  // Capture accepts any data. If email is present, a lead will be created.
+  // If no email, trigger still fires with payload data.
+  // Workflows decide what to do with incomplete data.
 
   return {
     valid: errors.length === 0,
@@ -267,9 +267,12 @@ function verifyServerSignature(
   }
 
   // 3. Decrypt signing secret
+  // NOTE: Using CURRENT_KEY_VERSION as the security schema stores just the
+  // encrypted value without a separate keyVersion field. All secrets are
+  // encrypted with the current key version at creation time.
   let secret: string;
   try {
-    secret = decryptSecret(signingSecret);
+    secret = decryptSecret(signingSecret, CURRENT_KEY_VERSION);
   } catch {
     return { valid: false, error: 'Failed to decrypt signing secret' };
   }
@@ -305,7 +308,12 @@ function verifyServerSignature(
 
 /**
  * Process a validated capture payload
- * Creates/updates lead, sets custom data, and triggers workflow
+ * 
+ * OBSERVATIONAL: Accepts any data.
+ * - If email present: Creates/updates lead, sets custom data, triggers workflow
+ * - If no email: Still triggers workflow with payload data, skips lead creation
+ * 
+ * Workflows decide what to do with incomplete data.
  */
 export async function processCapturePayload(
   form: LoadedForm,
@@ -320,7 +328,7 @@ export async function processCapturePayload(
 
   try {
     // 1. Extract lead fields and custom fields
-    const email = payload.email as string;
+    const email = payload.email as string | undefined;
     const leadFields: Record<string, string> = {};
     const customFields: Record<string, unknown> = {};
 
@@ -335,52 +343,58 @@ export async function processCapturePayload(
       }
     }
 
-    // 2. Upsert lead
-    const leadId = await upsertLead({
-      workspaceId: form.workspaceId,
-      email: email.toLowerCase().trim(),
-      source: leadFields.source || 'capture',
-    });
+    // 2. Lead creation is conditional on email presence
+    let leadId: string | undefined;
+    let isNewLead = false;
 
-    // Check if this is a new lead (by checking if lastEventAt equals createdAt)
-    const lead = await prisma.lead.findUnique({
-      where: { id: leadId },
-      select: { createdAt: true, lastEventAt: true },
-    });
-    const isNewLead = lead ? lead.createdAt.getTime() === lead.lastEventAt.getTime() : false;
+    if (email) {
+      // Upsert lead only if email is present
+      leadId = await upsertLead({
+        workspaceId: form.workspaceId,
+        email: email.toLowerCase().trim(),
+        source: leadFields.source || 'capture',
+      });
 
-    // 3. Set custom data if any
-    if (Object.keys(customFields).length > 0) {
-      // Validate custom fields exist for this workspace
-      const definitions = await getFieldDefinitions(form.workspaceId);
-      const definedKeys = new Set(definitions.map(d => d.key));
+      // Check if this is a new lead (by checking if lastEventAt equals createdAt)
+      const lead = await prisma.lead.findUnique({
+        where: { id: leadId },
+        select: { createdAt: true, lastEventAt: true },
+      });
+      isNewLead = lead ? lead.createdAt.getTime() === lead.lastEventAt.getTime() : false;
 
-      const validCustomFields: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(customFields)) {
-        if (definedKeys.has(key)) {
-          validCustomFields[key] = value;
+      // 3. Set custom data if any (only if we have a lead)
+      if (Object.keys(customFields).length > 0) {
+        // Validate custom fields exist for this workspace
+        const definitions = await getFieldDefinitions(form.workspaceId);
+        const definedKeys = new Set(definitions.map(d => d.key));
+
+        const validCustomFields: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(customFields)) {
+          if (definedKeys.has(key)) {
+            validCustomFields[key] = value;
+          }
         }
-      }
 
-      if (Object.keys(validCustomFields).length > 0) {
-        const result = await setLeadCustomData(leadId, validCustomFields, {
-          validate: true,
-          merge: true,
-        });
-
-        if (result.success) {
-          await emitEvent({
-            workspaceId: form.workspaceId,
-            leadId,
-            system: EventSystem.BACKEND,
-            eventType: 'capture_custom_data_set',
-            success: true,
+        if (Object.keys(validCustomFields).length > 0) {
+          const result = await setLeadCustomData(leadId, validCustomFields, {
+            validate: true,
+            merge: true,
           });
+
+          if (result.success) {
+            await emitEvent({
+              workspaceId: form.workspaceId,
+              leadId,
+              system: EventSystem.BACKEND,
+              eventType: 'capture_custom_data_set',
+              success: true,
+            });
+          }
         }
       }
     }
 
-    // 4. Update capture stats
+    // 4. Update capture stats (always)
     await prisma.workspaceForm.update({
       where: { id: form.id },
       data: {
@@ -389,15 +403,15 @@ export async function processCapturePayload(
       },
     });
 
-    // 5. Emit workflow trigger
+    // 5. Emit workflow trigger (always - with or without lead)
     await emitTrigger(
       form.workspaceId,
       { adapter: 'capture', operation: form.triggerName },
       {
         formId: form.id,
         formName: form.name,
-        email,
-        leadId,
+        email,           // May be undefined
+        leadId,          // May be undefined
         isNewLead,
         captureId,
         mode,
@@ -407,13 +421,23 @@ export async function processCapturePayload(
     );
 
     // 6. Log success event
-    await emitEvent({
-      workspaceId: form.workspaceId,
-      leadId,
-      system: EventSystem.BACKEND,
-      eventType: isNewLead ? 'capture_lead_created' : 'capture_lead_updated',
-      success: true,
-    });
+    if (leadId) {
+      await emitEvent({
+        workspaceId: form.workspaceId,
+        leadId,
+        system: EventSystem.BACKEND,
+        eventType: isNewLead ? 'capture_lead_created' : 'capture_lead_updated',
+        success: true,
+      });
+    } else {
+      // No lead created (no email) - still log the capture
+      await emitEvent({
+        workspaceId: form.workspaceId,
+        system: EventSystem.BACKEND,
+        eventType: 'capture_processed_no_email',
+        success: true,
+      });
+    }
 
     return {
       success: true,
@@ -434,6 +458,174 @@ export async function processCapturePayload(
     return {
       success: false,
       error: 'Processing failed',
+      captureId,
+    };
+  }
+}
+
+// =============================================================================
+// SERVER-SIDE CAPTURE SDK
+// =============================================================================
+
+/**
+ * Submit to capture from server-side code.
+ * Used by bespoke forms that need custom logic before capture.
+ * 
+ * OBSERVATIONAL: Never throws, always returns result.
+ * Email is optional - capture accepts any data.
+ * 
+ * @param formId - The WorkspaceForm ID to submit to
+ * @param payload - The data to capture (email optional, custom fields use 'custom.' prefix)
+ * @param options - Optional configuration
+ * @returns CaptureProcessResult with success status
+ * 
+ * @example
+ * // After booking is confirmed
+ * const result = await submitToCapture('form-uuid-here', {
+ *   email: customer.email,           // Optional
+ *   firstName: customer.name,
+ *   'custom.bookingId': bookingId,
+ *   'custom.slotTime': slot.startTime,
+ * });
+ */
+export async function submitToCapture(
+  formId: string,
+  payload: Record<string, unknown>,
+  options?: {
+    /** Override workspace ID lookup (for when formId might not be a UUID) */
+    workspaceId?: string;
+    /** Source mode for logging */
+    mode?: 'internal' | 'server';
+  }
+): Promise<CaptureProcessResult> {
+  const captureId = `cap_${randomUUID().split('-')[0]}`;
+  
+  try {
+    // 1. Load form configuration
+    const form = await getFormById(formId);
+    
+    if (!form) {
+      // If form not found and workspaceId provided, log event but don't throw
+      if (options?.workspaceId) {
+        await emitEvent({
+          workspaceId: options.workspaceId,
+          system: EventSystem.BACKEND,
+          eventType: 'capture_sdk_form_not_found',
+          success: false,
+          errorMessage: `Form ${formId} not found`,
+        });
+      }
+      return {
+        success: false,
+        error: 'Form not found',
+        captureId,
+      };
+    }
+    
+    if (!form.enabled) {
+      await emitEvent({
+        workspaceId: form.workspaceId,
+        system: EventSystem.BACKEND,
+        eventType: 'capture_sdk_form_disabled',
+        success: false,
+      });
+      return {
+        success: false,
+        error: 'Form is disabled',
+        captureId,
+      };
+    }
+    
+    // 2. Filter payload to only allowed targets (but don't validate strictly for SDK)
+    const filteredPayload: Record<string, unknown> = {};
+    
+    for (const [key, value] of Object.entries(payload)) {
+      // For SDK mode, we're more lenient - accept all fields that aren't denylisted
+      if (isDenylistedTarget(key)) {
+        continue;
+      }
+      
+      // Sanitize string values
+      if (typeof value === 'string') {
+        if (hasSensitiveValuePattern(value)) {
+          continue;
+        }
+        filteredPayload[key] = value.trim().substring(0, MAX_FIELD_LENGTH);
+      } else if (value !== null && value !== undefined) {
+        filteredPayload[key] = value;
+      }
+    }
+    
+    // 3. Process the capture
+    const result = await processCapturePayload(
+      form,
+      filteredPayload,
+      options?.mode === 'server' ? 'server' : 'browser', // Use browser mode for internal
+      { origin: 'sdk' }
+    );
+    
+    return result;
+    
+  } catch (error) {
+    // Log but don't throw - capture is observational
+    console.error('submitToCapture error:', error);
+    
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      captureId,
+    };
+  }
+}
+
+/**
+ * Submit capture by trigger name (convenience method).
+ * Looks up the WorkspaceForm by triggerName for a workspace.
+ * 
+ * @param workspaceId - The workspace ID
+ * @param triggerName - The trigger name configured on the form
+ * @param payload - The data to capture
+ */
+export async function submitCaptureTrigger(
+  workspaceId: string,
+  triggerName: string,
+  payload: Record<string, unknown>
+): Promise<CaptureProcessResult> {
+  const captureId = `cap_${randomUUID().split('-')[0]}`;
+  
+  try {
+    // Find form by trigger name
+    const form = await prisma.workspaceForm.findFirst({
+      where: {
+        workspaceId,
+        triggerName,
+        enabled: true,
+      },
+    });
+    
+    if (!form) {
+      await emitEvent({
+        workspaceId,
+        system: EventSystem.BACKEND,
+        eventType: 'capture_sdk_trigger_not_found',
+        success: false,
+        errorMessage: `No enabled form with trigger "${triggerName}"`,
+      });
+      return {
+        success: false,
+        error: `No enabled form with trigger "${triggerName}"`,
+        captureId,
+      };
+    }
+    
+    // Submit using the form ID
+    return submitToCapture(form.id, payload, { workspaceId, mode: 'internal' });
+    
+  } catch (error) {
+    console.error('submitCaptureTrigger error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
       captureId,
     };
   }

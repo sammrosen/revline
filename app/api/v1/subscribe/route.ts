@@ -6,6 +6,10 @@
  * Captures email addresses from landing pages and triggers workflows.
  * Uses the source parameter to route to the correct client.
  * 
+ * UNIFIED CAPTURE:
+ * - First tries to use Capture system (WorkspaceForm with 'email_captured' trigger)
+ * - Falls back to direct revline.email_captured trigger for backward compatibility
+ * 
  * STANDARDS:
  * - Persist first, then process
  * - Deduplication prevents double-submissions
@@ -28,6 +32,7 @@ import {
   WebhookProcessor,
   logStructured,
 } from '@/app/_lib/reliability';
+import { submitCaptureTrigger } from '@/app/_lib/services/capture.service';
 
 export async function POST(request: NextRequest) {
   // 1. Rate limit check
@@ -112,25 +117,63 @@ export async function POST(request: NextRequest) {
     // 8. Claim for processing
     await WebhookProcessor.markProcessing(registration.id);
 
-    // 9. Emit trigger to workflow engine
-    const result = await emitTrigger(
+    // 9. Try Capture system first, then fall back to revline for backward compatibility
+    // This allows workspaces to migrate to Capture at their own pace
+    const captureResult = await submitCaptureTrigger(
       client.id,
-      { adapter: 'revline', operation: 'email_captured' },
+      'email_captured', // Standard trigger name for email capture
       { 
         email, 
-        name, 
+        firstName: name,
         source,
         correlationId: registration.correlationId,
       }
     );
+    
+    // Track if capture system handled it (for logging)
+    let usedCaptureSystem = false;
+    
+    // If capture worked (form exists and trigger fired), we're done
+    // Otherwise, fall back to direct revline trigger for backward compatibility
+    let result;
+    if (captureResult.success) {
+      usedCaptureSystem = true;
+      // Capture system handled it - workflows are triggered internally
+      // Create minimal compatible result structure
+      result = {
+        workflowsFound: 1,
+        workflowsExecuted: 1,
+        executions: [] as Array<{ status: 'completed' | 'failed'; error?: string }>,
+      };
+      
+      logStructured({
+        correlationId: registration.correlationId,
+        event: 'email_capture_via_capture_system',
+        workspaceId: client.id,
+        provider: 'capture',
+        metadata: { email, source, captureId: captureResult.captureId },
+      });
+    } else {
+      // Fall back to direct revline trigger (backward compatibility)
+      result = await emitTrigger(
+        client.id,
+        { adapter: 'revline', operation: 'email_captured' },
+        { 
+          email, 
+          name, 
+          source,
+          correlationId: registration.correlationId,
+        }
+      );
+    }
 
-    // 10. Check results
-    const hasFailure = result.executions.some(e => e.status === 'failed');
+    // 10. Check results (only for revline trigger path)
+    const hasFailure = !usedCaptureSystem && result.executions.some(e => e.status === 'failed');
     
     if (hasFailure) {
       const failures = result.executions
         .filter(e => e.status === 'failed')
-        .map(e => e.error)
+        .map(e => e.error || 'Unknown error')
         .join('; ');
       
       logStructured({

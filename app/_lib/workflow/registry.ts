@@ -429,6 +429,28 @@ export const RESEND_ADAPTER: AdapterDefinition = {
   },
 };
 
+/**
+ * Capture Adapter
+ * Universal form capture - accepts data from any source via /api/v1/capture/[formId]
+ * 
+ * OBSERVATIONAL: Capture never blocks the source form.
+ * - Email is optional - accepts any data
+ * - Triggers are DYNAMIC - populated from workspace's WorkspaceForms
+ * - No actions - capture only emits triggers to workflows
+ * 
+ * See: app/api/v1/workflow-registry/route.ts for dynamic trigger building
+ */
+export const CAPTURE_ADAPTER: AdapterDefinition = {
+  id: 'capture',
+  name: 'Form Capture',
+  requiresIntegration: false, // Always available - uses WorkspaceForm table
+  // Triggers are DYNAMIC - populated from workspace's enabled WorkspaceForms
+  // The workflow registry API injects workspace-specific form triggers at runtime
+  // Each WorkspaceForm becomes a trigger where triggerName = operation name
+  triggers: {},
+  actions: {}, // No actions - capture only emits triggers
+};
+
 // =============================================================================
 // REGISTRY
 // =============================================================================
@@ -444,6 +466,7 @@ export const ADAPTER_REGISTRY: Record<string, AdapterDefinition> = {
   manychat: MANYCHAT_ADAPTER,
   abc_ignite: ABC_IGNITE_ADAPTER,
   resend: RESEND_ADAPTER,
+  capture: CAPTURE_ADAPTER,
 };
 
 // =============================================================================

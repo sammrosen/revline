@@ -1,10 +1,33 @@
 # Form Capture System
 
-> Comprehensive documentation for RevLine's external form capture and custom field system.
+> Comprehensive documentation for RevLine's unified form capture system.
 
 ## Overview
 
-The Form Capture System enables **observational capture** of form submissions from external websites (e.g., ABC Fitness signup forms) without blocking or modifying the original form flow. Data is routed through RevLine for lead creation, custom field population, and workflow triggering.
+The Form Capture System is RevLine's **universal top-of-funnel pipe**. It enables **observational capture** of form data from ANY source without blocking or modifying the original form flow. Data is routed through RevLine for lead creation, custom field population, and workflow triggering.
+
+### Key Principles
+
+- **Observational**: Capture never blocks source forms - always returns success (204 for browser mode)
+- **Email Optional**: Accepts any data. If email is present, a lead is created. If not, trigger still fires.
+- **Source Agnostic**: Works with external sites, landing pages, bespoke forms, server-to-server
+- **Future Proof**: Same endpoint works regardless of where the form lives or where you migrate to
+
+### Unified Architecture
+
+All form capture goes through the same pipe:
+
+```
+ANY SOURCE → POST /api/v1/capture/[formId] → Lead + Custom Fields + Workflow Trigger
+```
+
+| Source | Integration Method |
+|--------|-------------------|
+| External websites | `capture.js` script |
+| Landing pages | `capture.js` or direct POST |
+| Bespoke form pages | `submitToCapture()` SDK |
+| Server-to-server | HMAC-signed POST |
+| Legacy subscribe endpoint | Auto-routes to capture |
 
 This system was built with the following principles from [STANDARDS.md](./STANDARDS.md):
 - **Abstraction First**: Workspace-scoped, provider-agnostic design
@@ -195,7 +218,44 @@ Examples:
 - barcode:custom.barcode     → Maps to custom field "barcode"
 ```
 
-### 5. Validation & Sanitization
+### 5. Server-Side SDK (for Bespoke Forms)
+
+For bespoke forms that need custom logic before capture (e.g., booking forms that
+need to verify eligibility first), use the server-side SDK:
+
+```typescript
+import { submitCaptureTrigger } from '@/app/_lib/services/capture.service';
+
+// After your custom form logic completes...
+const result = await submitCaptureTrigger(
+  workspaceId,
+  'booking-confirmed',  // Must match WorkspaceForm.triggerName
+  {
+    email: customer.email,           // Optional
+    firstName: customer.name,
+    'custom.bookingId': bookingId,
+    'custom.slotTime': slot.startTime,
+  }
+);
+
+if (result.success) {
+  console.log('Captured:', result.captureId);
+}
+```
+
+**SDK Functions:**
+
+| Function | Use Case |
+|----------|----------|
+| `submitCaptureTrigger(workspaceId, triggerName, payload)` | Submit by trigger name |
+| `submitToCapture(formId, payload)` | Submit by form ID |
+
+**Key Points:**
+- Never throws - always returns `CaptureProcessResult`
+- Email is optional - capture accepts any data
+- Workflows decide what to do with incomplete data
+
+### 6. Validation & Sanitization
 
 #### Allowed Targets
 
@@ -440,7 +500,7 @@ All capture operations emit events for debugging:
 - ✅ Proper error codes (400/401/403/429)
 
 ### Data Validation
-- ✅ Email required
+- ✅ Email optional (observational - accepts any data)
 - ✅ Only accept fields in allowedTargets
 - ✅ Denylist sensitive field names
 - ✅ Denylist sensitive value patterns
@@ -541,6 +601,55 @@ __tests__/unit/
 - **Events**: Check Events tab for capture events
 - **Leads**: See captured leads in Leads tab
 - **Workflows**: Check workflow executions
+
+---
+
+## Migration from Legacy System
+
+If you were using the old RevLine form system (`FORM_REGISTRY`, `emitFormTrigger()`,
+or the RevLine Config form enabler), here's how to migrate:
+
+### 1. Create WorkspaceForms
+
+For each form trigger you used, create a matching WorkspaceForm:
+
+| Old Trigger | New WorkspaceForm |
+|-------------|-------------------|
+| `revline.booking-confirmed` | triggerName: `booking-confirmed` |
+| `revline.email_captured` | triggerName: `email_captured` |
+
+### 2. Update Code
+
+```typescript
+// OLD (deprecated)
+import { emitFormTrigger } from '@/app/_lib/workflow';
+await emitFormTrigger(workspaceId, 'sportswest-booking', 'booking-confirmed', payload);
+
+// NEW
+import { submitCaptureTrigger } from '@/app/_lib/services/capture.service';
+await submitCaptureTrigger(workspaceId, 'booking-confirmed', payload);
+```
+
+### 3. Update Workflows
+
+Run the migration script to update existing workflows:
+
+```bash
+npx tsx prisma/migrate-workflows-to-capture.ts
+```
+
+This changes `triggerAdapter: 'revline'` → `triggerAdapter: 'capture'`.
+
+### 4. Deprecations
+
+The following are deprecated and will be removed in a future version:
+
+| Deprecated | Replacement |
+|------------|-------------|
+| `FORM_REGISTRY` | WorkspaceForm table |
+| `emitFormTrigger()` | `submitCaptureTrigger()` |
+| RevLine Config form enabler | Capture tab |
+| `revline.triggerId` triggers | `capture.triggerName` triggers |
 
 ---
 

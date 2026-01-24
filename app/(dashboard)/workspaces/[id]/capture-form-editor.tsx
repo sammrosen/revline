@@ -42,7 +42,7 @@ interface CaptureFormEditorProps {
 }
 
 const LEAD_FIELDS = [
-  { key: 'email', label: 'Email (required)' },
+  { key: 'email', label: 'Email' },
   { key: 'firstName', label: 'First Name' },
   { key: 'lastName', label: 'Last Name' },
   { key: 'phone', label: 'Phone' },
@@ -109,9 +109,8 @@ export function CaptureFormEditor({
   }, [workspaceId]);
 
   // Handle target toggle
+  // Email is now optional - capture is observational and accepts any data
   const handleToggleTarget = (target: string) => {
-    if (target === 'email') return; // Email is always required
-
     setSelectedTargets((prev) =>
       prev.includes(target)
         ? prev.filter((t) => t !== target)
@@ -371,7 +370,7 @@ export function CaptureFormEditor({
             Allowed Target Fields <span className="text-red-400">*</span>
           </label>
           <p className="text-[10px] text-zinc-600 mb-2">
-            Select which fields can be captured. Email is always required.
+            Select which fields can be captured. All fields are optional.
           </p>
 
           {/* Lead fields */}
@@ -387,7 +386,7 @@ export function CaptureFormEditor({
                     selectedTargets.includes(field.key)
                       ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
                       : 'bg-zinc-950 border-zinc-700 text-zinc-400 hover:border-zinc-600'
-                  } ${field.key === 'email' ? 'cursor-not-allowed opacity-75' : ''}`}
+                  }`}
                 >
                   <input
                     type="checkbox"
