@@ -19,6 +19,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/_lib/db';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
+import { emitTrigger } from '@/app/_lib/workflow/engine';
 import { getBookingProvider } from '@/app/_lib/booking/get-provider';
 import { hashToken, isTokenExpired } from '@/app/_lib/booking/magic-link';
 import { BookingCustomer, TimeSlot } from '@/app/_lib/booking/types';
@@ -285,6 +286,19 @@ export async function GET(
       eventType: 'booking_confirmed',
       success: true,
     });
+    
+    // Emit trigger for workflows - this lets RevLine see and react to bookings
+    await emitTrigger(
+      workspaceId,
+      { adapter: 'revline', operation: 'booking-confirmed' },
+      {
+        email: pendingBooking.customerEmail,
+        name: pendingBooking.customerName,
+        bookingId: bookingResult.bookingId || '',
+        trainerName: pendingBooking.staffName || '',
+        sessionTime: pendingBooking.scheduledAt.toISOString(),
+      }
+    );
     
     // Redirect to success page with booking details
     return NextResponse.redirect(buildRedirectUrl(workspaceSlug, 'success', {
