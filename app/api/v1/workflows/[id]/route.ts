@@ -269,6 +269,15 @@ export async function DELETE(
       return ApiResponse.error('Insufficient permissions to delete workflows', 403, ErrorCodes.UNAUTHORIZED);
     }
 
+    // Block deletion of active workflows
+    if (existing.enabled) {
+      return ApiResponse.error(
+        'Cannot delete an active workflow. Disable it first.',
+        400,
+        ErrorCodes.VALIDATION_FAILED
+      );
+    }
+
     // Delete workflow (executions cascade)
     await prisma.workflow.delete({
       where: { id },
