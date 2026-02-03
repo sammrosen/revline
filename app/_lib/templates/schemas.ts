@@ -13,7 +13,7 @@
  * - placeholder: Input placeholder text
  */
 
-import { DEFAULT_BOOKING_COPY } from '@/app/_lib/config/defaults';
+import { DEFAULT_BOOKING_COPY, DEFAULT_SIGNUP_COPY } from '@/app/_lib/config/defaults';
 
 // =============================================================================
 // SCHEMA TYPES
@@ -105,6 +105,62 @@ export const BOOKING_COPY_SCHEMA: TemplateCopySchema = {
 };
 
 // =============================================================================
+// SIGNUP TEMPLATE SCHEMA
+// =============================================================================
+
+/**
+ * Copy schema for the membership signup template
+ */
+export const SIGNUP_COPY_SCHEMA: TemplateCopySchema = {
+  templateId: 'signup',
+  templateName: 'Membership Signup',
+  fields: [
+    {
+      key: 'smsConsent',
+      label: 'SMS Consent Text',
+      description: 'Marketing consent checkbox text',
+      default: DEFAULT_SIGNUP_COPY.smsConsent,
+      maxLength: 300,
+      placeholder: 'I agree to receive marketing messages...',
+      multiline: true,
+    },
+    {
+      key: 'disclaimer',
+      label: 'Page Disclaimer',
+      description: 'Disclaimer text shown at bottom of page',
+      default: DEFAULT_SIGNUP_COPY.disclaimer,
+      maxLength: 200,
+      placeholder: 'Results may vary...',
+    },
+    {
+      key: 'submitButton',
+      label: 'Submit Button Text',
+      description: 'Text on the final submit button',
+      default: DEFAULT_SIGNUP_COPY.submitButton,
+      maxLength: 30,
+      placeholder: 'e.g., Complete Enrollment',
+    },
+    {
+      key: 'successTitle',
+      label: 'Success Page Title',
+      description: 'Title shown after successful enrollment',
+      default: DEFAULT_SIGNUP_COPY.successTitle,
+      maxLength: 60,
+      placeholder: 'e.g., Welcome!',
+    },
+    {
+      key: 'successMessage',
+      label: 'Success Message',
+      description: 'Message shown on the confirmation page',
+      default: DEFAULT_SIGNUP_COPY.successMessage,
+      maxLength: 200,
+      placeholder: 'Your membership is now active...',
+      multiline: true,
+    },
+  ],
+};
+
+// =============================================================================
 // BRANDING SCHEMA
 // =============================================================================
 
@@ -179,7 +235,7 @@ export const BRANDING_SCHEMA: BrandingFieldSchema[] = [
  */
 export const TEMPLATE_COPY_SCHEMAS: Record<string, TemplateCopySchema> = {
   booking: BOOKING_COPY_SCHEMA,
-  // Future: signup, landing, etc.
+  signup: SIGNUP_COPY_SCHEMA,
 };
 
 /**

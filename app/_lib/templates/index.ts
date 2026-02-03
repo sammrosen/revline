@@ -6,6 +6,7 @@
 
 export {
   BOOKING_COPY_SCHEMA,
+  SIGNUP_COPY_SCHEMA,
   BRANDING_SCHEMA,
   TEMPLATE_COPY_SCHEMAS,
   getTemplateCopySchema,

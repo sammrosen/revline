@@ -215,6 +215,8 @@ export interface BookingCopyConfig {
 export interface CopyConfig {
   /** Booking template copy */
   booking?: BookingCopyConfig;
+  /** Signup template copy */
+  signup?: SignupCopyConfig;
 }
 
 /**
@@ -223,6 +225,146 @@ export interface CopyConfig {
 export interface WorkspaceFeatures {
   /** Show "Powered by RevLine" footer (default: true) */
   showPoweredBy?: boolean;
+}
+
+// =============================================================================
+// SIGNUP TEMPLATE TYPES
+// =============================================================================
+
+/**
+ * Copy configuration for signup/membership template
+ */
+export interface SignupCopyConfig {
+  /** Step titles (1-6) */
+  stepTitles?: {
+    1?: string;
+    2?: string;
+    3?: string;
+    4?: string;
+    5?: string;
+    6?: string;
+  };
+  /** SMS/Marketing consent text */
+  smsConsent?: string;
+  /** Page disclaimer text */
+  disclaimer?: string;
+  /** Final submit button text */
+  submitButton?: string;
+  /** Confirmation page title */
+  successTitle?: string;
+  /** Confirmation page message */
+  successMessage?: string;
+}
+
+/**
+ * Club/location information for signup
+ */
+export interface SignupClubInfo {
+  /** Club name */
+  name: string;
+  /** Street address */
+  address: string;
+  /** City */
+  city: string;
+  /** State abbreviation */
+  state: string;
+  /** ZIP/Postal code */
+  zip: string;
+}
+
+/**
+ * Pricing detail line item
+ */
+export interface SignupPricingDetail {
+  /** Label (e.g., "Enrollment Fee", "First Month") */
+  label: string;
+  /** Display value (e.g., "$65.99") */
+  value: string;
+  /** Strikethrough value for promotions (e.g., "$49.00") */
+  strikethrough?: string;
+}
+
+/**
+ * Payment summary for a plan
+ */
+export interface SignupPaymentDetails {
+  /** Amount due today */
+  dueToday: number;
+  /** Recurring monthly/yearly amount */
+  recurring: number;
+  /** Additional fees */
+  fees: number;
+}
+
+/**
+ * Membership plan configuration
+ */
+export interface SignupPlan {
+  /** Unique plan identifier */
+  id: string;
+  /** Display name (e.g., "Premier All Location") */
+  name: string;
+  /** Price amount */
+  price: number;
+  /** Billing period */
+  period: 'month' | 'year';
+  /** Plan image URL */
+  image?: string;
+  /** List of member benefits */
+  benefits: string[];
+  /** Pricing breakdown details */
+  pricingDetails: SignupPricingDetail[];
+  /** Promotional note (e.g., "$0 Enrollment Fee!") */
+  promoNote?: string;
+  /** Fine print disclaimer */
+  disclaimer?: string;
+  /** Payment summary */
+  paymentDetails: SignupPaymentDetails;
+}
+
+/**
+ * Policy links configuration
+ */
+export interface SignupPolicies {
+  /** Privacy policy URL */
+  privacy?: string;
+  /** Accessibility statement URL */
+  accessibility?: string;
+  /** Cancellation request URL */
+  cancellation?: string;
+  /** Terms and conditions URL */
+  terms?: string;
+}
+
+/**
+ * Feature flags for signup template
+ */
+export interface SignupFeatures {
+  /** Show promo code input (default: true) */
+  showPromoCode?: boolean;
+  /** Show powered by footer (default: true) */
+  showPoweredBy?: boolean;
+  /** Require SMS consent checkbox (default: true) */
+  requireSmsConsent?: boolean;
+}
+
+/**
+ * Full signup/membership configuration
+ * Stored in RevlineMeta.signup
+ */
+export interface SignupConfig {
+  /** Whether signup form is enabled */
+  enabled: boolean;
+  /** Club/location information */
+  club: SignupClubInfo;
+  /** Available membership plans */
+  plans: SignupPlan[];
+  /** Copy/text customization */
+  copy: SignupCopyConfig;
+  /** Policy page links */
+  policies: SignupPolicies;
+  /** Feature toggles */
+  features: SignupFeatures;
 }
 
 /**
@@ -267,6 +409,8 @@ export interface RevlineMeta {
   copy?: CopyConfig;
   /** Feature flags */
   features?: WorkspaceFeatures;
+  /** Signup/membership template configuration */
+  signup?: SignupConfig;
 }
 
 /**

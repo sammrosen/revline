@@ -1,14 +1,32 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { BRANDING_SCHEMA, BOOKING_COPY_SCHEMA } from '@/app/_lib/templates';
-import { DEFAULT_BRANDING, DEFAULT_BOOKING_COPY, isValidHexColor, isValidLogoUrl } from '@/app/_lib/config';
+import { BRANDING_SCHEMA, BOOKING_COPY_SCHEMA, SIGNUP_COPY_SCHEMA } from '@/app/_lib/templates';
+import { 
+  DEFAULT_SIGNUP_CONFIG,
+  EXAMPLE_SIGNUP_PLAN,
+  isValidHexColor, 
+  isValidLogoUrl,
+} from '@/app/_lib/config';
+import type { SignupConfig, SignupPlan } from '@/app/_lib/types';
 
 /**
  * Resolve a path template by replacing {slug} with actual workspace slug
  */
 function resolveFormPath(pathTemplate: string, workspaceSlug: string): string {
   return pathTemplate.replace(/{slug}/g, workspaceSlug);
+}
+
+/**
+ * Get the preview URL for a given form type
+ */
+function getPreviewUrl(workspaceSlug: string, formId: string): string {
+  // Map form IDs to their public paths
+  if (formId.includes('signup') || formId === 'membership-signup') {
+    return `/public/${workspaceSlug}/signup?preview=true`;
+  }
+  // Default to booking form
+  return `/public/${workspaceSlug}/book?preview=true`;
 }
 
 /**
@@ -64,6 +82,7 @@ interface RevlineMeta {
   branding?: BrandingConfig;
   copy?: CopyConfig;
   features?: FeaturesConfig;
+  signup?: SignupConfig;
 }
 
 interface FormTrigger {
@@ -90,7 +109,7 @@ export interface RevlineConfigEditorProps {
   workspaceSlug?: string;
 }
 
-type TabType = 'settings' | 'forms' | 'branding' | 'copy';
+type TabType = 'settings' | 'forms' | 'branding' | 'build';
 
 // =============================================================================
 // DEFAULTS
@@ -106,6 +125,7 @@ const DEFAULT_CONFIG: RevlineMeta = {
   features: {
     showPoweredBy: true,
   },
+  signup: undefined,
 };
 
 function parseMeta(value: string): RevlineMeta {
@@ -120,6 +140,7 @@ function parseMeta(value: string): RevlineMeta {
       branding: parsed.branding || {},
       copy: parsed.copy || {},
       features: parsed.features || { showPoweredBy: true },
+      signup: parsed.signup || undefined,
     };
   } catch {
     return DEFAULT_CONFIG;
@@ -143,6 +164,7 @@ export function RevlineConfigEditor({
   const [previewKey, setPreviewKey] = useState(0);
   const [previewError, setPreviewError] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
+  const [previewForm, setPreviewForm] = useState<string>(''); // Which form to preview (empty = auto based on tab)
   
   // Resizable panel state - deferred to avoid hydration mismatch
   const [hasMounted, setHasMounted] = useState(false);
@@ -150,6 +172,15 @@ export function RevlineConfigEditor({
   const [isDragging, setIsDragging] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(100); // percentage
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Track if there are unsaved changes (compare current meta to original value)
+  const [savedValue, setSavedValue] = useState(value);
+  const hasUnsavedChanges = JSON.stringify(meta) !== JSON.stringify(parseMeta(savedValue));
+  
+  // Update savedValue when value prop changes (after external save)
+  useEffect(() => {
+    setSavedValue(value);
+  }, [value]);
   
   // Mark as mounted after hydration
   useEffect(() => {
@@ -230,22 +261,39 @@ export function RevlineConfigEditor({
         branding: parsed.branding || {},
         copy: parsed.copy || {},
         features: parsed.features || { showPoweredBy: true },
+        signup: parsed.signup || undefined,
       });
     } catch {
       // Invalid JSON, don't update meta
     }
   }
 
-  // Check if booking form is enabled (for showing copy tab)
-  const hasBookingForm = Object.keys(meta.forms).some(id => 
-    meta.forms[id]?.enabled && (id === 'booking' || id.includes('booking'))
-  );
+  // Get enabled form IDs for Build tab
+  const enabledFormIds = Object.keys(meta.forms).filter(id => meta.forms[id]?.enabled);
+  const hasEnabledForms = enabledFormIds.length > 0;
+  
+  // Selected form for Build tab (track which form is being edited)
+  const [selectedBuildForm, setSelectedBuildForm] = useState<string>(() => {
+    // Default to first enabled form
+    const firstEnabled = Object.keys(meta.forms).find(id => meta.forms[id]?.enabled);
+    return firstEnabled || '';
+  });
+  
+  // Sync selectedBuildForm when forms change
+  useEffect(() => {
+    const enabledIds = Object.keys(meta.forms).filter(id => meta.forms[id]?.enabled);
+    if (enabledIds.length > 0 && !enabledIds.includes(selectedBuildForm)) {
+      setSelectedBuildForm(enabledIds[0]);
+    } else if (enabledIds.length === 0) {
+      setSelectedBuildForm('');
+    }
+  }, [meta.forms, selectedBuildForm]);
 
   const tabs: { id: TabType; label: string; show: boolean }[] = [
     { id: 'settings', label: 'Settings', show: true },
     { id: 'forms', label: 'Forms', show: true },
     { id: 'branding', label: 'Branding', show: true },
-    { id: 'copy', label: 'Copy', show: hasBookingForm },
+    { id: 'build', label: 'Build', show: hasEnabledForms },
   ];
 
   return (
@@ -298,7 +346,7 @@ export function RevlineConfigEditor({
           {/* Editor Panel */}
           <div 
             className="overflow-y-auto pr-2"
-            style={{ width: hasMounted && showPreview && (activeTab === 'branding' || activeTab === 'copy') && workspaceSlug ? `${editorWidth}%` : '100%' }}
+            style={{ width: hasMounted && showPreview && (activeTab === 'branding' || activeTab === 'build') && workspaceSlug ? `${editorWidth}%` : '100%' }}
           >
             <div className="space-y-4">
               {activeTab === 'settings' && (
@@ -324,10 +372,13 @@ export function RevlineConfigEditor({
                 />
               )}
               
-              {activeTab === 'copy' && hasBookingForm && (
-                <CopyTab 
+              {activeTab === 'build' && hasEnabledForms && (
+                <BuildTab 
                   meta={meta} 
-                  updateMeta={updateMeta} 
+                  updateMeta={updateMeta}
+                  registeredForms={registeredForms}
+                  selectedForm={selectedBuildForm}
+                  onSelectForm={setSelectedBuildForm}
                 />
               )}
               
@@ -336,7 +387,7 @@ export function RevlineConfigEditor({
           </div>
 
           {/* Draggable Divider */}
-          {showPreview && (activeTab === 'branding' || activeTab === 'copy') && workspaceSlug && (
+          {showPreview && (activeTab === 'branding' || activeTab === 'build') && workspaceSlug && (
             <div
               className="w-2 shrink-0 cursor-col-resize group flex items-center justify-center hover:bg-zinc-700/50 transition-colors"
               onMouseDown={() => setIsDragging(true)}
@@ -346,7 +397,7 @@ export function RevlineConfigEditor({
           )}
 
           {/* Preview Panel */}
-          {(activeTab === 'branding' || activeTab === 'copy') && workspaceSlug && (
+          {(activeTab === 'branding' || activeTab === 'build') && workspaceSlug && (
             <div 
               className="flex flex-col pl-2"
               style={{ width: hasMounted && showPreview ? `${100 - editorWidth}%` : 'auto' }}
@@ -359,6 +410,26 @@ export function RevlineConfigEditor({
                     <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded text-[10px]">
                       Interactive
                     </span>
+                  )}
+                  {/* Form selector for preview */}
+                  {showPreview && enabledFormIds.length > 0 && (
+                    <select
+                      value={previewForm || (activeTab === 'build' ? selectedBuildForm : enabledFormIds[0])}
+                      onChange={(e) => {
+                        setPreviewForm(e.target.value);
+                        setPreviewKey(k => k + 1);
+                      }}
+                      className="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-[11px] text-zinc-300 focus:border-amber-500/50 outline-none"
+                    >
+                      {enabledFormIds.map(formId => {
+                        const formInfo = registeredForms.find(f => f.id === formId);
+                        return (
+                          <option key={formId} value={formId}>
+                            {formInfo?.name || formId}
+                          </option>
+                        );
+                      })}
+                    </select>
                   )}
                 </div>
                 <div className="flex items-center gap-1">
@@ -447,8 +518,8 @@ export function RevlineConfigEditor({
                       }}
                     >
                       <iframe
-                        key={previewKey}
-                        src={`/public/${workspaceSlug}/book?preview=true`}
+                        key={`${previewKey}-${previewForm || selectedBuildForm}`}
+                        src={getPreviewUrl(workspaceSlug, previewForm || (activeTab === 'build' ? selectedBuildForm : enabledFormIds[0] || 'magic-link-booking'))}
                         className="w-full h-full bg-white"
                         style={{ minHeight: '800px' }}
                         sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
@@ -460,9 +531,19 @@ export function RevlineConfigEditor({
               )}
 
               {showPreview && (
-                <p className="text-[10px] text-zinc-600 mt-1 shrink-0">
-                  Drag divider to resize • Fully interactive
-                </p>
+                <div className="mt-1 shrink-0 space-y-1">
+                  {hasUnsavedChanges && (
+                    <p className="text-[10px] text-amber-400/80 flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      Preview shows saved state. Save to see changes.
+                    </p>
+                  )}
+                  <p className="text-[10px] text-zinc-600">
+                    Drag divider to resize • Fully interactive
+                  </p>
+                </div>
               )}
             </div>
           )}
@@ -609,7 +690,7 @@ function FormsTab({
                   <button
                     type="button"
                     onClick={() => toggleForm(formId)}
-                    className={`w-10 h-5 rounded-full relative transition-colors flex-shrink-0 ${
+                    className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${
                       form.enabled ? 'bg-amber-500' : 'bg-zinc-700'
                     }`}
                   >
@@ -654,7 +735,7 @@ function FormsTab({
                   <button
                     type="button"
                     onClick={() => removeForm(formId)}
-                    className="text-zinc-500 hover:text-red-400 transition-colors flex-shrink-0"
+                    className="text-zinc-500 hover:text-red-400 transition-colors shrink-0"
                     title="Remove form"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -812,10 +893,84 @@ function BrandingTab({
 }
 
 // =============================================================================
-// COPY TAB
+// BUILD TAB
 // =============================================================================
 
-function CopyTab({ 
+function BuildTab({ 
+  meta, 
+  updateMeta,
+  registeredForms,
+  selectedForm,
+  onSelectForm,
+}: { 
+  meta: RevlineMeta; 
+  updateMeta: (m: RevlineMeta) => void;
+  registeredForms: RegisteredForm[];
+  selectedForm: string;
+  onSelectForm: (formId: string) => void;
+}) {
+  const enabledFormIds = Object.keys(meta.forms).filter(id => meta.forms[id]?.enabled);
+  const selectedFormInfo = registeredForms.find(f => f.id === selectedForm);
+  
+  // Determine the form type for showing appropriate sections
+  const isBookingForm = selectedForm.includes('booking') || selectedFormInfo?.type === 'booking';
+  const isSignupForm = selectedForm.includes('signup') || selectedFormInfo?.type === 'signup';
+
+  return (
+    <div className="space-y-4">
+      {/* Form Selector */}
+      <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-zinc-300">Editing Form</h4>
+            <p className="text-xs text-zinc-500 mt-0.5">Select which form to configure</p>
+          </div>
+          <select
+            value={selectedForm}
+            onChange={(e) => onSelectForm(e.target.value)}
+            className="px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none transition-colors min-w-[200px]"
+          >
+            {enabledFormIds.map(formId => {
+              const formInfo = registeredForms.find(f => f.id === formId);
+              return (
+                <option key={formId} value={formId}>
+                  {formInfo?.name || formId}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+      </div>
+
+      {/* Form-specific Copy Section */}
+      {isBookingForm && (
+        <BookingCopySection meta={meta} updateMeta={updateMeta} />
+      )}
+      
+      {isSignupForm && (
+        <>
+          <SignupCopySection meta={meta} updateMeta={updateMeta} />
+          <SignupConfigSection meta={meta} updateMeta={updateMeta} />
+        </>
+      )}
+      
+      {/* Fallback for unknown form types */}
+      {!isBookingForm && !isSignupForm && selectedForm && (
+        <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
+          <p className="text-sm text-zinc-500 text-center py-4">
+            No configuration options available for this form type.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// BOOKING COPY SECTION (for Build tab)
+// =============================================================================
+
+function BookingCopySection({ 
   meta, 
   updateMeta 
 }: { 
@@ -836,7 +991,7 @@ function CopyTab({
 
   return (
     <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
-      <h4 className="text-sm font-medium text-zinc-300 mb-3">Booking Page Copy</h4>
+      <h4 className="text-sm font-medium text-zinc-300 mb-3">Copy</h4>
       
       <div className="space-y-4">
         {BOOKING_COPY_SCHEMA.fields.map(field => (
@@ -885,9 +1040,532 @@ function CopyTab({
           })}
           className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
         >
-          Reset to defaults
+          Reset copy to defaults
         </button>
       </div>
     </div>
   );
 }
+
+// =============================================================================
+// SIGNUP COPY SECTION (for Build tab)
+// =============================================================================
+
+function SignupCopySection({ 
+  meta, 
+  updateMeta 
+}: { 
+  meta: RevlineMeta; 
+  updateMeta: (m: RevlineMeta) => void;
+}) {
+  const signupCopy = meta.signup?.copy || {};
+
+  function updateCopy(field: string, value: string) {
+    updateMeta({
+      ...meta,
+      signup: {
+        ...meta.signup,
+        enabled: meta.signup?.enabled ?? false,
+        club: meta.signup?.club || DEFAULT_SIGNUP_CONFIG.club,
+        plans: meta.signup?.plans || [],
+        policies: meta.signup?.policies || DEFAULT_SIGNUP_CONFIG.policies,
+        features: meta.signup?.features || DEFAULT_SIGNUP_CONFIG.features,
+        copy: { ...signupCopy, [field]: value },
+      },
+    });
+  }
+
+  return (
+    <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
+      <h4 className="text-sm font-medium text-zinc-300 mb-3">Copy</h4>
+      
+      <div className="space-y-4">
+        {SIGNUP_COPY_SCHEMA.fields.map(field => (
+          <div key={field.key}>
+            <label className="text-xs text-zinc-400 block mb-1.5">
+              {field.label}
+            </label>
+            
+            {field.multiline ? (
+              <textarea
+                value={(signupCopy as Record<string, string>)[field.key] || ''}
+                onChange={(e) => updateCopy(field.key, e.target.value)}
+                placeholder={field.placeholder || field.default}
+                maxLength={field.maxLength}
+                rows={3}
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none transition-colors resize-none"
+              />
+            ) : (
+              <input
+                type="text"
+                value={(signupCopy as Record<string, string>)[field.key] || ''}
+                onChange={(e) => updateCopy(field.key, e.target.value)}
+                placeholder={field.placeholder || field.default}
+                maxLength={field.maxLength}
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none transition-colors"
+              />
+            )}
+            
+            <div className="flex justify-between mt-1">
+              <p className="text-xs text-zinc-600">{field.description}</p>
+              {field.maxLength && (
+                <span className="text-xs text-zinc-600">
+                  {((signupCopy as Record<string, string>)[field.key] || '').length}/{field.maxLength}
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {/* Reset to defaults */}
+      <div className="mt-4 pt-4 border-t border-zinc-800/50">
+        <button
+          type="button"
+          onClick={() => updateMeta({ 
+            ...meta, 
+            signup: meta.signup ? { ...meta.signup, copy: {} } : undefined
+          })}
+          className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+        >
+          Reset copy to defaults
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// SIGNUP CONFIG SECTION (for Build tab)
+// =============================================================================
+
+function SignupConfigSection({ 
+  meta, 
+  updateMeta 
+}: { 
+  meta: RevlineMeta; 
+  updateMeta: (m: RevlineMeta) => void;
+}) {
+  const signupConfig: SignupConfig = meta.signup || DEFAULT_SIGNUP_CONFIG;
+  const [editingPlanIndex, setEditingPlanIndex] = useState<number | null>(null);
+  
+  // Update signup config
+  const updateSignup = (updates: Partial<SignupConfig>) => {
+    updateMeta({
+      ...meta,
+      signup: { ...signupConfig, ...updates },
+    });
+  };
+  
+  // Update club info
+  const updateClub = (field: keyof SignupConfig['club'], value: string) => {
+    updateSignup({
+      club: { ...signupConfig.club, [field]: value },
+    });
+  };
+  
+  // Update policies
+  const updatePolicy = (field: keyof SignupConfig['policies'], value: string) => {
+    updateSignup({
+      policies: { ...signupConfig.policies, [field]: value },
+    });
+  };
+  
+  // Update features
+  const updateFeature = (field: keyof SignupConfig['features'], value: boolean) => {
+    updateSignup({
+      features: { ...signupConfig.features, [field]: value },
+    });
+  };
+  
+  // Add a new plan
+  const addPlan = () => {
+    const newPlan: SignupPlan = {
+      ...EXAMPLE_SIGNUP_PLAN,
+      id: `plan-${Date.now()}`,
+      name: `New Plan ${signupConfig.plans.length + 1}`,
+    };
+    updateSignup({
+      plans: [...signupConfig.plans, newPlan],
+    });
+    setEditingPlanIndex(signupConfig.plans.length);
+  };
+  
+  // Update a plan
+  const updatePlan = (index: number, updates: Partial<SignupPlan>) => {
+    const newPlans = [...signupConfig.plans];
+    newPlans[index] = { ...newPlans[index], ...updates };
+    updateSignup({ plans: newPlans });
+  };
+  
+  // Delete a plan
+  const deletePlan = (index: number) => {
+    const newPlans = signupConfig.plans.filter((_, i) => i !== index);
+    updateSignup({ plans: newPlans });
+    setEditingPlanIndex(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Enable Toggle */}
+      <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-zinc-300">Signup Enabled</h4>
+            <p className="text-xs text-zinc-500 mt-0.5">Enable the public signup form</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => updateSignup({ enabled: !signupConfig.enabled })}
+            className={`w-11 h-6 rounded-full relative transition-colors ${
+              signupConfig.enabled ? 'bg-amber-500' : 'bg-zinc-700'
+            }`}
+          >
+            <span 
+              className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                signupConfig.enabled ? 'left-5' : 'left-0.5'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+      
+      {signupConfig.enabled && (
+        <>
+          {/* Club Info */}
+          <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
+            <h4 className="text-sm font-medium text-zinc-300 mb-3">Club Information</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="block text-xs text-zinc-400 mb-1">Club Name</label>
+                <input
+                  type="text"
+                  value={signupConfig.club.name}
+                  onChange={(e) => updateClub('name', e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                  placeholder="Your Gym Name"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-zinc-400 mb-1">Address</label>
+                <input
+                  type="text"
+                  value={signupConfig.club.address}
+                  onChange={(e) => updateClub('address', e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                  placeholder="123 Fitness Way"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">City</label>
+                <input
+                  type="text"
+                  value={signupConfig.club.city}
+                  onChange={(e) => updateClub('city', e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                  placeholder="Anytown"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">State</label>
+                  <input
+                    type="text"
+                    value={signupConfig.club.state}
+                    onChange={(e) => updateClub('state', e.target.value.toUpperCase().slice(0, 2))}
+                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                    placeholder="CA"
+                    maxLength={2}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">ZIP</label>
+                  <input
+                    type="text"
+                    value={signupConfig.club.zip}
+                    onChange={(e) => updateClub('zip', e.target.value.replace(/\D/g, '').slice(0, 5))}
+                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                    placeholder="90210"
+                    maxLength={5}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Plans */}
+          <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-medium text-zinc-300">Membership Plans</h4>
+              <button
+                type="button"
+                onClick={addPlan}
+                className="px-2 py-1 text-xs bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30 transition-colors"
+              >
+                + Add Plan
+              </button>
+            </div>
+            
+            {signupConfig.plans.length === 0 ? (
+              <p className="text-xs text-zinc-500 text-center py-4">No plans configured. Add a plan to get started.</p>
+            ) : (
+              <div className="space-y-2">
+                {signupConfig.plans.map((plan, index) => (
+                  <div
+                    key={plan.id}
+                    className={`border rounded-lg overflow-hidden ${
+                      editingPlanIndex === index ? 'border-amber-500/50' : 'border-zinc-700'
+                    }`}
+                  >
+                    {/* Plan header */}
+                    <div
+                      className="flex items-center justify-between p-3 bg-zinc-800/50 cursor-pointer"
+                      onClick={() => setEditingPlanIndex(editingPlanIndex === index ? null : index)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-white">{plan.name}</span>
+                        <span className="text-xs text-amber-400">${plan.price}/{plan.period === 'month' ? 'mo' : 'yr'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); deletePlan(index); }}
+                          className="p-1 text-red-400 hover:text-red-300"
+                          title="Delete plan"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                        <svg
+                          className={`w-4 h-4 text-zinc-400 transition-transform ${editingPlanIndex === index ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
+                    
+                    {/* Plan editor */}
+                    {editingPlanIndex === index && (
+                      <div className="p-3 space-y-3 border-t border-zinc-700">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs text-zinc-400 mb-1">Plan Name</label>
+                            <input
+                              type="text"
+                              value={plan.name}
+                              onChange={(e) => updatePlan(index, { name: e.target.value })}
+                              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-xs text-zinc-400 mb-1">Price</label>
+                              <input
+                                type="number"
+                                value={plan.price}
+                                onChange={(e) => updatePlan(index, { price: parseFloat(e.target.value) || 0 })}
+                                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                                step="0.01"
+                                min="0"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-zinc-400 mb-1">Period</label>
+                              <select
+                                value={plan.period}
+                                onChange={(e) => updatePlan(index, { period: e.target.value as 'month' | 'year' })}
+                                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                              >
+                                <option value="month">Monthly</option>
+                                <option value="year">Yearly</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs text-zinc-400 mb-1">Image URL</label>
+                          <input
+                            type="text"
+                            value={plan.image || ''}
+                            onChange={(e) => updatePlan(index, { image: e.target.value })}
+                            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                            placeholder="https://example.com/plan-image.jpg"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs text-zinc-400 mb-1">Promo Note</label>
+                          <input
+                            type="text"
+                            value={plan.promoNote || ''}
+                            onChange={(e) => updatePlan(index, { promoNote: e.target.value })}
+                            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                            placeholder="e.g., $0 Enrollment Fee!"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs text-zinc-400 mb-1">Benefits (one per line)</label>
+                          <textarea
+                            value={plan.benefits.join('\n')}
+                            onChange={(e) => updatePlan(index, { benefits: e.target.value.split('\n').filter(b => b.trim()) })}
+                            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none resize-none"
+                            rows={4}
+                            placeholder="Full gym access&#10;Locker room access&#10;Free fitness assessment"
+                          />
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-xs text-zinc-400 mb-1">Due Today</label>
+                            <input
+                              type="number"
+                              value={plan.paymentDetails.dueToday}
+                              onChange={(e) => updatePlan(index, { 
+                                paymentDetails: { ...plan.paymentDetails, dueToday: parseFloat(e.target.value) || 0 }
+                              })}
+                              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                              step="0.01"
+                              min="0"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-zinc-400 mb-1">Recurring</label>
+                            <input
+                              type="number"
+                              value={plan.paymentDetails.recurring}
+                              onChange={(e) => updatePlan(index, { 
+                                paymentDetails: { ...plan.paymentDetails, recurring: parseFloat(e.target.value) || 0 }
+                              })}
+                              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                              step="0.01"
+                              min="0"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-zinc-400 mb-1">Fees</label>
+                            <input
+                              type="number"
+                              value={plan.paymentDetails.fees}
+                              onChange={(e) => updatePlan(index, { 
+                                paymentDetails: { ...plan.paymentDetails, fees: parseFloat(e.target.value) || 0 }
+                              })}
+                              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                              step="0.01"
+                              min="0"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          {/* Policy Links */}
+          <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
+            <h4 className="text-sm font-medium text-zinc-300 mb-3">Policy Links</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">Privacy Policy URL</label>
+                <input
+                  type="url"
+                  value={signupConfig.policies.privacy || ''}
+                  onChange={(e) => updatePolicy('privacy', e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                  placeholder="https://example.com/privacy"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">Terms URL</label>
+                <input
+                  type="url"
+                  value={signupConfig.policies.terms || ''}
+                  onChange={(e) => updatePolicy('terms', e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                  placeholder="https://example.com/terms"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">Accessibility URL</label>
+                <input
+                  type="url"
+                  value={signupConfig.policies.accessibility || ''}
+                  onChange={(e) => updatePolicy('accessibility', e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                  placeholder="https://example.com/accessibility"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">Cancellation URL</label>
+                <input
+                  type="url"
+                  value={signupConfig.policies.cancellation || ''}
+                  onChange={(e) => updatePolicy('cancellation', e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                  placeholder="https://example.com/cancel"
+                />
+              </div>
+            </div>
+          </div>
+          
+          {/* Features */}
+          <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
+            <h4 className="text-sm font-medium text-zinc-300 mb-3">Features</h4>
+            <div className="space-y-3">
+              <label className="flex items-center justify-between">
+                <span className="text-sm text-zinc-300">Show Promo Code Field</span>
+                <input
+                  type="checkbox"
+                  checked={signupConfig.features.showPromoCode ?? true}
+                  onChange={(e) => updateFeature('showPromoCode', e.target.checked)}
+                  className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500/50"
+                />
+              </label>
+              <label className="flex items-center justify-between">
+                <span className="text-sm text-zinc-300">Require SMS Consent</span>
+                <input
+                  type="checkbox"
+                  checked={signupConfig.features.requireSmsConsent ?? true}
+                  onChange={(e) => updateFeature('requireSmsConsent', e.target.checked)}
+                  className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500/50"
+                />
+              </label>
+              <label className="flex items-center justify-between">
+                <span className="text-sm text-zinc-300">Show Powered By Footer</span>
+                <input
+                  type="checkbox"
+                  checked={signupConfig.features.showPoweredBy ?? true}
+                  onChange={(e) => updateFeature('showPoweredBy', e.target.checked)}
+                  className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500/50"
+                />
+              </label>
+            </div>
+          </div>
+          
+          {/* Reset to defaults */}
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => updateMeta({ 
+                ...meta, 
+                signup: DEFAULT_SIGNUP_CONFIG 
+              })}
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              Reset all config to defaults
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+

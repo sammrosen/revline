@@ -10,7 +10,17 @@
  * - Branding defaults should be neutral (RevLine blue theme)
  */
 
-import { BrandingConfig, BookingCopyConfig, WorkspaceFeatures } from '@/app/_lib/types';
+import { 
+  BrandingConfig, 
+  BookingCopyConfig, 
+  WorkspaceFeatures,
+  SignupCopyConfig,
+  SignupConfig,
+  SignupClubInfo,
+  SignupFeatures,
+  SignupPolicies,
+  SignupPlan,
+} from '@/app/_lib/types';
 
 // =============================================================================
 // BRANDING DEFAULTS
@@ -53,6 +63,100 @@ export const DEFAULT_BOOKING_COPY: Required<BookingCopyConfig> = {
  */
 export const DEFAULT_FEATURES: Required<WorkspaceFeatures> = {
   showPoweredBy: true,
+};
+
+// =============================================================================
+// SIGNUP DEFAULTS
+// =============================================================================
+
+/**
+ * Default copy for signup/membership template
+ */
+export const DEFAULT_SIGNUP_COPY: Required<SignupCopyConfig> = {
+  stepTitles: {
+    1: 'Location',
+    2: 'About You',
+    3: 'Select Plan',
+    4: 'Member Info',
+    5: 'Payment',
+    6: 'Confirmation',
+  },
+  smsConsent: 'I agree to receive marketing and service messages. I can opt-out at any time by following the unsubscribe instructions. Consent is not a condition of purchase.',
+  disclaimer: 'Results may vary from individual to individual.',
+  submitButton: 'Complete Enrollment',
+  successTitle: 'Welcome to the Team!',
+  successMessage: 'Your membership is now active. Check your email for confirmation details.',
+};
+
+/**
+ * Default club info (placeholder)
+ */
+export const DEFAULT_SIGNUP_CLUB: Required<SignupClubInfo> = {
+  name: 'Your Gym',
+  address: '123 Fitness Way',
+  city: 'Anytown',
+  state: 'CA',
+  zip: '90210',
+};
+
+/**
+ * Default signup feature flags
+ */
+export const DEFAULT_SIGNUP_FEATURES: Required<SignupFeatures> = {
+  showPromoCode: true,
+  showPoweredBy: true,
+  requireSmsConsent: true,
+};
+
+/**
+ * Default signup policies (empty - must be configured)
+ */
+export const DEFAULT_SIGNUP_POLICIES: Required<SignupPolicies> = {
+  privacy: '',
+  accessibility: '',
+  cancellation: '',
+  terms: '',
+};
+
+/**
+ * Example membership plan (for template/reference)
+ */
+export const EXAMPLE_SIGNUP_PLAN: SignupPlan = {
+  id: 'standard',
+  name: 'Standard Membership',
+  price: 49.99,
+  period: 'month',
+  image: '',
+  benefits: [
+    'Full gym access',
+    'Locker room access',
+    'Free fitness assessment',
+    'Mobile app access',
+  ],
+  pricingDetails: [
+    { label: 'Monthly Rate', value: '$49.99' },
+    { label: 'Enrollment Fee', value: '$0', strikethrough: '$29' },
+  ],
+  promoNote: '$0 Enrollment Fee!',
+  disclaimer: '',
+  paymentDetails: {
+    dueToday: 49.99,
+    recurring: 49.99,
+    fees: 0,
+  },
+};
+
+/**
+ * Default signup configuration
+ * Includes example plan for template reference
+ */
+export const DEFAULT_SIGNUP_CONFIG: SignupConfig = {
+  enabled: false,
+  club: DEFAULT_SIGNUP_CLUB,
+  plans: [EXAMPLE_SIGNUP_PLAN],
+  copy: DEFAULT_SIGNUP_COPY,
+  policies: DEFAULT_SIGNUP_POLICIES,
+  features: DEFAULT_SIGNUP_FEATURES,
 };
 
 // =============================================================================
