@@ -162,9 +162,72 @@ export interface AbcIgniteMeta {
   }>;
 }
 
+// =============================================================================
+// WORKSPACE BRANDING & COPY TYPES
+// =============================================================================
+
+/**
+ * Branding configuration for workspace templates
+ * Used to customize the visual appearance of public pages
+ * 
+ * @example
+ * {
+ *   "primaryColor": "#8B2346",
+ *   "logo": "https://example.com/logo.png",
+ *   "fontFamily": "inter"
+ * }
+ */
+export interface BrandingConfig {
+  /** Primary brand color (hex format) */
+  primaryColor?: string;
+  /** Secondary/accent color (hex format) */
+  secondaryColor?: string;
+  /** Page background color (hex format) */
+  backgroundColor?: string;
+  /** Logo URL (https only for security) */
+  logo?: string;
+  /** Font family for templates */
+  fontFamily?: 'inter' | 'poppins' | 'roboto' | 'system';
+}
+
+/**
+ * Copy configuration for booking template
+ */
+export interface BookingCopyConfig {
+  /** Main headline (default: "Book a Session") */
+  headline?: string;
+  /** Subheadline text */
+  subhead?: string;
+  /** Submit button text (default: "Request Booking") */
+  submitButton?: string;
+  /** Success page title (default: "Check Your Email") */
+  successTitle?: string;
+  /** Success page message */
+  successMessage?: string;
+  /** Footer text (default: "Powered by RevLine") */
+  footerText?: string;
+}
+
+/**
+ * Copy configuration for all templates
+ * Each template type has its own copy schema
+ */
+export interface CopyConfig {
+  /** Booking template copy */
+  booking?: BookingCopyConfig;
+}
+
+/**
+ * Feature flags for workspace
+ */
+export interface WorkspaceFeatures {
+  /** Show "Powered by RevLine" footer (default: true) */
+  showPoweredBy?: boolean;
+}
+
 /**
  * RevLine integration metadata
- * Forms configuration and internal settings
+ * Forms configuration, branding, copy, and internal settings
  * 
  * Each enabled form becomes a workflow trigger option.
  * The form ID IS the trigger operation - no separate mapping needed.
@@ -177,6 +240,15 @@ export interface AbcIgniteMeta {
  *   },
  *   "settings": {
  *     "defaultSource": "landing"
+ *   },
+ *   "branding": {
+ *     "primaryColor": "#8B2346",
+ *     "logo": "https://example.com/logo.png"
+ *   },
+ *   "copy": {
+ *     "booking": {
+ *       "headline": "Schedule Your Session"
+ *     }
  *   }
  * }
  */
@@ -189,6 +261,12 @@ export interface RevlineMeta {
   settings: {
     defaultSource?: string;
   };
+  /** Branding configuration for templates */
+  branding?: BrandingConfig;
+  /** Copy configuration per template */
+  copy?: CopyConfig;
+  /** Feature flags */
+  features?: WorkspaceFeatures;
 }
 
 /**

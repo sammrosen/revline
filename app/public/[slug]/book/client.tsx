@@ -12,27 +12,37 @@
  * - No enumeration (same response for all outcomes)
  * - Server-side verification only
  * - Email confirmation required
+ * 
+ * Configuration:
+ * - Branding (colors, logo) from workspace config
+ * - Copy (headlines, button text) from workspace config
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   BookingProviderCapabilities,
   BookingEmployee,
   TimeSlot,
 } from '@/app/_lib/booking';
+import type { ResolvedBranding, ResolvedBookingCopy, ResolvedFeatures } from '@/app/_lib/config';
 
-// Default brand colors (Sports West style)
-// TODO: Could be made configurable via workspace meta in future
-const BRAND = {
-  primary: '#8B2346',      // Burgundy
-  primaryHover: '#6d1c37',
-  background: '#f3f4f6',   // Light gray
-  card: '#ffffff',
-  text: '#111827',
-  textMuted: '#6b7280',
-  border: '#e5e7eb',
-  success: '#059669',
-};
+// =============================================================================
+// TYPES
+// =============================================================================
+
+/**
+ * Derived brand colors computed from primary color
+ */
+interface DerivedBrand {
+  primary: string;
+  primaryHover: string;
+  background: string;
+  card: string;
+  text: string;
+  textMuted: string;
+  border: string;
+  success: string;
+}
 
 // Steps in the simplified flow
 type MagicLinkStep = 'select' | 'submit' | 'pending';
@@ -58,6 +68,33 @@ interface MagicLinkBookingClientProps {
   workspaceName: string;
   capabilities: BookingProviderCapabilities;
   initialBarcode?: string | null;
+  /** Branding configuration from workspace */
+  branding: ResolvedBranding;
+  /** Copy configuration for booking template */
+  copy: ResolvedBookingCopy;
+  /** Feature flags */
+  features: ResolvedFeatures;
+}
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+
+/**
+ * Derive full brand colors from primary color
+ * Ensures consistent theming with configurable primary
+ */
+function deriveBrandColors(branding: ResolvedBranding): DerivedBrand {
+  return {
+    primary: branding.primaryColor,
+    primaryHover: branding.secondaryColor,
+    background: branding.backgroundColor,
+    card: '#ffffff',
+    text: '#111827',
+    textMuted: '#6b7280',
+    border: '#e5e7eb',
+    success: '#059669',
+  };
 }
 
 const getInitialDate = () => new Date().toISOString().split('T')[0];
@@ -76,16 +113,26 @@ const initialState: MagicLinkBookingState = {
   phone: '',
 };
 
+// =============================================================================
+// MAIN COMPONENT
+// =============================================================================
+
 export function MagicLinkBookingClient({
   workspaceSlug,
   workspaceName,
   capabilities,
   initialBarcode,
+  branding,
+  copy,
+  features,
 }: MagicLinkBookingClientProps) {
   const [state, setState] = useState<MagicLinkBookingState>({
     ...initialState,
     barcode: initialBarcode || '',
   });
+
+  // Derive brand colors from config
+  const brand = useMemo(() => deriveBrandColors(branding), [branding]);
 
   // Load employees on mount
   useEffect(() => {
@@ -259,16 +306,24 @@ export function MagicLinkBookingClient({
   }, [initialBarcode, capabilities.supportsEmployeeSelection]);
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: BRAND.background }}>
+    <div className="min-h-screen" style={{ backgroundColor: brand.background }}>
       {/* Header */}
       <header className="bg-zinc-800 text-white">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="bg-white px-3 py-2 rounded">
-              <span className="font-bold text-zinc-800 text-sm">{workspaceName.toUpperCase()}</span>
-            </div>
+            {branding.logo ? (
+              <img 
+                src={branding.logo} 
+                alt={workspaceName} 
+                className="h-8 object-contain"
+              />
+            ) : (
+              <div className="bg-white px-3 py-2 rounded">
+                <span className="font-bold text-zinc-800 text-sm">{workspaceName.toUpperCase()}</span>
+              </div>
+            )}
           </div>
-          <span className="text-sm text-zinc-400">Book a Session</span>
+          <span className="text-sm text-zinc-400">{copy.headline}</span>
         </div>
         
         {/* Step indicator */}
@@ -302,6 +357,13 @@ export function MagicLinkBookingClient({
 
       {/* Main content */}
       <main className="max-w-4xl mx-auto px-4 py-8">
+        {/* Subhead */}
+        {copy.subhead && state.step === 'select' && (
+          <p className="text-center mb-6" style={{ color: brand.textMuted }}>
+            {copy.subhead}
+          </p>
+        )}
+
         {/* Error banner */}
         {state.error && state.step !== 'pending' && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -321,6 +383,7 @@ export function MagicLinkBookingClient({
             onSelectSlot={handleSlotSelect}
             onDateChange={handleDateChange}
             supportsEmployeeSelection={capabilities.supportsEmployeeSelection || false}
+            brand={brand}
           />
         )}
 
@@ -338,6 +401,8 @@ export function MagicLinkBookingClient({
             onPhoneChange={(v) => setState(s => ({ ...s, phone: v }))}
             onSubmit={handleSubmit}
             onBack={handleBack}
+            brand={brand}
+            copy={copy}
           />
         )}
 
@@ -346,17 +411,23 @@ export function MagicLinkBookingClient({
           <PendingStep
             email={state.email}
             onReset={handleReset}
+            brand={brand}
+            copy={copy}
           />
         )}
       </main>
 
-      {/* RevLine Footer */}
-      <footer className="py-6 text-center">
-        <p className="text-xs text-gray-400">Powered by RevLine</p>
-        <a href="mailto:hi@revlineops.com" className="text-xs text-gray-400 hover:text-gray-500">
-          hi@revlineops.com
-        </a>
-      </footer>
+      {/* Footer */}
+      {features.showPoweredBy && (
+        <footer className="py-6 text-center">
+          <p className="text-xs text-gray-400">{copy.footerText}</p>
+          {copy.footerText.toLowerCase().includes('revline') && (
+            <a href="mailto:hi@revlineops.com" className="text-xs text-gray-400 hover:text-gray-500">
+              hi@revlineops.com
+            </a>
+          )}
+        </footer>
+      )}
     </div>
   );
 }
@@ -375,6 +446,7 @@ function SelectStep({
   onSelectSlot,
   onDateChange,
   supportsEmployeeSelection,
+  brand,
 }: {
   employees: BookingEmployee[];
   selectedEmployee: BookingEmployee | null;
@@ -385,6 +457,7 @@ function SelectStep({
   onSelectSlot: (slot: TimeSlot) => void;
   onDateChange: (date: string) => void;
   supportsEmployeeSelection: boolean;
+  brand: DerivedBrand;
 }) {
   // Group slots by date
   const slotsByDate = slots.reduce((acc, slot) => {
@@ -414,7 +487,7 @@ function SelectStep({
       {/* Employee selector */}
       {supportsEmployeeSelection && employees.length > 0 && (
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-lg font-semibold mb-4" style={{ color: BRAND.text }}>
+          <h2 className="text-lg font-semibold mb-4" style={{ color: brand.text }}>
             Select Your Trainer
           </h2>
           <div className="flex flex-wrap gap-3">
@@ -429,8 +502,8 @@ function SelectStep({
                 }`}
                 style={
                   selectedEmployee?.key === employee.key
-                    ? { backgroundColor: BRAND.primary, borderColor: BRAND.primary }
-                    : { color: BRAND.text }
+                    ? { backgroundColor: brand.primary, borderColor: brand.primary }
+                    : { color: brand.text }
                 }
               >
                 {employee.name}
@@ -446,19 +519,19 @@ function SelectStep({
       {/* Time slots */}
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
         {/* Date navigation header */}
-        <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: BRAND.border, backgroundColor: '#f9fafb' }}>
+        <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: brand.border, backgroundColor: '#f9fafb' }}>
           <button
             onClick={goToPreviousWeek}
             disabled={!canGoPrevious || loading}
             className="p-2 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
-            style={{ color: BRAND.text }}
+            style={{ color: brand.text }}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           
-          <span className="font-medium" style={{ color: BRAND.text }}>
+          <span className="font-medium" style={{ color: brand.text }}>
             {formatDateRange(selectedDate)}
           </span>
           
@@ -466,7 +539,7 @@ function SelectStep({
             onClick={goToNextWeek}
             disabled={loading}
             className="p-2 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
-            style={{ color: BRAND.text }}
+            style={{ color: brand.text }}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -475,7 +548,7 @@ function SelectStep({
         </div>
 
         <div className="p-6">
-          <h2 className="text-lg font-semibold mb-4" style={{ color: BRAND.text }}>
+          <h2 className="text-lg font-semibold mb-4" style={{ color: brand.text }}>
             {loading ? 'Loading availability...' : 'Select a Time'}
           </h2>
 
@@ -483,11 +556,11 @@ function SelectStep({
             <div className="flex justify-center py-12">
               <div
                 className="animate-spin w-8 h-8 border-3 rounded-full"
-                style={{ borderColor: `${BRAND.border} ${BRAND.border} ${BRAND.primary} ${BRAND.primary}` }}
+                style={{ borderColor: `${brand.border} ${brand.border} ${brand.primary} ${brand.primary}` }}
               />
             </div>
           ) : Object.keys(slotsByDate).length === 0 ? (
-            <div className="text-center py-12" style={{ color: BRAND.textMuted }}>
+            <div className="text-center py-12" style={{ color: brand.textMuted }}>
               <p>No available times found for this week.</p>
               <p className="text-sm mt-2">Try another week or a different trainer.</p>
             </div>
@@ -495,7 +568,7 @@ function SelectStep({
             <div className="space-y-6">
               {Object.entries(slotsByDate).map(([date, dateSlots]) => (
                 <div key={date}>
-                  <h3 className="text-sm font-medium mb-3" style={{ color: BRAND.textMuted }}>
+                  <h3 className="text-sm font-medium mb-3" style={{ color: brand.textMuted }}>
                     {formatDate(date)}
                   </h3>
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
@@ -504,7 +577,7 @@ function SelectStep({
                         key={slot.id}
                         onClick={() => onSelectSlot(slot)}
                         className="px-3 py-2 text-sm rounded border hover:border-gray-400 transition-colors"
-                        style={{ borderColor: BRAND.border, color: BRAND.text }}
+                        style={{ borderColor: brand.border, color: brand.text }}
                       >
                         {formatTime(slot.startTime)}
                       </button>
@@ -536,6 +609,8 @@ function SubmitStep({
   onPhoneChange,
   onSubmit,
   onBack,
+  brand,
+  copy,
 }: {
   slot: TimeSlot;
   employee: BookingEmployee | null;
@@ -548,36 +623,38 @@ function SubmitStep({
   onPhoneChange: (value: string) => void;
   onSubmit: () => void;
   onBack: () => void;
+  brand: DerivedBrand;
+  copy: ResolvedBookingCopy;
 }) {
   const startTime = new Date(slot.startTime);
 
   return (
     <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-      <div className="p-6 border-b" style={{ borderColor: BRAND.border }}>
-        <h2 className="text-xl font-semibold" style={{ color: BRAND.text }}>
+      <div className="p-6 border-b" style={{ borderColor: brand.border }}>
+        <h2 className="text-xl font-semibold" style={{ color: brand.text }}>
           Confirm Your Session
         </h2>
-        <p style={{ color: BRAND.textMuted }}>
+        <p style={{ color: brand.textMuted }}>
           Enter your details to receive a confirmation email.
         </p>
       </div>
 
       {/* Selected session info */}
-      <div className="p-6 border-b" style={{ borderColor: BRAND.border, backgroundColor: '#f9fafb' }}>
+      <div className="p-6 border-b" style={{ borderColor: brand.border, backgroundColor: '#f9fafb' }}>
         <div className="flex items-start gap-3">
-          <svg className="w-5 h-5 mt-0.5" style={{ color: BRAND.textMuted }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 mt-0.5" style={{ color: brand.textMuted }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
           <div>
-            <div className="font-medium" style={{ color: BRAND.text }}>{slot.title}</div>
-            <div style={{ color: BRAND.textMuted }}>
+            <div className="font-medium" style={{ color: brand.text }}>{slot.title}</div>
+            <div style={{ color: brand.textMuted }}>
               {startTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
             </div>
-            <div style={{ color: BRAND.textMuted }}>
+            <div style={{ color: brand.textMuted }}>
               {startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
             </div>
             {(employee?.name || slot.staffName) && (
-              <div className="mt-1" style={{ color: BRAND.text }}>
+              <div className="mt-1" style={{ color: brand.text }}>
                 with {employee?.name || slot.staffName}
               </div>
             )}
@@ -588,7 +665,7 @@ function SubmitStep({
       {/* Form */}
       <div className="p-6 space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: BRAND.text }}>
+          <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
             Member Barcode *
           </label>
           <input
@@ -597,13 +674,13 @@ function SubmitStep({
             onChange={(e) => onBarcodeChange(e.target.value)}
             placeholder="fgj6"
             className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-            style={{ borderColor: BRAND.border, backgroundColor: BRAND.card, color: BRAND.text }}
+            style={{ borderColor: brand.border, backgroundColor: brand.card, color: brand.text }}
             disabled={loading}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: BRAND.text }}>
+          <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
             Email Address *
           </label>
           <input
@@ -612,16 +689,16 @@ function SubmitStep({
             onChange={(e) => onEmailChange(e.target.value)}
             placeholder="you@example.com"
             className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-            style={{ borderColor: BRAND.border, backgroundColor: BRAND.card, color: BRAND.text }}
+            style={{ borderColor: brand.border, backgroundColor: brand.card, color: brand.text }}
             disabled={loading}
           />
-          <p className="text-xs mt-1" style={{ color: BRAND.textMuted }}>
+          <p className="text-xs mt-1" style={{ color: brand.textMuted }}>
             Must match the email on your membership
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: BRAND.text }}>
+          <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
             Last 4 Digits of Phone *
           </label>
           <input
@@ -631,22 +708,22 @@ function SubmitStep({
             placeholder="1234"
             maxLength={4}
             className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-            style={{ borderColor: BRAND.border, backgroundColor: BRAND.card, color: BRAND.text }}
+            style={{ borderColor: brand.border, backgroundColor: brand.card, color: brand.text }}
             disabled={loading}
           />
-          <p className="text-xs mt-1" style={{ color: BRAND.textMuted }}>
+          <p className="text-xs mt-1" style={{ color: brand.textMuted }}>
             For verification purposes
           </p>
         </div>
       </div>
 
       {/* Actions */}
-      <div className="p-6 border-t flex gap-4" style={{ borderColor: BRAND.border, backgroundColor: '#f9fafb' }}>
+      <div className="p-6 border-t flex gap-4" style={{ borderColor: brand.border, backgroundColor: '#f9fafb' }}>
         <button
           onClick={onBack}
           disabled={loading}
           className="px-6 py-3 border rounded font-medium hover:bg-white disabled:opacity-50"
-          style={{ borderColor: BRAND.border, color: BRAND.text }}
+          style={{ borderColor: brand.border, color: brand.text }}
         >
           Back
         </button>
@@ -654,7 +731,7 @@ function SubmitStep({
           onClick={onSubmit}
           disabled={loading}
           className="flex-1 py-3 text-white font-medium rounded disabled:opacity-50 flex items-center justify-center gap-2"
-          style={{ backgroundColor: BRAND.primary }}
+          style={{ backgroundColor: brand.primary }}
         >
           {loading ? (
             <>
@@ -662,7 +739,7 @@ function SubmitStep({
               <span>Submitting...</span>
             </>
           ) : (
-            'Request Booking'
+            copy.submitButton
           )}
         </button>
       </div>
@@ -677,9 +754,13 @@ function SubmitStep({
 function PendingStep({
   email,
   onReset,
+  brand,
+  copy,
 }: {
   email: string;
   onReset: () => void;
+  brand: DerivedBrand;
+  copy: ResolvedBookingCopy;
 }) {
   return (
     <div className="bg-white rounded-lg shadow-lg overflow-hidden text-center">
@@ -687,11 +768,11 @@ function PendingStep({
         {/* Success icon */}
         <div
           className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"
-          style={{ backgroundColor: `${BRAND.success}20` }}
+          style={{ backgroundColor: `${brand.success}20` }}
         >
           <svg
             className="w-8 h-8"
-            style={{ color: BRAND.success }}
+            style={{ color: brand.success }}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -705,16 +786,16 @@ function PendingStep({
           </svg>
         </div>
 
-        <h2 className="text-2xl font-semibold mb-3" style={{ color: BRAND.text }}>
-          Check Your Email
+        <h2 className="text-2xl font-semibold mb-3" style={{ color: brand.text }}>
+          {copy.successTitle}
         </h2>
 
-        <p className="mb-2" style={{ color: BRAND.textMuted }}>
-          If your information matches our records, you&apos;ll receive a confirmation email shortly.
+        <p className="mb-2" style={{ color: brand.textMuted }}>
+          {copy.successMessage}
         </p>
 
-        <p className="text-sm mb-6" style={{ color: BRAND.textMuted }}>
-          Sent to: <strong style={{ color: BRAND.text }}>{email}</strong>
+        <p className="text-sm mb-6" style={{ color: brand.textMuted }}>
+          Sent to: <strong style={{ color: brand.text }}>{email}</strong>
         </p>
 
         <div
@@ -732,7 +813,7 @@ function PendingStep({
         <button
           onClick={onReset}
           className="px-6 py-2 border rounded font-medium hover:bg-gray-50 transition-colors"
-          style={{ borderColor: BRAND.border, color: BRAND.text }}
+          style={{ borderColor: brand.border, color: brand.text }}
         >
           Book Another Session
         </button>

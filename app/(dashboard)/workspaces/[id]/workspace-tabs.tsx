@@ -79,6 +79,12 @@ interface WorkspaceTabsProps {
   mailerliteGroups?: Record<string, { id: string; name: string }>;
   stripeProducts?: Record<string, string>;
   timezone?: string; // Workspace timezone for settings
+  domainConfig?: {
+    customDomain: string | null;
+    domainVerifyToken: string | null;
+    domainVerified: boolean;
+    domainVerifiedAt: string | null;
+  };
 }
 
 // Parse secrets from JSON, returning only id and name (never values)
@@ -128,7 +134,7 @@ function getInitialTab(): TabType {
   return hash && validTabs.includes(hash) ? hash : 'workflows';
 }
 
-export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York' }: WorkspaceTabsProps) {
+export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York', domainConfig }: WorkspaceTabsProps) {
   const [activeTab, setActiveTab] = useState<TabType>(getInitialTab);
   const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
 
@@ -402,7 +408,11 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
         )}
 
         {activeTab === 'settings' && (
-          <WorkspaceSettings workspaceId={workspaceId} currentTimezone={timezone} />
+          <WorkspaceSettings 
+            workspaceId={workspaceId} 
+            currentTimezone={timezone}
+            domainConfig={domainConfig}
+          />
         )}
       </div>
     </div>
