@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Trash2 } from 'lucide-react';
 
 interface WorkflowAction {
   adapter: string;
@@ -95,6 +95,10 @@ export function WorkflowEditor({
   const [showDisableModal, setShowDisableModal] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
   
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
   // Check if workflow is active and being edited
   const isEditingActiveWorkflow = workflowId && initialData?.enabled;
 
@@ -139,6 +143,42 @@ export function WorkflowEditor({
       setError('Failed to disable workflow');
     } finally {
       setIsDisabling(false);
+    }
+  };
+
+  // Handle deleting workflow
+  const handleDeleteWorkflow = async () => {
+    if (!workflowId) return;
+    
+    // Must be disabled first
+    if (enabled) {
+      setError('Disable the workflow before deleting');
+      setShowDeleteModal(false);
+      return;
+    }
+    
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/v1/workflows/${workflowId}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        // Close modal and refresh
+        if (onSave) onSave();
+        if (onClose) onClose();
+        router.refresh();
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to delete workflow');
+        setShowDeleteModal(false);
+      }
+    } catch (err) {
+      console.error('Failed to delete workflow:', err);
+      setError('Failed to delete workflow');
+      setShowDeleteModal(false);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -316,6 +356,42 @@ export function WorkflowEditor({
                   if (onClose) onClose();
                 }}
                 disabled={isDisabling}
+                className="px-4 py-2 text-zinc-400 hover:text-white text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-md w-full">
+            <div className="flex items-start gap-3 mb-4">
+              <Trash2 className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-lg font-semibold text-white">Delete Workflow</h3>
+                <p className="text-sm text-zinc-400 mt-1">
+                  Are you sure you want to delete &quot;{name}&quot;? This action cannot be undone.
+                  All execution history will also be deleted.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleDeleteWorkflow}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-400 disabled:opacity-50 text-sm font-medium transition-colors"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Workflow'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
                 className="px-4 py-2 text-zinc-400 hover:text-white text-sm disabled:opacity-50"
               >
                 Cancel
@@ -571,13 +647,26 @@ export function WorkflowEditor({
       <div className={onClose ? "flex gap-3 pt-4 border-t border-zinc-800" : "flex items-center justify-end gap-4"}>
         {onClose ? (
           <>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2 bg-white text-black rounded hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
-            >
-              {loading ? 'Saving...' : workflowId ? 'Update Workflow' : 'Create Workflow'}
-            </button>
+            {/* Delete button - only show when editing existing workflow */}
+            {workflowId && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (enabled) {
+                    setError('Disable the workflow before deleting');
+                  } else {
+                    setShowDeleteModal(true);
+                  }
+                }}
+                disabled={loading || isDeleting}
+                className="px-4 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded text-sm disabled:opacity-50 transition-colors flex items-center gap-2"
+                title={enabled ? 'Disable workflow first to delete' : 'Delete workflow'}
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </button>
+            )}
+            <div className="flex-1" />
             <button
               type="button"
               onClick={onClose}
@@ -586,9 +675,35 @@ export function WorkflowEditor({
             >
               Cancel
             </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 bg-white text-black rounded hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            >
+              {loading ? 'Saving...' : workflowId ? 'Update Workflow' : 'Create Workflow'}
+            </button>
           </>
         ) : (
           <>
+            {/* Delete button for page-based view */}
+            {workflowId && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (enabled) {
+                    setError('Disable the workflow before deleting');
+                  } else {
+                    setShowDeleteModal(true);
+                  }
+                }}
+                disabled={loading || isDeleting}
+                className="px-4 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded disabled:opacity-50 transition-colors flex items-center gap-2 mr-auto"
+                title={enabled ? 'Disable workflow first to delete' : 'Delete workflow'}
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </button>
+            )}
             <button
               type="button"
               onClick={() => router.back()}
