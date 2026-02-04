@@ -17,7 +17,7 @@ export { emitTrigger } from './engine';
  * Ensures the trigger is declared in the form's registry entry.
  * 
  * @param workspaceId - Workspace ID (scopes the trigger)
- * @param formId - Form ID from registry (e.g., 'magic-link-booking')
+ * @param formId - Form ID from registry (e.g., 'sportswest-booking')
  * @param triggerId - Trigger ID declared in form's triggers array (e.g., 'booking-confirmed')
  * @param payload - Event payload
  * @throws Error if trigger is not declared for this form
@@ -25,7 +25,7 @@ export { emitTrigger } from './engine';
  * @example
  * await emitFormTrigger(
  *   workspaceId,
- *   'magic-link-booking',
+ *   'sportswest-booking',
  *   'booking-confirmed',
  *   { email: 'user@example.com', name: 'John' }
  * );

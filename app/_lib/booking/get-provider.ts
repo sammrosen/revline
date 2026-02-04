@@ -125,13 +125,13 @@ export async function hasBookingProvider(workspaceId: string): Promise<boolean> 
  * This is used by bespoke form pages to find which workspace they belong to.
  * The formId is configured in the workspace's RevLine integration meta.forms.
  * 
- * @param formId - The unique form identifier (e.g., 'magic-link-booking')
+ * @param formId - The unique form identifier (e.g., 'sportswest-booking')
  * @returns The workspace if found and active, null if not found
  * @throws Error if multiple workspaces have the same formId enabled (prevents cross-contamination)
  * 
  * @example
  * // In a bespoke form page:
- * const FORM_ID = 'magic-link-booking';
+ * const FORM_ID = 'sportswest-booking';
  * const workspace = await getWorkspaceByFormId(FORM_ID);
  * if (!workspace) notFound();
  */

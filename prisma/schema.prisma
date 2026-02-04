@@ -23,12 +23,6 @@ model Workspace {
   createdById String?         @map("created_by_id") // User who created this workspace
   createdAt   DateTime        @default(now()) @map("created_at")
 
-  // Custom domain configuration
-  customDomain       String?   @unique @map("custom_domain") // e.g., "book.clientgym.com"
-  domainVerifyToken  String?   @map("domain_verify_token") // TXT record verification token
-  domainVerified     Boolean   @default(false) @map("domain_verified")
-  domainVerifiedAt   DateTime? @map("domain_verified_at")
-
   members            WorkspaceMember[]
   integrations       WorkspaceIntegration[]
   leads              Lead[]

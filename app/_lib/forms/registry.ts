@@ -27,7 +27,7 @@ export interface FormRegistryEntry {
   /** Path where the form is deployed (for reference) */
   path: string;
   /** Form type - helps categorize forms */
-  type: 'booking' | 'signup' | 'intake' | 'contact' | 'survey' | 'other';
+  type: 'booking' | 'intake' | 'contact' | 'survey' | 'other';
   /** Triggers this form can emit - required, at least one */
   triggers: FormTrigger[];
 }
@@ -42,9 +42,9 @@ export interface FormRegistryEntry {
  */
 export const FORM_REGISTRY: FormRegistryEntry[] = [
   {
-    id: 'magic-link-booking',
-    name: 'ABC Appointment Booking',
-    description: 'Magic link booking flow for personal training sessions via ABC Ignite',
+    id: 'sportswest-booking',
+    name: 'Sports West Booking',
+    description: 'Personal training session booking for Sports West Athletic Club',
     path: '/public/{slug}/book',
     type: 'booking',
     triggers: [
@@ -57,30 +57,6 @@ export const FORM_REGISTRY: FormRegistryEntry[] = [
         id: 'booking-waitlisted',
         label: 'Booking Waitlisted',
         description: 'Member added to waitlist for a session',
-      },
-    ],
-  },
-  {
-    id: 'membership-signup',
-    name: 'Membership Signup',
-    description: 'Multi-step membership signup with plan selection and payment',
-    path: '/public/{slug}/signup',
-    type: 'signup',
-    triggers: [
-      {
-        id: 'signup-completed',
-        label: 'Signup Completed',
-        description: 'Member successfully completed signup and payment',
-      },
-      {
-        id: 'signup-started',
-        label: 'Signup Started',
-        description: 'User started the signup process (reached step 2)',
-      },
-      {
-        id: 'signup-abandoned',
-        label: 'Signup Abandoned',
-        description: 'User abandoned signup before completion',
       },
     ],
   },

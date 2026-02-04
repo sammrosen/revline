@@ -1,12 +1,11 @@
 /**
  * Next.js Proxy
  * 
- * Handles four main responsibilities:
+ * Handles three main responsibilities:
  * 1. Global rate limiting safety net for API routes
  * 2. Protects app routes (workspaces, settings, etc.) with authentication.
  *    Checks session cookie and redirects to login if not authenticated.
- * 3. Routes custom domains to workspace-specific pages (dynamic DB lookup).
- * 4. Routes hardcoded domains for legacy support.
+ * 3. Routes custom domains to specific pages.
  * 
  * STANDARDS:
  * - All app routes protected automatically
@@ -14,13 +13,11 @@
  * - Passes userId via x-user-id header for server components
  * - /setup only accessible when no users exist (checked in the route itself)
  * - Global rate limit is a safety net; routes implement their own specific limits
- * - Custom domains resolved via direct DB lookup (no caching for reliability)
  */
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { validateSession } from './app/_lib/auth';
-import { prisma } from './app/_lib/db';
 
 // =============================================================================
 // GLOBAL RATE LIMITING (Safety Net)
@@ -29,7 +26,7 @@ import { prisma } from './app/_lib/db';
 // For production multi-instance, route-level limits with Redis would be needed
 const GLOBAL_RATE_LIMIT_STORE = new Map<string, { count: number; resetAt: number }>();
 const GLOBAL_RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
-const GLOBAL_RATE_LIMIT_MAX = 300; // 300 requests per minute per IP (safety net; routes have own limits)
+const GLOBAL_RATE_LIMIT_MAX = 100; // 100 requests per minute per IP
 
 /**
  * Get client IP from request headers
@@ -76,64 +73,16 @@ function checkGlobalRateLimit(ip: string): boolean {
   return true;
 }
 
-// =============================================================================
-// CUSTOM DOMAIN RESOLUTION
-// =============================================================================
-
-/**
- * Static domain routing for legacy/special domains
- * These take precedence over dynamic workspace domains
- */
-const STATIC_DOMAIN_ROUTES: Record<string, string> = {
-  // Legacy domains - keep for backwards compatibility
-  // Add static domain mappings here if needed
-  // 'fit1coaching.com': '/fit1',
-  // 'www.fit1coaching.com': '/fit1',
+// Domain to route mapping
+const DOMAIN_ROUTES: Record<string, string> = {
+  // Custom domains pointing to specific pages
+  'client1.com': '/client1',
+  'www.client1.com': '/client1',
+  'demo.example.com': '/demo',
+  'fit1coaching.com': '/fit1',
+  'www.fit1coaching.com': '/fit1',
+  // Add more domain mappings here
 };
-
-/**
- * Resolve custom domain to workspace slug via direct DB lookup
- * 
- * RELIABILITY: Direct lookup on every request (no caching)
- * - Ensures immediate propagation of domain changes
- * - Simple logic with no cache invalidation concerns
- * - Database query is indexed on customDomain field
- * 
- * @param hostname - The hostname from the request
- * @returns Workspace slug if found and verified, null otherwise
- */
-async function resolveCustomDomain(hostname: string): Promise<string | null> {
-  // Skip localhost and known system domains
-  if (
-    hostname.includes('localhost') ||
-    hostname.includes('railway.app') ||
-    hostname.includes('revline.io') ||
-    hostname.includes('vercel.app')
-  ) {
-    return null;
-  }
-
-  try {
-    const workspace = await prisma.workspace.findFirst({
-      where: {
-        customDomain: hostname.toLowerCase(),
-        domainVerified: true, // Only route verified domains
-      },
-      select: {
-        slug: true,
-      },
-    });
-
-    return workspace?.slug ?? null;
-  } catch (error) {
-    // Log but don't fail the request - fall through to normal routing
-    console.error('Custom domain lookup error:', {
-      hostname,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    return null;
-  }
-}
 
 // Protected page routes (require authentication)
 const PROTECTED_PAGE_PREFIXES = [
@@ -239,40 +188,31 @@ export async function proxy(request: NextRequest) {
     // Valid session - add userId to headers for server components and API routes
     const response = NextResponse.next();
     response.headers.set('x-user-id', userId);
+    
+    // Check domain routing for app routes too (in case accessed via custom domain)
+    const hostname = request.headers.get('host') || '';
+    const targetPath = DOMAIN_ROUTES[hostname];
+    
+    if (targetPath) {
+      const url = request.nextUrl.clone();
+      url.pathname = targetPath;
+      return NextResponse.rewrite(url);
+    }
+    
     return response;
   }
 
-  // 3. Handle domain routing for public pages
+  // 3. Handle domain routing
   const hostname = request.headers.get('host') || '';
   
-  // 3a. Check static domain routes first (legacy/special cases)
-  const staticPath = STATIC_DOMAIN_ROUTES[hostname];
-  if (staticPath) {
-    const url = request.nextUrl.clone();
-    url.pathname = staticPath;
-    return NextResponse.rewrite(url);
-  }
+  // Check if this hostname should be routed to a specific page
+  const targetPath = DOMAIN_ROUTES[hostname];
   
-  // 3b. Check dynamic custom domains (database lookup)
-  // Only for non-API, non-dashboard routes
-  if (!pathname.startsWith('/api/') && !pathname.startsWith('/workspaces')) {
-    const workspaceSlug = await resolveCustomDomain(hostname);
-    
-    if (workspaceSlug) {
-      // Route to workspace's booking page
-      // Custom domains route to /public/[slug]/book by default
-      const url = request.nextUrl.clone();
-      
-      // If accessing root of custom domain, go to booking page
-      if (pathname === '/' || pathname === '') {
-        url.pathname = `/public/${workspaceSlug}/book`;
-      } else {
-        // For other paths, prepend /public/[slug]
-        url.pathname = `/public/${workspaceSlug}${pathname}`;
-      }
-      
-      return NextResponse.rewrite(url);
-    }
+  if (targetPath) {
+    // Rewrite to the target path while keeping the custom domain in the URL
+    const url = request.nextUrl.clone();
+    url.pathname = targetPath;
+    return NextResponse.rewrite(url);
   }
   
   // No special routing needed

@@ -22,7 +22,7 @@ import {
 import { emitFormTrigger } from '@/app/_lib/workflow';
 
 // Form ID for booking - must match the form registry
-const BOOKING_FORM_ID = 'magic-link-booking';
+const BOOKING_FORM_ID = 'sportswest-booking';
 
 export async function POST(request: NextRequest) {
   // Rate limit
