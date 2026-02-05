@@ -5,12 +5,17 @@
  * 
  * Public-facing magic link booking page for any workspace.
  * Uses workspace slug for lookup.
+ * 
+ * Configuration:
+ * - Loads branding and copy from workspace's Revline config
+ * - Falls back to global defaults if not configured
  */
 
 import { notFound } from 'next/navigation';
 import { prisma } from '@/app/_lib/db';
 import { WorkspaceStatus } from '@prisma/client';
 import { getBookingCapabilities, hasBookingProvider } from '@/app/_lib/booking';
+import { WorkspaceConfigService } from '@/app/_lib/config';
 import { MagicLinkBookingClient } from './client';
 
 interface BookingPageProps {
@@ -90,6 +95,9 @@ export default async function PublicBookingPage({ params, searchParams }: Bookin
     );
   }
 
+  // Load workspace branding and copy configuration
+  const config = await WorkspaceConfigService.resolveForBooking(workspace.id);
+
   // Show error message if redirected from confirm with error
   const errorMessage = errorCode ? ERROR_MESSAGES[errorCode] : null;
 
@@ -112,6 +120,9 @@ export default async function PublicBookingPage({ params, searchParams }: Bookin
         workspaceName={workspace.name}
         capabilities={capabilities}
         initialBarcode={barcode || null}
+        branding={config.branding}
+        copy={config.copy}
+        features={config.features}
       />
     </>
   );

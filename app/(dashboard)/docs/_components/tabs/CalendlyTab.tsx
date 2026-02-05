@@ -1,4 +1,4 @@
-import { TipBox, WarningBox, CodeBlock, SecretTable } from '../shared';
+import { TipBox, CodeBlock, SecretTable } from '../shared';
 
 export function CalendlyTab() {
   return (
