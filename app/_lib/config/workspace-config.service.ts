@@ -18,7 +18,6 @@ import {
   BookingCopyConfig, 
   WorkspaceFeatures,
   RevlineMeta,
-  SignupConfig,
   SignupCopyConfig,
   SignupClubInfo,
   SignupFeatures,

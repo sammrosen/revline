@@ -28,10 +28,11 @@ export function StepIndicator({
   steps,
   currentStep,
   completedSteps,
-  brand: _brand,
+  brand,
   copy,
 }: StepIndicatorProps) {
-  // _brand is available for future custom styling
+  // Brand colors available for future custom step indicator styling
+  void brand;
   return (
     <div className="bg-zinc-700">
       <div className="max-w-6xl mx-auto px-4">

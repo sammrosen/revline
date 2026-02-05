@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'RevLine | Reliability-first Revenue Infrastructure',
@@ -827,13 +828,13 @@ export default function Home() {
           </a>
           
           <div className="mt-12">
-            <a
+            <Link
               href="/login"
               className="inline-flex items-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-300 hover:text-white transition-colors duration-200"
             >
               <LockIcon className="w-4 h-4" />
               Dashboard Login
-            </a>
+            </Link>
           </div>
           
           <div className="mt-16 pt-8 border-t border-zinc-800">

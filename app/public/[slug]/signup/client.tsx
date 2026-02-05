@@ -189,10 +189,11 @@ export function SignupClient({
   plans,
   copy,
   policies,
-  features: _features,
+  features,
   signupFeatures,
 }: SignupClientProps) {
-  // _features is available for future use (e.g., showPoweredBy)
+  // features.showPoweredBy available for global branding; signupFeatures.showPoweredBy used for signup-specific
+  void features;
   const router = useRouter();
   
   // Skip step 1 (location) for now - single location
