@@ -5,10 +5,22 @@
  * The key principle is that business data (leads, events, integrations) remains
  * workspace-scoped. This layer controls WHO can access workspaces, not what the
  * data belongs to.
+ * 
+ * Access hierarchy:
+ * 1. Direct workspace membership (WorkspaceMember) - checked first
+ * 2. Organization membership (OrganizationMember) - fallback if no direct access
+ *    - Org owners get OWNER role
+ *    - Org members with canAccessAllWorkspaces get ADMIN role
+ *    - Org members with workspace assignment get MEMBER role
  */
 
 import { prisma } from './db';
 import { WorkspaceRole, Workspace } from '@prisma/client';
+import { 
+  getOrgAccess, 
+  isUserAssignedToWorkspace,
+  getEffectivePermissions,
+} from './organization-access';
 
 // Re-export the enum for convenience
 export { WorkspaceRole };
@@ -20,6 +32,8 @@ export interface WorkspaceAccess {
   userId: string;
   workspaceId: string;
   role: WorkspaceRole;
+  /** Whether access is via org membership (vs direct workspace membership) */
+  viaOrg?: boolean;
 }
 
 /**
@@ -43,10 +57,10 @@ export function hasMinimumRole(
 }
 
 /**
- * Get a user's access to a specific workspace
- * Returns null if user has no access
+ * Get direct workspace membership (without org fallback)
+ * Used internally when we need to check explicit membership
  */
-export async function getWorkspaceAccess(
+async function getDirectWorkspaceAccess(
   userId: string,
   workspaceId: string
 ): Promise<WorkspaceAccess | null> {
@@ -70,6 +84,73 @@ export async function getWorkspaceAccess(
     userId,
     workspaceId,
     role: membership.role,
+    viaOrg: false,
+  };
+}
+
+/**
+ * Get a user's access to a specific workspace
+ * Checks direct membership first, then falls back to org-level access
+ * Returns null if user has no access via either path
+ */
+export async function getWorkspaceAccess(
+  userId: string,
+  workspaceId: string
+): Promise<WorkspaceAccess | null> {
+  // 1. Check direct workspace membership first
+  const directAccess = await getDirectWorkspaceAccess(userId, workspaceId);
+  if (directAccess) {
+    return directAccess;
+  }
+
+  // 2. Check org-level access
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { organizationId: true },
+  });
+
+  if (!workspace?.organizationId) {
+    return null;
+  }
+
+  const orgAccess = await getOrgAccess(userId, workspace.organizationId);
+  if (!orgAccess) {
+    return null;
+  }
+
+  // 3. Determine role based on org membership
+  // Owners get OWNER role
+  if (orgAccess.isOwner) {
+    return {
+      userId,
+      workspaceId,
+      role: WorkspaceRole.OWNER,
+      viaOrg: true,
+    };
+  }
+
+  // Members with canAccessAllWorkspaces get ADMIN role
+  if (orgAccess.permissions.canAccessAllWorkspaces) {
+    return {
+      userId,
+      workspaceId,
+      role: WorkspaceRole.ADMIN,
+      viaOrg: true,
+    };
+  }
+
+  // 4. Check if user is assigned to this specific workspace
+  const isAssigned = await isUserAssignedToWorkspace(userId, workspaceId);
+  if (!isAssigned) {
+    return null;
+  }
+
+  // Assigned members get MEMBER role
+  return {
+    userId,
+    workspaceId,
+    role: WorkspaceRole.MEMBER,
+    viaOrg: true,
   };
 }
 
@@ -110,43 +191,123 @@ export async function requireWorkspaceAccess(
  */
 export interface WorkspaceWithAccess extends Workspace {
   userRole: WorkspaceRole;
+  /** Whether access is via org membership */
+  viaOrg?: boolean;
 }
 
 /**
  * Get all workspaces a user has access to
+ * Includes both direct memberships and org-level access
  * Returns workspaces with the user's role attached
  */
 export async function getUserWorkspaces(
   userId: string
 ): Promise<WorkspaceWithAccess[]> {
-  const memberships = await prisma.workspaceMember.findMany({
+  // 1. Get direct workspace memberships
+  const directMemberships = await prisma.workspaceMember.findMany({
     where: { userId },
     include: {
       workspace: true,
     },
-    orderBy: {
-      workspace: {
-        name: 'asc',
+  });
+
+  const directWorkspaceIds = new Set(directMemberships.map((m) => m.workspaceId));
+  const result: WorkspaceWithAccess[] = directMemberships.map((m) => ({
+    ...m.workspace,
+    userRole: m.role,
+    viaOrg: false,
+  }));
+
+  // 2. Get org memberships and their workspaces
+  const orgMemberships = await prisma.organizationMember.findMany({
+    where: { userId },
+    include: {
+      organization: {
+        include: {
+          workspaces: true,
+        },
       },
     },
   });
 
-  return memberships.map((membership) => ({
-    ...membership.workspace,
-    userRole: membership.role,
-  }));
+  for (const orgMembership of orgMemberships) {
+    const permissions = getEffectivePermissions(
+      orgMembership.isOwner,
+      orgMembership.permissions
+    );
+
+    // Get user's workspace assignments if they don't have canAccessAllWorkspaces
+    let assignedWorkspaceIds: Set<string> | null = null;
+    if (!orgMembership.isOwner && !permissions.canAccessAllWorkspaces) {
+      const assignments = await prisma.workspaceAssignment.findMany({
+        where: { userId },
+        select: { workspaceId: true },
+      });
+      assignedWorkspaceIds = new Set(assignments.map((a) => a.workspaceId));
+    }
+
+    for (const workspace of orgMembership.organization.workspaces) {
+      // Skip if already have direct access
+      if (directWorkspaceIds.has(workspace.id)) {
+        continue;
+      }
+
+      // Check if user can access this workspace via org
+      let role: WorkspaceRole;
+      
+      if (orgMembership.isOwner) {
+        role = WorkspaceRole.OWNER;
+      } else if (permissions.canAccessAllWorkspaces) {
+        role = WorkspaceRole.ADMIN;
+      } else if (assignedWorkspaceIds?.has(workspace.id)) {
+        role = WorkspaceRole.MEMBER;
+      } else {
+        // No access to this workspace
+        continue;
+      }
+
+      result.push({
+        ...workspace,
+        userRole: role,
+        viaOrg: true,
+      });
+    }
+  }
+
+  // Sort by name
+  result.sort((a, b) => a.name.localeCompare(b.name));
+
+  return result;
 }
 
 /**
  * Get all workspace IDs a user has access to
+ * Includes both direct memberships and org-level access
  * Useful for filtering queries
  */
 export async function getUserWorkspaceIds(userId: string): Promise<string[]> {
-  const memberships = await prisma.workspaceMember.findMany({
-    where: { userId },
-    select: { workspaceId: true },
+  const workspaces = await getUserWorkspaces(userId);
+  return workspaces.map((w) => w.id);
+}
+
+/**
+ * Get all workspaces in an organization that a user can access
+ * Respects org permissions and workspace assignments
+ */
+export async function getOrgWorkspacesForUser(
+  userId: string,
+  organizationId: string
+): Promise<WorkspaceWithAccess[]> {
+  const allWorkspaces = await getUserWorkspaces(userId);
+  
+  // Filter to only workspaces in this org
+  const orgWorkspaceIds = await prisma.workspace.findMany({
+    where: { organizationId },
+    select: { id: true },
   });
-  return memberships.map((m) => m.workspaceId);
+  const orgWorkspaceIdSet = new Set(orgWorkspaceIds.map((w) => w.id));
+  
+  return allWorkspaces.filter((w) => orgWorkspaceIdSet.has(w.id));
 }
 
 /**
