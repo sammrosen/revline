@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 const PASSWORD_REQUIREMENTS = [
   { label: 'At least 12 characters', test: (p: string) => p.length >= 12 },
@@ -113,12 +114,12 @@ export default function AdminSetupPage() {
           {error && (
             <p className="text-zinc-400 mb-6">{error}</p>
           )}
-          <a
+          <Link
             href="/login"
             className="text-zinc-400 hover:text-white transition-colors text-sm"
           >
             ← Back to Login
-          </a>
+          </Link>
         </div>
       </div>
     );

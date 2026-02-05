@@ -5,8 +5,8 @@
  * 1. Global rate limiting safety net for API routes
  * 2. Protects app routes (workspaces, settings, etc.) with authentication.
  *    Checks session cookie and redirects to login if not authenticated.
- * 3. Routes custom domains to workspace-specific pages (dynamic DB lookup).
- * 4. Routes hardcoded domains for legacy support.
+ * 3. Routes custom domains to workspace-specific pages (dynamic DB lookup for templates).
+ * 4. Routes static site domains via the sites module (for non-workspace sites).
  * 
  * STANDARDS:
  * - All app routes protected automatically
@@ -14,13 +14,15 @@
  * - Passes userId via x-user-id header for server components
  * - /setup only accessible when no users exist (checked in the route itself)
  * - Global rate limit is a safety net; routes implement their own specific limits
- * - Custom domains resolved via direct DB lookup (no caching for reliability)
+ * - Custom workspace domains resolved via direct DB lookup (no caching for reliability)
+ * - Static site domains are configured in app/_lib/sites/registry.ts
  */
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { validateSession } from './app/_lib/auth';
 import { prisma } from './app/_lib/db';
+import { resolveSiteByDomain } from './app/_lib/sites';
 
 // =============================================================================
 // GLOBAL RATE LIMITING (Safety Net)
@@ -79,17 +81,6 @@ function checkGlobalRateLimit(ip: string): boolean {
 // =============================================================================
 // CUSTOM DOMAIN RESOLUTION
 // =============================================================================
-
-/**
- * Static domain routing for legacy/special domains
- * These take precedence over dynamic workspace domains
- */
-const STATIC_DOMAIN_ROUTES: Record<string, string> = {
-  // Legacy domains - keep for backwards compatibility
-  // Add static domain mappings here if needed
-  // 'fit1coaching.com': '/fit1',
-  // 'www.fit1coaching.com': '/fit1',
-};
 
 /**
  * Resolve custom domain to workspace slug via direct DB lookup
@@ -245,15 +236,15 @@ export async function proxy(request: NextRequest) {
   // 3. Handle domain routing for public pages
   const hostname = request.headers.get('host') || '';
   
-  // 3a. Check static domain routes first (legacy/special cases)
-  const staticPath = STATIC_DOMAIN_ROUTES[hostname];
-  if (staticPath) {
+  // 3a. Check static site domains first (file-based registry for non-workspace sites)
+  const resolvedSite = resolveSiteByDomain(hostname);
+  if (resolvedSite) {
     const url = request.nextUrl.clone();
-    url.pathname = staticPath;
+    url.pathname = pathname === '/' ? `/${resolvedSite.siteId}` : `/${resolvedSite.siteId}${pathname}`;
     return NextResponse.rewrite(url);
   }
   
-  // 3b. Check dynamic custom domains (database lookup)
+  // 3b. Check dynamic custom domains (database lookup for workspace templates)
   // Only for non-API, non-dashboard routes
   if (!pathname.startsWith('/api/') && !pathname.startsWith('/workspaces')) {
     const workspaceSlug = await resolveCustomDomain(hostname);
