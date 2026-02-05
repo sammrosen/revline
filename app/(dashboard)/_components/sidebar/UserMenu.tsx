@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut, Settings, ChevronUp, User } from 'lucide-react';
+import { LogOut, Settings, ChevronUp } from 'lucide-react';
 
 interface UserMenuProps {
   user: {
@@ -30,7 +30,14 @@ export function UserMenu({ user }: UserMenuProps) {
 
   const handleLogout = async () => {
     setIsOpen(false);
-    router.push('/api/v1/auth/logout');
+    try {
+      await fetch('/api/v1/auth/logout', { method: 'POST' });
+      router.push('/login');
+      router.refresh();
+    } catch {
+      // Even on error, redirect to login
+      router.push('/login');
+    }
   };
 
   const displayName = user?.name || user?.email?.split('@')[0] || 'User';

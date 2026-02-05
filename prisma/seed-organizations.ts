@@ -14,7 +14,7 @@ import { config } from 'dotenv';
 config({ path: '.env.local' });
 config({ path: '.env' });
 
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -180,11 +180,11 @@ async function main() {
   } else {
     organization = await prisma.organization.create({
       data: {
-        name: 'RevLine',
-        slug: 'revline',
+        name: 'Rosen Systems LLC',
+        slug: 'rosen-systems',
       },
     });
-    console.log(`   ✓ Organization "RevLine" created\n`);
+    console.log(`   ✓ Organization "Rosen Systems LLC" created\n`);
   }
 
   // 2. Link all existing workspaces to the organization
@@ -304,9 +304,11 @@ async function main() {
           organizationId: organization.id,
           type: template.type,
           name: template.name,
-          schema: template.schema,
-          defaultCopy: template.defaultCopy,
-          defaultBranding: template.defaultBranding,
+          schema: template.schema as Prisma.InputJsonValue,
+          defaultCopy: template.defaultCopy as Prisma.InputJsonValue,
+          defaultBranding: template.defaultBranding === null 
+            ? Prisma.JsonNull 
+            : (template.defaultBranding as Prisma.InputJsonValue),
           enabled: true,
         },
       });

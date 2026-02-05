@@ -3,6 +3,7 @@ import { getUserIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { requireOrgAccess, OrgAccessError } from '@/app/_lib/organization-access';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 
 const CreateTemplateSchema = z.object({
   type: z.string().min(1).max(50).regex(/^[a-z][a-z0-9_-]*$/, {
@@ -20,7 +21,7 @@ const CreateTemplateSchema = z.object({
       multiline: z.boolean().optional(),
     })),
   }),
-  defaultCopy: z.record(z.string()),
+  defaultCopy: z.record(z.string(), z.string()),
   defaultBranding: z.object({
     primaryColor: z.string().optional(),
     secondaryColor: z.string().optional(),
@@ -109,7 +110,7 @@ export async function POST(
     
     if (!validation.success) {
       return NextResponse.json(
-        { error: validation.error.errors[0]?.message || 'Invalid input' },
+        { error: validation.error.issues[0]?.message || 'Invalid input' },
         { status: 400 }
       );
     }
@@ -138,9 +139,11 @@ export async function POST(
         organizationId: id,
         type,
         name,
-        schema,
-        defaultCopy,
-        defaultBranding,
+        schema: schema as Prisma.InputJsonValue,
+        defaultCopy: defaultCopy as Prisma.InputJsonValue,
+        defaultBranding: defaultBranding === null 
+          ? Prisma.JsonNull 
+          : (defaultBranding as Prisma.InputJsonValue),
         enabled: enabled ?? true,
       },
     });

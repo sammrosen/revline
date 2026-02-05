@@ -1,11 +1,13 @@
 /**
  * Form Registry
  * 
- * Lists all available bespoke form IDs.
- * When creating a new bespoke form, add its ID here.
+ * Lists all available bespoke form IDs and their baked-in operations.
+ * When creating a new bespoke form, add its ID here along with:
+ * - operations: What integrations the form calls internally (ABC, Resend, etc.)
+ * - triggers: What events the form emits for workflows to respond to
  * 
- * The admin UI uses this to validate form IDs and show warnings
- * if an unrecognized form ID is entered.
+ * The admin UI uses this to validate form IDs, show warnings,
+ * and the dependency graph uses it to visualize the complete business flow.
  */
 
 export interface FormTrigger {
@@ -15,6 +17,34 @@ export interface FormTrigger {
   label: string;
   /** Optional description of when this trigger fires */
   description?: string;
+}
+
+/**
+ * Represents an operation that a form performs internally.
+ * These are "baked-in" operations that happen automatically when the form runs,
+ * as opposed to workflow actions which are configurable.
+ */
+export interface FormOperation {
+  /** Adapter that performs this operation (e.g., 'abc_ignite', 'resend') */
+  adapter: string;
+  /** Operation name (e.g., 'lookup_member', 'send_email') */
+  operation: string;
+  /** Human-readable label for display in the graph */
+  label?: string;
+  /** True if this operation only runs in some code paths (e.g., conditional checks) */
+  conditional?: boolean;
+  /** 
+   * Phase relative to trigger emission:
+   * - 'pre': Happens before the async gap (initial request phase)
+   * - 'trigger': Happens when the trigger fires (confirmation phase)
+   * Default: 'pre'
+   */
+  phase?: 'pre' | 'trigger';
+  /** 
+   * If true, can run in parallel with other parallel ops in the same phase.
+   * Default: false (sequential execution)
+   */
+  parallel?: boolean;
 }
 
 export interface FormRegistryEntry {
@@ -28,6 +58,12 @@ export interface FormRegistryEntry {
   path: string;
   /** Form type - helps categorize forms */
   type: 'booking' | 'signup' | 'intake' | 'contact' | 'survey' | 'other';
+  /** 
+   * Operations this form performs internally (baked-in workflow).
+   * These are integration calls that happen automatically when the form runs.
+   * Used by the dependency graph to show complete business process visibility.
+   */
+  operations?: FormOperation[];
   /** Triggers this form can emit - required, at least one */
   triggers: FormTrigger[];
 }
@@ -47,6 +83,15 @@ export const FORM_REGISTRY: FormRegistryEntry[] = [
     description: 'Magic link booking flow for personal training sessions via ABC Ignite',
     path: '/public/{slug}/book',
     type: 'booking',
+    // Baked-in operations this form performs automatically
+    operations: [
+      // Pre phase: Request (POST /api/v1/booking/request) - before user clicks magic link
+      { adapter: 'abc_ignite', operation: 'lookup_member', label: 'Find member by barcode', phase: 'pre' },
+      { adapter: 'abc_ignite', operation: 'check_eligibility', label: 'Verify booking eligibility', phase: 'pre', conditional: true },
+      { adapter: 'resend', operation: 'send_email', label: 'Send magic link email', phase: 'pre' },
+      // Trigger phase: Confirm (GET /api/v1/booking/confirm/[token]) - when trigger fires
+      { adapter: 'abc_ignite', operation: 'enroll_member', label: 'Book appointment', phase: 'trigger' },
+    ],
     triggers: [
       {
         id: 'booking-confirmed',
@@ -66,6 +111,8 @@ export const FORM_REGISTRY: FormRegistryEntry[] = [
     description: 'Multi-step membership signup with plan selection and payment',
     path: '/public/{slug}/signup',
     type: 'signup',
+    // No baked-in operations currently - triggers only
+    operations: [],
     triggers: [
       {
         id: 'signup-completed',
@@ -86,13 +133,22 @@ export const FORM_REGISTRY: FormRegistryEntry[] = [
   },
   // Add new forms here as you build them:
   // {
-  //   id: 'acme-intake',
-  //   name: 'ACME Prospect Intake',
-  //   description: 'Lead capture form for ACME Corp',
-  //   path: '/workspaces/acme/intake',
-  //   type: 'intake',
+  //   id: 'swac-class-booking',
+  //   name: 'SWAC Class Booking',
+  //   description: 'Drop-in class booking for SWAC members',
+  //   path: '/public/{slug}/classes',
+  //   type: 'booking',
+  //   operations: [
+  //     // Pre phase: setup and validation
+  //     { adapter: 'abc_ignite', operation: 'lookup_member', phase: 'pre' },
+  //     { adapter: 'abc_ignite', operation: 'check_availability', phase: 'pre' },
+  //     // Trigger phase: when booking completes
+  //     { adapter: 'abc_ignite', operation: 'enroll_member', phase: 'trigger' },
+  //     { adapter: 'resend', operation: 'send_email', label: 'Confirmation email', phase: 'trigger' },
+  //   ],
   //   triggers: [
-  //     { id: 'intake-submitted', label: 'Intake Submitted' },
+  //     { id: 'class-booked', label: 'Class Booked' },
+  //     { id: 'class-waitlisted', label: 'Added to Waitlist' },
   //   ],
   // },
 ];
@@ -144,4 +200,30 @@ export function isValidFormTrigger(formId: string, triggerId: string): boolean {
  */
 export function resolveFormPath(pathTemplate: string, workspaceSlug: string): string {
   return pathTemplate.replace(/{slug}/g, workspaceSlug);
+}
+
+/**
+ * Get all baked-in operations for a form
+ */
+export function getFormOperations(formId: string): FormOperation[] {
+  const form = getFormById(formId);
+  return form?.operations ?? [];
+}
+
+/**
+ * Get all forms that use a specific adapter in their baked-in operations
+ */
+export function getFormsUsingAdapter(adapterId: string): FormRegistryEntry[] {
+  return FORM_REGISTRY.filter(f => 
+    f.operations?.some(op => op.adapter === adapterId)
+  );
+}
+
+/**
+ * Get the list of integration adapters a form depends on
+ * (unique adapters from the form's operations)
+ */
+export function getFormIntegrationDependencies(formId: string): string[] {
+  const ops = getFormOperations(formId);
+  return [...new Set(ops.map(op => op.adapter))];
 }

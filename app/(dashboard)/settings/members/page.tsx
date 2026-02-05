@@ -84,7 +84,7 @@ export default function MembersPage() {
       }
 
       setMembers(data.members);
-    } catch (err) {
+    } catch {
       setError('Failed to load members');
     } finally {
       setLoading(false);
@@ -116,7 +116,7 @@ export default function MembersPage() {
       await fetchMembers();
       setShowAddForm(false);
       setNewEmail('');
-    } catch (err) {
+    } catch {
       setAddError('Failed to add member');
     } finally {
       setAdding(false);
@@ -138,7 +138,7 @@ export default function MembersPage() {
       }
 
       setMembers(members.filter((m) => m.id !== memberId));
-    } catch (err) {
+    } catch {
       alert('Failed to remove member');
     }
   }
@@ -171,7 +171,7 @@ export default function MembersPage() {
           ? { ...m, permissions: { ...m.permissions, [permission]: !currentValue } }
           : m
       ));
-    } catch (err) {
+    } catch {
       alert('Failed to update permissions');
     }
   }

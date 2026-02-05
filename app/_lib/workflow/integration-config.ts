@@ -25,50 +25,84 @@ export interface IntegrationStyle {
   borderClass: string;
   /** Tailwind text class */
   textClass: string;
-  /** Lucide icon component */
+  /** Lucide icon component (fallback) */
   icon: LucideIcon;
+  /** Logo image path in /public/logos/ */
+  logo: string;
 }
 
 export const INTEGRATION_CONFIG: Record<string, IntegrationStyle> = {
   calendly: {
     name: 'Calendly',
-    color: '#006BFF',
+    color: '#0069fe',
     bgClass: 'bg-blue-500/20',
     borderClass: 'border-blue-500/40',
     textClass: 'text-blue-400',
     icon: Calendar,
+    logo: '/logos/calendly.png',
   },
   stripe: {
     name: 'Stripe',
-    color: '#635BFF',
+    color: '#5539fd',
     bgClass: 'bg-violet-500/20',
     borderClass: 'border-violet-500/40',
     textClass: 'text-violet-400',
     icon: CreditCard,
+    logo: '/logos/stripe.png',
   },
   mailerlite: {
     name: 'MailerLite',
-    color: '#09C269',
+    color: '#19b575',
     bgClass: 'bg-emerald-500/20',
     borderClass: 'border-emerald-500/40',
     textClass: 'text-emerald-400',
     icon: Mail,
+    logo: '/logos/mailerlite.png',
   },
   revline: {
     name: 'RevLine',
-    color: '#F59E0B',
-    bgClass: 'bg-amber-500/20',
-    borderClass: 'border-amber-500/40',
-    textClass: 'text-amber-400',
+    color: '#ff6100',
+    bgClass: 'bg-orange-500/20',
+    borderClass: 'border-orange-500/40',
+    textClass: 'text-orange-400',
     icon: Zap,
+    logo: '/logos/RevLine.png',
   },
   manychat: {
     name: 'ManyChat',
-    color: '#FB3B64',
-    bgClass: 'bg-pink-500/20',
-    borderClass: 'border-pink-500/40',
-    textClass: 'text-pink-400',
+    color: '#000000',
+    bgClass: 'bg-zinc-500/20',
+    borderClass: 'border-zinc-500/40',
+    textClass: 'text-zinc-300',
     icon: MessageCircle,
+    logo: '/logos/manychat.png',
+  },
+  abc_ignite: {
+    name: 'ABC Ignite',
+    color: '#214377',
+    bgClass: 'bg-blue-900/20',
+    borderClass: 'border-blue-900/40',
+    textClass: 'text-blue-300',
+    icon: Zap,
+    logo: '/logos/abc-ignite.png',
+  },
+  resend: {
+    name: 'Resend',
+    color: '#000000',
+    bgClass: 'bg-zinc-500/20',
+    borderClass: 'border-zinc-500/40',
+    textClass: 'text-zinc-300',
+    icon: Mail,
+    logo: '/logos/resend.png',
+  },
+  capture: {
+    name: 'Capture',
+    color: '#71717A',
+    bgClass: 'bg-zinc-500/20',
+    borderClass: 'border-zinc-500/40',
+    textClass: 'text-zinc-400',
+    icon: Zap,
+    logo: '/logos/capture.png',
   },
 };
 
@@ -85,6 +119,7 @@ export function getIntegrationStyle(adapterId: string): IntegrationStyle {
       borderClass: 'border-zinc-500/40',
       textClass: 'text-zinc-400',
       icon: Zap,
+      logo: '', // No logo for unknown integrations
     }
   );
 }

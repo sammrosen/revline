@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { Building2, Save, AlertTriangle } from 'lucide-react';
 
 interface Organization {
@@ -27,7 +26,6 @@ interface Access {
 }
 
 export default function OrganizationSettingsPage() {
-  const router = useRouter();
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [access, setAccess] = useState<Access | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,7 +69,7 @@ export default function OrganizationSettingsPage() {
       setAccess(data.access);
       setName(data.organization.name);
       setSlug(data.organization.slug);
-    } catch (err) {
+    } catch {
       setError('Failed to load organization');
     } finally {
       setLoading(false);
@@ -105,7 +103,7 @@ export default function OrganizationSettingsPage() {
       
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
+    } catch {
       setError('Failed to save changes');
     } finally {
       setSaving(false);

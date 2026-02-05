@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { 
-  Home, 
   Layers, 
   FileText, 
   Building2, 
@@ -17,6 +16,7 @@ import { OrgSwitcher } from './OrgSwitcher';
 import { NavSection } from './NavSection';
 import { NavItem } from './NavItem';
 import { UserMenu } from './UserMenu';
+import { WorkspaceNav } from './WorkspaceNav';
 
 interface Organization {
   id: string;
@@ -53,9 +53,12 @@ export function Sidebar({ organizations, currentOrg, user }: SidebarProps) {
       <nav className="flex-1 overflow-y-auto p-2 space-y-4">
         {/* Main Navigation */}
         <NavSection>
-          <NavItem href="/workspaces" icon={Layers} label="Workspaces" />
+          <NavItem href="/workspaces" icon={Layers} label="Dashboard" />
           <NavItem href="/templates" icon={FileText} label="Templates" />
         </NavSection>
+
+        {/* Workspace Context Navigation - shows when viewing a workspace */}
+        <WorkspaceNav />
 
         {/* Settings */}
         <NavSection title="Settings">

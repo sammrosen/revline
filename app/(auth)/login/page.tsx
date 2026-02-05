@@ -209,7 +209,7 @@ export default function AdminLoginPage() {
               {lowRecoveryCodesWarning && (
                 <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
                   <p className="text-yellow-400 text-sm">
-                    ⚠️ You have less than 3 recovery codes remaining. Consider regenerating them in Settings.
+                    Warning: You have less than 3 recovery codes remaining. Consider regenerating them in Settings.
                   </p>
                 </div>
               )}

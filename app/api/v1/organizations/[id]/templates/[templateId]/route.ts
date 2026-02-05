@@ -3,6 +3,7 @@ import { getUserIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { requireOrgAccess, OrgAccessError } from '@/app/_lib/organization-access';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 
 const UpdateTemplateSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -17,7 +18,7 @@ const UpdateTemplateSchema = z.object({
       multiline: z.boolean().optional(),
     })),
   }).optional(),
-  defaultCopy: z.record(z.string()).optional(),
+  defaultCopy: z.record(z.string(), z.string()).optional(),
   defaultBranding: z.object({
     primaryColor: z.string().optional(),
     secondaryColor: z.string().optional(),
@@ -117,7 +118,7 @@ export async function PATCH(
     
     if (!validation.success) {
       return NextResponse.json(
-        { error: validation.error.errors[0]?.message || 'Invalid input' },
+        { error: validation.error.issues[0]?.message || 'Invalid input' },
         { status: 400 }
       );
     }
@@ -128,9 +129,13 @@ export async function PATCH(
       where: { id: templateId },
       data: {
         ...(name !== undefined && { name }),
-        ...(schema !== undefined && { schema }),
-        ...(defaultCopy !== undefined && { defaultCopy }),
-        ...(defaultBranding !== undefined && { defaultBranding }),
+        ...(schema !== undefined && { schema: schema as Prisma.InputJsonValue }),
+        ...(defaultCopy !== undefined && { defaultCopy: defaultCopy as Prisma.InputJsonValue }),
+        ...(defaultBranding !== undefined && { 
+          defaultBranding: defaultBranding === null 
+            ? Prisma.JsonNull 
+            : (defaultBranding as Prisma.InputJsonValue) 
+        }),
         ...(enabled !== undefined && { enabled }),
       },
     });

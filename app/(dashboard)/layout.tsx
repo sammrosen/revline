@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { redirect } from 'next/navigation'
 import { ServiceWorkerRegistration } from './_components/ServiceWorkerRegistration'
 import { Sidebar } from './_components/sidebar'
 import { getUserIdFromHeaders } from '@/app/_lib/auth'

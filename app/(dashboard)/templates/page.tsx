@@ -79,7 +79,7 @@ export default function TemplatesPage() {
       }
 
       setTemplates(data.templates);
-    } catch (err) {
+    } catch {
       setError('Failed to load templates');
     } finally {
       setLoading(false);
@@ -105,7 +105,7 @@ export default function TemplatesPage() {
       setTemplates(templates.map((t) => 
         t.id === templateId ? { ...t, enabled: !currentEnabled } : t
       ));
-    } catch (err) {
+    } catch {
       alert('Failed to update template');
     }
   }
@@ -125,7 +125,7 @@ export default function TemplatesPage() {
       }
 
       setTemplates(templates.filter((t) => t.id !== templateId));
-    } catch (err) {
+    } catch {
       alert('Failed to delete template');
     }
   }
