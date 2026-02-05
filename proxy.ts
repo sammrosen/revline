@@ -1,11 +1,12 @@
 /**
  * Next.js Proxy
  * 
- * Handles three main responsibilities:
+ * Handles four main responsibilities:
  * 1. Global rate limiting safety net for API routes
  * 2. Protects app routes (workspaces, settings, etc.) with authentication.
  *    Checks session cookie and redirects to login if not authenticated.
- * 3. Routes custom domains to specific pages.
+ * 3. Routes custom domains to workspace-specific pages (dynamic DB lookup for templates).
+ * 4. Routes static site domains via the sites module (for non-workspace sites).
  * 
  * STANDARDS:
  * - All app routes protected automatically
@@ -13,11 +14,15 @@
  * - Passes userId via x-user-id header for server components
  * - /setup only accessible when no users exist (checked in the route itself)
  * - Global rate limit is a safety net; routes implement their own specific limits
+ * - Custom workspace domains resolved via direct DB lookup (no caching for reliability)
+ * - Static site domains are configured in app/_lib/sites/registry.ts
  */
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { validateSession } from './app/_lib/auth';
+import { prisma } from './app/_lib/db';
+import { resolveSiteByDomain } from './app/_lib/sites';
 
 // =============================================================================
 // GLOBAL RATE LIMITING (Safety Net)
@@ -26,7 +31,7 @@ import { validateSession } from './app/_lib/auth';
 // For production multi-instance, route-level limits with Redis would be needed
 const GLOBAL_RATE_LIMIT_STORE = new Map<string, { count: number; resetAt: number }>();
 const GLOBAL_RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
-const GLOBAL_RATE_LIMIT_MAX = 100; // 100 requests per minute per IP
+const GLOBAL_RATE_LIMIT_MAX = 300; // 300 requests per minute per IP (safety net; routes have own limits)
 
 /**
  * Get client IP from request headers
@@ -73,16 +78,53 @@ function checkGlobalRateLimit(ip: string): boolean {
   return true;
 }
 
-// Domain to route mapping
-const DOMAIN_ROUTES: Record<string, string> = {
-  // Custom domains pointing to specific pages
-  'client1.com': '/client1',
-  'www.client1.com': '/client1',
-  'demo.example.com': '/demo',
-  'fit1coaching.com': '/fit1',
-  'www.fit1coaching.com': '/fit1',
-  // Add more domain mappings here
-};
+// =============================================================================
+// CUSTOM DOMAIN RESOLUTION
+// =============================================================================
+
+/**
+ * Resolve custom domain to workspace slug via direct DB lookup
+ * 
+ * RELIABILITY: Direct lookup on every request (no caching)
+ * - Ensures immediate propagation of domain changes
+ * - Simple logic with no cache invalidation concerns
+ * - Database query is indexed on customDomain field
+ * 
+ * @param hostname - The hostname from the request
+ * @returns Workspace slug if found and verified, null otherwise
+ */
+async function resolveCustomDomain(hostname: string): Promise<string | null> {
+  // Skip localhost and known system domains
+  if (
+    hostname.includes('localhost') ||
+    hostname.includes('railway.app') ||
+    hostname.includes('revline.io') ||
+    hostname.includes('vercel.app')
+  ) {
+    return null;
+  }
+
+  try {
+    const workspace = await prisma.workspace.findFirst({
+      where: {
+        customDomain: hostname.toLowerCase(),
+        domainVerified: true, // Only route verified domains
+      },
+      select: {
+        slug: true,
+      },
+    });
+
+    return workspace?.slug ?? null;
+  } catch (error) {
+    // Log but don't fail the request - fall through to normal routing
+    console.error('Custom domain lookup error:', {
+      hostname,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return null;
+  }
+}
 
 // Protected page routes (require authentication)
 const PROTECTED_PAGE_PREFIXES = [
@@ -188,31 +230,40 @@ export async function proxy(request: NextRequest) {
     // Valid session - add userId to headers for server components and API routes
     const response = NextResponse.next();
     response.headers.set('x-user-id', userId);
-    
-    // Check domain routing for app routes too (in case accessed via custom domain)
-    const hostname = request.headers.get('host') || '';
-    const targetPath = DOMAIN_ROUTES[hostname];
-    
-    if (targetPath) {
-      const url = request.nextUrl.clone();
-      url.pathname = targetPath;
-      return NextResponse.rewrite(url);
-    }
-    
     return response;
   }
 
-  // 3. Handle domain routing
+  // 3. Handle domain routing for public pages
   const hostname = request.headers.get('host') || '';
   
-  // Check if this hostname should be routed to a specific page
-  const targetPath = DOMAIN_ROUTES[hostname];
-  
-  if (targetPath) {
-    // Rewrite to the target path while keeping the custom domain in the URL
+  // 3a. Check static site domains first (file-based registry for non-workspace sites)
+  const resolvedSite = resolveSiteByDomain(hostname);
+  if (resolvedSite) {
     const url = request.nextUrl.clone();
-    url.pathname = targetPath;
+    url.pathname = pathname === '/' ? `/${resolvedSite.siteId}` : `/${resolvedSite.siteId}${pathname}`;
     return NextResponse.rewrite(url);
+  }
+  
+  // 3b. Check dynamic custom domains (database lookup for workspace templates)
+  // Only for non-API, non-dashboard routes
+  if (!pathname.startsWith('/api/') && !pathname.startsWith('/workspaces')) {
+    const workspaceSlug = await resolveCustomDomain(hostname);
+    
+    if (workspaceSlug) {
+      // Route to workspace's booking page
+      // Custom domains route to /public/[slug]/book by default
+      const url = request.nextUrl.clone();
+      
+      // If accessing root of custom domain, go to booking page
+      if (pathname === '/' || pathname === '') {
+        url.pathname = `/public/${workspaceSlug}/book`;
+      } else {
+        // For other paths, prepend /public/[slug]
+        url.pathname = `/public/${workspaceSlug}${pathname}`;
+      }
+      
+      return NextResponse.rewrite(url);
+    }
   }
   
   // No special routing needed

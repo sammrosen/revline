@@ -55,6 +55,7 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
   const [metaText, setMetaText] = useState(JSON.stringify(integration.meta || {}, null, 2));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const router = useRouter();
 
   // Secrets state
@@ -159,7 +160,10 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
         return;
       }
 
-      setShowEditMeta(false);
+      // Keep RevLine modal open so user can see preview update
+      if (!isRevline) {
+        setShowEditMeta(false);
+      }
       router.refresh();
     } catch {
       setError('Network error');
@@ -291,17 +295,44 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
               ? 'Configure sender settings for transactional emails.'
               : 'Update non-sensitive configuration (group IDs, product maps, etc.)';
 
+    // Use fullscreen mode for RevLine editor (has preview panel)
+    const useFullscreen = isRevline && isFullscreen;
+    
     return (
       <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-0 sm:p-4 z-50">
-        <div className="bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg p-4 sm:p-6 max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center gap-2 mb-2">
-            <h3 className="text-lg font-semibold">Edit {modalTitle}</h3>
-            {!hasStructuredEditor && (
-              <IntegrationHelp 
-                integration={integrationType}
-                context="edit-meta"
-                onCopyTemplate={(template) => setMetaText(template)}
-              />
+        <div className={`bg-zinc-900 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-lg p-4 sm:p-6 overflow-y-auto ${
+          useFullscreen 
+            ? 'w-full h-full max-w-none' 
+            : 'max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh]'
+        }`}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold">Edit {modalTitle}</h3>
+              {!hasStructuredEditor && (
+                <IntegrationHelp 
+                  integration={integrationType}
+                  context="edit-meta"
+                  onCopyTemplate={(template) => setMetaText(template)}
+                />
+              )}
+            </div>
+            {isRevline && (
+              <button
+                type="button"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="text-zinc-400 hover:text-zinc-200 p-1.5 rounded hover:bg-zinc-800 transition-colors"
+                title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              >
+                {isFullscreen ? (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                  </svg>
+                )}
+              </button>
             )}
           </div>
           <p className="text-sm text-zinc-400 mb-4">{modalDescription}</p>
@@ -376,7 +407,7 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
               }}
               className="px-4 py-2 text-zinc-400 hover:text-white text-sm"
             >
-              Cancel
+              {isRevline ? 'Close' : 'Cancel'}
             </button>
           </div>
         </div>

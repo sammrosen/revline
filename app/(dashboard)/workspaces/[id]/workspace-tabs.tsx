@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { HealthStatus, LeadStage } from '@prisma/client';
 import { IntegrationActions } from './integration-actions';
 import { AddIntegrationForm } from './add-integration-form';
@@ -79,6 +79,12 @@ interface WorkspaceTabsProps {
   mailerliteGroups?: Record<string, { id: string; name: string }>;
   stripeProducts?: Record<string, string>;
   timezone?: string; // Workspace timezone for settings
+  domainConfig?: {
+    customDomain: string | null;
+    domainVerifyToken: string | null;
+    domainVerified: boolean;
+    domainVerifiedAt: string | null;
+  };
 }
 
 // Parse secrets from JSON, returning only id and name (never values)
@@ -120,17 +126,29 @@ interface IntegrationDependency {
   usedBy: Array<{ workflowId: string; workflowName: string }>;
 }
 
-// Get initial tab from URL hash (runs only on client)
-function getInitialTab(): TabType {
-  if (typeof window === 'undefined') return 'workflows';
-  const hash = window.location.hash.slice(1) as TabType;
-  const validTabs: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'insights', 'testing', 'settings'];
-  return hash && validTabs.includes(hash) ? hash : 'workflows';
-}
+const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'insights', 'testing', 'settings'];
 
-export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York' }: WorkspaceTabsProps) {
-  const [activeTab, setActiveTab] = useState<TabType>(getInitialTab);
+export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York', domainConfig }: WorkspaceTabsProps) {
+  // Initialize with default to avoid hydration mismatch, then sync from hash in useEffect
+  const [activeTab, setActiveTab] = useState<TabType>('workflows');
   const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
+
+  // Sync tab from URL hash after mount (client-only)
+  const hasAppliedHash = useRef(false);
+  
+  useEffect(() => {
+    if (hasAppliedHash.current) return;
+    hasAppliedHash.current = true;
+    
+    const hash = window.location.hash.slice(1);
+    if (hash && VALID_TABS.includes(hash as TabType)) {
+      // Use setTimeout to avoid React's strict mode double-render issues
+      // and to ensure hydration is complete before changing state
+      setTimeout(() => {
+        setActiveTab(hash as TabType);
+      }, 0);
+    }
+  }, []);
 
   // Update URL hash when tab changes (without triggering navigation)
   const handleTabChange = (tab: TabType) => {
@@ -402,7 +420,11 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
         )}
 
         {activeTab === 'settings' && (
-          <WorkspaceSettings workspaceId={workspaceId} currentTimezone={timezone} />
+          <WorkspaceSettings 
+            workspaceId={workspaceId} 
+            currentTimezone={timezone}
+            domainConfig={domainConfig}
+          />
         )}
       </div>
     </div>

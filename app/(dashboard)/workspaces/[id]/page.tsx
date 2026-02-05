@@ -159,6 +159,12 @@ export default async function WorkspaceDetailPage({
           mailerliteGroups={mailerliteGroups}
           stripeProducts={stripeProducts}
           timezone={workspace.timezone}
+          domainConfig={{
+            customDomain: workspace.customDomain ?? null,
+            domainVerifyToken: workspace.domainVerifyToken ?? null,
+            domainVerified: workspace.domainVerified ?? false,
+            domainVerifiedAt: workspace.domainVerifiedAt?.toISOString() ?? null,
+          }}
         />
       </div>
     </div>
