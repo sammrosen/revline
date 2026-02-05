@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useTransition } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { 
   ChevronDown,
@@ -163,7 +163,9 @@ export function WorkspaceNav() {
   // Selected workspace data
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [workspaceData, setWorkspaceData] = useState<WorkspaceSummary | null>(null);
-  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const [isFetching, setIsFetching] = useState(false);
+  const isLoadingData = isPending || isFetching;
 
   // Extract workspace ID from URL if on workspace page
   const workspaceMatch = pathname.match(/^\/workspaces\/([^/]+)$/);
@@ -181,7 +183,7 @@ export function WorkspaceNav() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Fetch workspace list on mount
+  // Fetch workspace list on mount and sync URL workspace
   useEffect(() => {
     let cancelled = false;
     
@@ -216,40 +218,46 @@ export function WorkspaceNav() {
     return () => { cancelled = true; };
   }, [urlWorkspaceId]);
 
-  // Sync selected workspace when URL changes
-  useEffect(() => {
-    if (urlWorkspaceId && urlWorkspaceId !== selectedWorkspaceId) {
-      setSelectedWorkspaceId(urlWorkspaceId);
-    }
-  }, [urlWorkspaceId, selectedWorkspaceId]);
+  // Derive effective workspace ID - URL takes precedence when on workspace page
+  const effectiveWorkspaceId = isOnWorkspacePage && urlWorkspaceId 
+    ? urlWorkspaceId 
+    : selectedWorkspaceId;
 
-  // Fetch workspace data when selection changes
+  // Fetch workspace data when effective selection changes
   useEffect(() => {
-    if (!selectedWorkspaceId) {
-      setWorkspaceData(null);
+    if (!effectiveWorkspaceId) {
       return;
     }
 
-    // Save to localStorage
-    localStorage.setItem('selectedWorkspaceId', selectedWorkspaceId);
+    // Save to localStorage (only if not from URL to avoid overwriting user preference)
+    if (!isOnWorkspacePage) {
+      localStorage.setItem('selectedWorkspaceId', effectiveWorkspaceId);
+    }
 
     let cancelled = false;
-    setIsLoadingData(true);
+    
+    startTransition(() => {
+      setIsFetching(true);
+    });
 
-    fetch(`/api/v1/workspaces/${selectedWorkspaceId}/summary`)
+    fetch(`/api/v1/workspaces/${effectiveWorkspaceId}/summary`)
       .then(res => res.ok ? res.json() : null)
       .then(data => {
-        if (!cancelled && data) {
+        if (!cancelled) {
           setWorkspaceData(data);
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) {
+          setWorkspaceData(null);
+        }
+      })
       .finally(() => {
-        if (!cancelled) setIsLoadingData(false);
+        if (!cancelled) setIsFetching(false);
       });
 
     return () => { cancelled = true; };
-  }, [selectedWorkspaceId]);
+  }, [effectiveWorkspaceId, isOnWorkspacePage]);
 
   // Sync with hash on workspace pages
   useEffect(() => {
@@ -292,7 +300,7 @@ export function WorkspaceNav() {
     return null;
   }
 
-  const selectedWorkspace = workspaces.find(w => w.id === selectedWorkspaceId);
+  const displayedWorkspace = workspaces.find(w => w.id === effectiveWorkspaceId);
 
   return (
     <div className="space-y-1 border-t border-zinc-800 pt-4">
@@ -310,7 +318,7 @@ export function WorkspaceNav() {
           className="w-full flex items-center gap-2 px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg hover:border-zinc-700 transition-colors"
         >
           <span className="flex-1 text-left text-sm font-medium text-white truncate">
-            {selectedWorkspace?.name || 'Select workspace'}
+            {displayedWorkspace?.name || 'Select workspace'}
           </span>
           <ChevronsUpDown className="w-4 h-4 text-zinc-500 shrink-0" />
         </button>
@@ -325,7 +333,7 @@ export function WorkspaceNav() {
                 className="w-full flex items-center gap-3 px-3 py-2 hover:bg-zinc-800 transition-colors text-left"
               >
                 <span className="flex-1 text-sm text-white truncate">{workspace.name}</span>
-                {workspace.id === selectedWorkspaceId && (
+                {workspace.id === effectiveWorkspaceId && (
                   <Check className="w-4 h-4 text-green-400 shrink-0" />
                 )}
               </button>
@@ -335,7 +343,7 @@ export function WorkspaceNav() {
       </div>
 
       {/* Workspace Tabs */}
-      {selectedWorkspaceId && workspaceData && (
+      {effectiveWorkspaceId && workspaceData && (
         <>
           {/* Expand/Collapse Toggle */}
           <div className="px-3 pt-2">
@@ -361,8 +369,8 @@ export function WorkspaceNav() {
                   label={tab.label}
                   count={tab.countKey ? workspaceData.counts[tab.countKey] : undefined}
                   activeTab={activeTab}
-                  workspaceId={selectedWorkspaceId}
-                  isOnWorkspacePage={isOnWorkspacePage && urlWorkspaceId === selectedWorkspaceId}
+                  workspaceId={effectiveWorkspaceId}
+                  isOnWorkspacePage={isOnWorkspacePage && urlWorkspaceId === effectiveWorkspaceId}
                 />
               ))}
               {/* Actions Dropdown */}
@@ -377,7 +385,7 @@ export function WorkspaceNav() {
       )}
 
       {/* Loading workspace data */}
-      {selectedWorkspaceId && isLoadingData && !workspaceData && (
+      {effectiveWorkspaceId && isLoadingData && !workspaceData && (
         <div className="px-3 py-2">
           <div className="flex items-center gap-2 text-zinc-500">
             <Loader2 className="w-3 h-3 animate-spin" />
