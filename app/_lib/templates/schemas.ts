@@ -101,6 +101,14 @@ export const BOOKING_COPY_SCHEMA: TemplateCopySchema = {
       maxLength: 50,
       placeholder: 'e.g., Powered by Your Company',
     },
+    {
+      key: 'footerEmail',
+      label: 'Footer Email',
+      description: 'Contact email shown in the page footer',
+      default: DEFAULT_BOOKING_COPY.footerEmail,
+      maxLength: 100,
+      placeholder: 'e.g., support@yourcompany.com',
+    },
   ],
 };
 

@@ -65,6 +65,7 @@ export interface ResolvedBookingCopy {
   successTitle: string;
   successMessage: string;
   footerText: string;
+  footerEmail: string;
 }
 
 /**
@@ -413,6 +414,11 @@ export class WorkspaceConfigService {
     // Footer text
     if (overrides.footerText) {
       result.footerText = sanitizeCopyText(overrides.footerText, 50);
+    }
+
+    // Footer email
+    if (overrides.footerEmail) {
+      result.footerEmail = sanitizeCopyText(overrides.footerEmail, 100);
     }
 
     return result;

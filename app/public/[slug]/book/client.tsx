@@ -74,6 +74,49 @@ interface MagicLinkBookingClientProps {
   copy: ResolvedBookingCopy;
   /** Feature flags */
   features: ResolvedFeatures;
+  /** Preview mode - uses mock data, no API calls */
+  previewMode?: boolean;
+}
+
+// =============================================================================
+// MOCK DATA FOR PREVIEW MODE
+// =============================================================================
+
+const MOCK_EMPLOYEES: BookingEmployee[] = [
+  { key: 'trainer-1', name: 'Alex Martinez', title: 'Personal Trainer' },
+  { key: 'trainer-2', name: 'Jordan Taylor', title: 'Fitness Coach' },
+  { key: 'trainer-3', name: 'Sam Kim', title: 'Strength Specialist' },
+];
+
+function generateMockSlots(): TimeSlot[] {
+  const slots: TimeSlot[] = [];
+  const today = new Date();
+  
+  // Generate slots for next 7 days
+  for (let day = 0; day < 7; day++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() + day);
+    
+    // Skip weekends for realism
+    if (date.getDay() === 0 || date.getDay() === 6) continue;
+    
+    // Morning and afternoon slots
+    for (const hour of [9, 10, 11, 14, 15, 16]) {
+      const slotDate = new Date(date);
+      slotDate.setHours(hour, 0, 0, 0);
+      
+      slots.push({
+        id: `slot-${day}-${hour}`,
+        startTime: slotDate.toISOString(),
+        endTime: new Date(slotDate.getTime() + 60 * 60 * 1000).toISOString(),
+        duration: 60,
+        title: 'Personal Training Session',
+        staffName: MOCK_EMPLOYEES[0].name,
+      });
+    }
+  }
+  
+  return slots;
 }
 
 // =============================================================================
@@ -125,24 +168,36 @@ export function MagicLinkBookingClient({
   branding,
   copy,
   features,
+  previewMode = false,
 }: MagicLinkBookingClientProps) {
-  const [state, setState] = useState<MagicLinkBookingState>({
+  // Generate mock data once for preview mode
+  const mockSlots = useMemo(() => previewMode ? generateMockSlots() : [], [previewMode]);
+  
+  const [state, setState] = useState<MagicLinkBookingState>(() => ({
     ...initialState,
     barcode: initialBarcode || '',
-  });
+    // In preview mode, initialize with mock data
+    ...(previewMode ? {
+      employees: MOCK_EMPLOYEES,
+      selectedEmployee: MOCK_EMPLOYEES[0],
+      slots: mockSlots,
+    } : {}),
+  }));
 
   // Derive brand colors from config
   const brand = useMemo(() => deriveBrandColors(branding), [branding]);
 
-  // Load employees on mount
+  // Load employees on mount (skip in preview mode)
   useEffect(() => {
+    if (previewMode) return; // Skip API calls in preview mode
+    
     if (capabilities.supportsEmployeeSelection) {
       loadEmployees();
     } else {
       loadAvailability();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [previewMode]);
 
   const loadEmployees = async () => {
     setState(s => ({ ...s, loading: true, error: null }));
@@ -217,21 +272,31 @@ export function MagicLinkBookingClient({
 
   const handleEmployeeSelect = useCallback((employee: BookingEmployee) => {
     setState(s => ({ ...s, selectedEmployee: employee, selectedSlot: null }));
-    loadAvailability(employee.key, state.selectedDate);
+    if (!previewMode) {
+      loadAvailability(employee.key, state.selectedDate);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.selectedDate]);
+  }, [state.selectedDate, previewMode]);
 
   const handleDateChange = useCallback((newDate: string) => {
-    setState(s => ({ ...s, selectedDate: newDate, slots: [] }));
-    loadAvailability(state.selectedEmployee?.key, newDate);
+    setState(s => ({ ...s, selectedDate: newDate, slots: previewMode ? mockSlots : [] }));
+    if (!previewMode) {
+      loadAvailability(state.selectedEmployee?.key, newDate);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.selectedEmployee?.key]);
+  }, [state.selectedEmployee?.key, previewMode, mockSlots]);
 
   const handleSlotSelect = useCallback((slot: TimeSlot) => {
     setState(s => ({ ...s, selectedSlot: slot, step: 'submit', error: null }));
   }, []);
 
   const handleSubmit = async () => {
+    // In preview mode, just show the pending step without making API call
+    if (previewMode) {
+      setState(s => ({ ...s, step: 'pending' }));
+      return;
+    }
+    
     const { barcode, email, phone, selectedSlot, selectedEmployee } = state;
     
     // Validate inputs
@@ -296,14 +361,22 @@ export function MagicLinkBookingClient({
     setState({
       ...initialState,
       barcode: initialBarcode || '',
+      // In preview mode, keep mock data
+      ...(previewMode ? {
+        employees: MOCK_EMPLOYEES,
+        selectedEmployee: MOCK_EMPLOYEES[0],
+        slots: mockSlots,
+      } : {}),
     });
-    if (capabilities.supportsEmployeeSelection) {
-      loadEmployees();
-    } else {
-      loadAvailability();
+    if (!previewMode) {
+      if (capabilities.supportsEmployeeSelection) {
+        loadEmployees();
+      } else {
+        loadAvailability();
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialBarcode, capabilities.supportsEmployeeSelection]);
+  }, [initialBarcode, capabilities.supportsEmployeeSelection, previewMode, mockSlots]);
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: brand.background }}>
@@ -421,9 +494,9 @@ export function MagicLinkBookingClient({
       {features.showPoweredBy && (
         <footer className="py-6 text-center">
           <p className="text-xs text-gray-400">{copy.footerText}</p>
-          {copy.footerText.toLowerCase().includes('revline') && (
-            <a href="mailto:hi@revlineops.com" className="text-xs text-gray-400 hover:text-gray-500">
-              hi@revlineops.com
+          {copy.footerEmail && (
+            <a href={`mailto:${copy.footerEmail}`} className="text-xs text-gray-400 hover:text-gray-500">
+              {copy.footerEmail}
             </a>
           )}
         </footer>
