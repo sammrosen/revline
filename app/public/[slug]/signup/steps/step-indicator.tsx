@@ -3,8 +3,8 @@
 /**
  * Step Indicator Component
  * 
- * Displays the multi-step progress indicator with numbered steps.
- * Shows completed, current, and upcoming steps with appropriate styling.
+ * Circle-based step indicator with connecting lines.
+ * Shows completed (checkmark), current (filled), and upcoming (outlined) steps.
  */
 
 import type { DerivedBrand } from '../client';
@@ -31,13 +31,11 @@ export function StepIndicator({
   brand,
   copy,
 }: StepIndicatorProps) {
-  // Brand colors available for future custom step indicator styling
-  void brand;
   return (
-    <div className="bg-zinc-700">
+    <div className="py-3 bg-white border-b" style={{ borderColor: brand.border }}>
       <div className="max-w-6xl mx-auto px-4">
-        <div className="flex">
-          {steps.map((step) => {
+        <div className="flex items-center justify-center">
+          {steps.map((step, index) => {
             const isCompleted = completedSteps.includes(step.number);
             const isCurrent = step.number === currentStep;
             
@@ -45,41 +43,50 @@ export function StepIndicator({
             const stepTitle = copy.stepTitles[step.number] || step.label;
             
             return (
-              <div
-                key={step.key}
-                className={`flex-1 py-3 text-center border-b-2 transition-colors ${
-                  isCurrent
-                    ? 'border-white text-white'
-                    : isCompleted
-                      ? 'border-zinc-500 text-zinc-400'
-                      : 'border-transparent text-zinc-500'
-                }`}
-              >
-                <div className="flex items-center justify-center gap-2">
-                  {/* Step circle */}
-                  <span
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                      isCompleted
-                        ? 'bg-zinc-500 text-white'
-                        : isCurrent
-                          ? 'bg-white text-zinc-800'
-                          : 'bg-zinc-600 text-zinc-400'
-                    }`}
+              <div key={step.key} className="flex items-center">
+                {/* Step circle with label */}
+                <div className="flex flex-col items-center">
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-200 text-white"
+                    style={{
+                      backgroundColor: isCompleted ? brand.primary : '#18181b',
+                    }}
                   >
                     {isCompleted ? (
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      <svg 
+                        className="w-4 h-4" 
+                        fill="none" 
+                        stroke="white" 
+                        viewBox="0 0 24 24" 
+                        strokeWidth={3}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                     ) : (
                       step.number
                     )}
-                  </span>
+                  </div>
                   
                   {/* Step label - hidden on mobile */}
-                  <span className="hidden sm:inline text-sm font-medium">
+                  <span 
+                    className="hidden sm:block mt-2 text-xs font-medium whitespace-nowrap"
+                    style={{
+                      color: isCompleted ? brand.primary : isCurrent ? brand.text : brand.textMuted,
+                    }}
+                  >
                     {stepTitle}
                   </span>
                 </div>
+                
+                {/* Connecting line (not after last step) */}
+                {index < steps.length - 1 && (
+                  <div 
+                    className="w-8 sm:w-12 h-0.5 mx-1 sm:mx-2"
+                    style={{
+                      backgroundColor: isCompleted ? brand.primary : '#d4d4d8',
+                    }}
+                  />
+                )}
               </div>
             );
           })}

@@ -49,14 +49,14 @@ export function SelectPlanStep({
               type="text"
               value={promoCode}
               onChange={(e) => onPromoCodeChange(e.target.value.toUpperCase())}
-              className="px-3 py-2 border rounded text-sm"
-              style={{ borderColor: brand.border, color: brand.text }}
+              className="px-4 py-3 bg-gray-100 border-0 rounded-lg text-sm text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+              style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
               placeholder="Enter Promo Code"
               disabled={loading}
             />
             <button
               type="button"
-              className="px-4 py-2 text-sm font-medium text-white rounded"
+              className="px-5 py-3 text-sm font-semibold text-white rounded-lg transition-all hover:shadow-md"
               style={{ backgroundColor: brand.primary }}
               disabled={loading || !promoCode.trim()}
             >
@@ -74,8 +74,8 @@ export function SelectPlanStep({
           return (
             <div
               key={plan.id}
-              className={`bg-white rounded-lg shadow-lg overflow-hidden transition-all ${
-                isSelected ? 'ring-2 ring-offset-2' : 'hover:shadow-xl'
+              className={`bg-white rounded-xl shadow-sm overflow-hidden transition-all ${
+                isSelected ? 'ring-2 ring-offset-2' : 'hover:shadow-md'
               }`}
               style={isSelected ? { 
                 boxShadow: `0 0 0 2px ${brand.primary}`,
@@ -219,15 +219,15 @@ export function SelectPlanStep({
         <button
           onClick={onBack}
           disabled={loading}
-          className="px-6 py-3 border rounded-lg font-medium hover:bg-zinc-50 disabled:opacity-50"
-          style={{ borderColor: brand.border, color: brand.text }}
+          className="px-6 py-3 bg-gray-100 rounded-lg font-semibold hover:bg-gray-200 disabled:opacity-50 transition-colors"
+          style={{ color: brand.text }}
         >
           Back
         </button>
         <button
           onClick={onNext}
           disabled={loading || !selectedPlanId}
-          className="px-8 py-3 text-white font-medium rounded-lg disabled:opacity-50"
+          className="px-8 py-4 text-white font-semibold rounded-lg disabled:opacity-50 transition-all hover:shadow-lg"
           style={{ backgroundColor: brand.primary }}
         >
           Continue

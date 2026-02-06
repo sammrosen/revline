@@ -87,15 +87,14 @@ export default async function WorkspaceDetailPage({
 
   return (
     <div className="min-h-screen p-4 sm:p-6">
-      <div className="max-w-[1600px] mx-auto">
-        {/* Compact Header */}
-        <div className="mb-4 flex items-center gap-3">
-          <h1 className="text-xl font-bold tracking-tight text-white">{workspace.name}</h1>
-          <span className="text-zinc-500 font-mono text-xs bg-zinc-900/50 px-2 py-0.5 rounded border border-zinc-800/50">{workspace.slug}</span>
-        </div>
+      {/* Compact Header */}
+      <div className="mb-4 flex items-center gap-3 max-w-[1600px] mx-auto">
+        <h1 className="text-xl font-bold tracking-tight text-white">{workspace.name}</h1>
+        <span className="text-zinc-500 font-mono text-xs bg-zinc-900/50 px-2 py-0.5 rounded border border-zinc-800/50">{workspace.slug}</span>
+      </div>
 
-        {/* Tabbed Content */}
-        <WorkspaceTabs
+      {/* Tabbed Content - no max-width to allow graph to use full width */}
+      <WorkspaceTabs
           workspaceId={workspace.id}
           workspaceSlug={workspace.slug}
           integrations={workspace.integrations.map((i) => ({
@@ -135,7 +134,6 @@ export default async function WorkspaceDetailPage({
           }}
           leadStages={workspace.leadStages as Array<{ key: string; label: string; color: string }> | undefined}
         />
-      </div>
     </div>
   );
 }

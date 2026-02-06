@@ -33,40 +33,40 @@ export function PersonalInfoStep({
 }: PersonalInfoStepProps) {
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-        <div className="p-6 border-b" style={{ borderColor: brand.border }}>
-          <h2 className="text-xl font-semibold" style={{ color: brand.text }}>
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="p-6" style={{ backgroundColor: brand.primary }}>
+          <h2 className="text-base font-bold uppercase tracking-wide text-white">
             Personal Info
           </h2>
         </div>
         
-        <div className="p-6 space-y-4">
+        <div className="p-8 space-y-6">
           {/* Name row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 First Name *
               </label>
               <input
                 type="text"
                 value={formState.firstName}
                 onChange={(e) => updateForm('firstName', e.target.value)}
-                className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                style={{ borderColor: brand.border, color: brand.text }}
+                className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+                style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                 placeholder="John"
                 disabled={loading}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Last Name *
               </label>
               <input
                 type="text"
                 value={formState.lastName}
                 onChange={(e) => updateForm('lastName', e.target.value)}
-                className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                style={{ borderColor: brand.border, color: brand.text }}
+                className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+                style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                 placeholder="Smith"
                 disabled={loading}
               />
@@ -74,23 +74,23 @@ export function PersonalInfoStep({
           </div>
           
           {/* Contact row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Email *
               </label>
               <input
                 type="email"
                 value={formState.email}
                 onChange={(e) => updateForm('email', e.target.value)}
-                className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                style={{ borderColor: brand.border, color: brand.text }}
+                className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+                style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                 placeholder="john@example.com"
                 disabled={loading}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Mobile Phone *
               </label>
               <input
@@ -109,8 +109,8 @@ export function PersonalInfoStep({
                   }
                   updateForm('phone', formatted);
                 }}
-                className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                style={{ borderColor: brand.border, color: brand.text }}
+                className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+                style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                 placeholder="(555) 123-4567"
                 disabled={loading}
               />
@@ -118,13 +118,13 @@ export function PersonalInfoStep({
           </div>
           
           {/* SMS Consent */}
-          <div className="pt-4">
+          <div className="pt-2">
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={formState.smsConsent}
                 onChange={(e) => updateForm('smsConsent', e.target.checked)}
-                className="mt-1 w-4 h-4 rounded border-gray-300 focus:ring-2"
+                className="mt-1 w-5 h-5 rounded border-gray-300 focus:ring-2"
                 style={{ accentColor: brand.primary }}
                 disabled={loading}
               />
@@ -137,11 +137,11 @@ export function PersonalInfoStep({
         </div>
         
         {/* Actions */}
-        <div className="p-6 border-t" style={{ borderColor: brand.border, backgroundColor: '#f9fafb' }}>
+        <div className="px-8 py-6 border-t" style={{ borderColor: brand.border, backgroundColor: '#f9fafb' }}>
           <button
             onClick={onNext}
             disabled={loading}
-            className="w-full py-3 text-white font-medium rounded-lg disabled:opacity-50 transition-colors"
+            className="w-full py-4 text-white font-semibold rounded-lg disabled:opacity-50 transition-all hover:shadow-lg"
             style={{ backgroundColor: brand.primary }}
           >
             Continue

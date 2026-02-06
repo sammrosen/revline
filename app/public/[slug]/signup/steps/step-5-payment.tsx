@@ -73,24 +73,24 @@ export function PaymentStep({
       {/* Main form */}
       <div className="lg:col-span-2 space-y-6">
         {/* Payment method card */}
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          <div className="p-6 border-b" style={{ borderColor: brand.border }}>
-            <h2 className="text-xl font-semibold" style={{ color: brand.primary }}>
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="p-6" style={{ backgroundColor: brand.primary }}>
+            <h2 className="text-base font-bold uppercase tracking-wide text-white">
               Recurring Payment
             </h2>
           </div>
           
-          <div className="p-6 space-y-4">
+          <div className="p-8 space-y-6">
             {/* Payment method */}
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Payment Method
               </label>
               <select
                 value={formState.paymentMethod}
                 onChange={(e) => updateForm('paymentMethod', e.target.value as 'card' | 'bank')}
-                className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                style={{ borderColor: brand.border, color: brand.text }}
+                className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors appearance-none cursor-pointer"
+                style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                 disabled={loading}
               >
                 <option value="card">Credit Card</option>
@@ -99,31 +99,31 @@ export function PaymentStep({
             </div>
             
             {/* Cardholder name */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: brand.primary }}>
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   Cardholder&apos;s First Name *
                 </label>
                 <input
                   type="text"
                   value={formState.cardFirstName}
                   onChange={(e) => updateForm('cardFirstName', e.target.value)}
-                  className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                  style={{ borderColor: brand.border, color: brand.text }}
+                  className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+                  style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                   placeholder="John"
                   disabled={loading}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: brand.primary }}>
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   Cardholder&apos;s Last Name *
                 </label>
                 <input
                   type="text"
                   value={formState.cardLastName}
                   onChange={(e) => updateForm('cardLastName', e.target.value)}
-                  className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                  style={{ borderColor: brand.border, color: brand.text }}
+                  className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+                  style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                   placeholder="Smith"
                   disabled={loading}
                 />
@@ -132,15 +132,15 @@ export function PaymentStep({
             
             {/* Card number */}
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: brand.primary }}>
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Credit Card Number *
               </label>
               <input
                 type="text"
                 value={formState.cardNumber}
                 onChange={(e) => updateForm('cardNumber', formatCardNumber(e.target.value))}
-                className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 font-mono"
-                style={{ borderColor: brand.border, color: brand.text }}
+                className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors font-mono"
+                style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                 placeholder="1234 5678 9012 3456"
                 maxLength={19}
                 disabled={loading}
@@ -150,14 +150,14 @@ export function PaymentStep({
             {/* Expiry and CVV */}
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: brand.primary }}>
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   Exp. Month *
                 </label>
                 <select
                   value={formState.cardExpMonth}
                   onChange={(e) => updateForm('cardExpMonth', e.target.value)}
-                  className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                  style={{ borderColor: brand.border, color: brand.text }}
+                  className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors appearance-none cursor-pointer"
+                  style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                   disabled={loading}
                 >
                   {EXP_MONTHS.map((m) => (
@@ -166,14 +166,14 @@ export function PaymentStep({
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: brand.primary }}>
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   Exp. Year *
                 </label>
                 <select
                   value={formState.cardExpYear}
                   onChange={(e) => updateForm('cardExpYear', e.target.value)}
-                  className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                  style={{ borderColor: brand.border, color: brand.text }}
+                  className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors appearance-none cursor-pointer"
+                  style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                   disabled={loading}
                 >
                   {EXP_YEARS.map((y) => (
@@ -182,15 +182,15 @@ export function PaymentStep({
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: brand.primary }}>
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   Security Code *
                 </label>
                 <input
                   type="text"
                   value={formState.cardCvv}
                   onChange={(e) => updateForm('cardCvv', e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 font-mono"
-                  style={{ borderColor: brand.border, color: brand.text }}
+                  className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors font-mono"
+                  style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                   placeholder="123"
                   maxLength={4}
                   disabled={loading}
@@ -199,17 +199,17 @@ export function PaymentStep({
             </div>
             
             {/* Billing ZIP */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: brand.primary }}>
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   Zip/Postal Code *
                 </label>
                 <input
                   type="text"
                   value={formState.cardZip}
                   onChange={(e) => updateForm('cardZip', e.target.value.replace(/\D/g, '').slice(0, 5))}
-                  className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                  style={{ borderColor: brand.border, color: brand.text }}
+                  className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+                  style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                   placeholder="12345"
                   maxLength={5}
                   disabled={loading}
@@ -218,13 +218,13 @@ export function PaymentStep({
             </div>
             
             {/* Payment authorization */}
-            <div className="pt-4">
+            <div className="pt-2">
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={formState.agreeToPayment}
                   onChange={(e) => updateForm('agreeToPayment', e.target.checked)}
-                  className="mt-1 w-4 h-4 rounded border-gray-300 focus:ring-2"
+                  className="mt-1 w-5 h-5 rounded border-gray-300 focus:ring-2"
                   style={{ accentColor: brand.primary }}
                   disabled={loading}
                 />
@@ -238,21 +238,21 @@ export function PaymentStep({
         </div>
         
         {/* Terms & Conditions card */}
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          <div className="p-6 border-b" style={{ borderColor: brand.border }}>
-            <h2 className="text-xl font-semibold" style={{ color: brand.primary }}>
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="p-6" style={{ backgroundColor: brand.primary }}>
+            <h2 className="text-base font-bold uppercase tracking-wide text-white">
               Terms & Conditions
             </h2>
           </div>
           
-          <div className="p-6 space-y-4">
+          <div className="p-8 space-y-4">
             {/* Terms checkbox */}
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={formState.agreeToTerms}
                 onChange={(e) => updateForm('agreeToTerms', e.target.checked)}
-                className="mt-1 w-4 h-4 rounded border-gray-300 focus:ring-2"
+                className="mt-1 w-5 h-5 rounded border-gray-300 focus:ring-2"
                 style={{ accentColor: brand.primary }}
                 disabled={loading}
               />
@@ -297,15 +297,15 @@ export function PaymentStep({
           <button
             onClick={onBack}
             disabled={loading}
-            className="px-6 py-3 border rounded-lg font-medium hover:bg-white disabled:opacity-50"
-            style={{ borderColor: brand.border, color: brand.text }}
+            className="px-6 py-3 bg-gray-100 rounded-lg font-semibold hover:bg-gray-200 disabled:opacity-50 transition-colors"
+            style={{ color: brand.text }}
           >
             Back
           </button>
           <button
             onClick={onSubmit}
             disabled={loading}
-            className="px-8 py-3 text-white font-medium rounded-lg disabled:opacity-50 flex items-center gap-2"
+            className="px-8 py-4 text-white font-semibold rounded-lg disabled:opacity-50 flex items-center gap-2 transition-all hover:shadow-lg"
             style={{ backgroundColor: brand.primary }}
           >
             {loading ? (

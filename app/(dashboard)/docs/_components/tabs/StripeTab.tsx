@@ -257,7 +257,7 @@ Actions:
             <li>1. Complete a test purchase</li>
             <li>2. Go to Stripe → Developers → Webhooks → Your endpoint</li>
             <li>3. Check &quot;Recent deliveries&quot; - should show 200 response</li>
-            <li>4. Check RevLine admin → Events for payment event</li>
+            <li>4. Check RevLine → Events for payment event</li>
             <li>5. Check MailerLite for subscriber in correct group</li>
           </ol>
         </div>
