@@ -129,7 +129,7 @@ export function IntegrationNetworkGraph({ workspaceId }: IntegrationNetworkGraph
   // Error state
   if (error) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-140px)] min-h-[400px]">
+      <div className="flex items-center justify-center h-[calc(100vh-180px)] min-h-[400px]">
         <div className="text-center">
           <AlertTriangle className="w-8 h-8 text-red-500 mx-auto mb-2" />
           <div className="text-red-400">{error}</div>
@@ -147,7 +147,7 @@ export function IntegrationNetworkGraph({ workspaceId }: IntegrationNetworkGraph
   // Empty state
   if (!graph || initialNodes.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-140px)] min-h-[400px]">
+      <div className="flex items-center justify-center h-[calc(100vh-180px)] min-h-[400px]">
         <div className="text-center text-zinc-500">
           <div className="text-lg mb-2">No workflows or forms configured</div>
           <div className="text-sm">Create a workflow or enable a form to see the business process graph</div>
@@ -157,7 +157,7 @@ export function IntegrationNetworkGraph({ workspaceId }: IntegrationNetworkGraph
   }
 
   return (
-    <div className="relative h-[calc(100vh-140px)] min-h-[400px] overflow-hidden">
+    <div className="relative h-[calc(100vh-180px)] min-h-[400px] overflow-hidden">
       {/* SVG marker definitions */}
       <EdgeMarkerDefs />
       <TriggerEdgeMarkerDefs />

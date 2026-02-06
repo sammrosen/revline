@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'RevLine Admin - Login',
+  title: 'RevLine - Login',
   robots: 'noindex, nofollow',
 }
 

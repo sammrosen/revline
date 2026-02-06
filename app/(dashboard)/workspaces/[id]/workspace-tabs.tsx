@@ -204,9 +204,9 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
   return (
     <div className="min-h-[400px]">
         {activeTab === 'workflows' && (
-          <div className={`relative ${workflowViewMode === 'graph' ? '-mx-4 sm:-mx-6 px-4 sm:px-6' : ''}`}>
+          <div className={`relative ${workflowViewMode === 'graph' ? '-mx-4 sm:-mx-6 -mb-4 sm:-mb-6' : 'max-w-[1600px] mx-auto'}`}>
             {/* Integration badges and controls header */}
-            <div className="flex items-center justify-between mb-3">
+            <div className={`flex items-center justify-between mb-3 ${workflowViewMode === 'graph' ? 'px-4 sm:px-6' : ''}`}>
               <div className="flex items-center gap-2 flex-wrap">
                 {configuredIntegrations.map((integration) => {
                   const style = getIntegrationStyle(integration.toLowerCase());
@@ -272,15 +272,17 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
 
             {/* Workflow List view */}
             {workflowViewMode === 'list' && (
-              <WorkflowList
-                workspaceId={workspaceId}
-                workflows={workflows}
-                configuredIntegrations={configuredIntegrations}
-                mailerliteGroups={mailerliteGroups}
-                stripeProducts={stripeProducts}
-                leadStages={leadStages}
-                hideHeader
-              />
+              <div className="max-w-[1600px] mx-auto">
+                <WorkflowList
+                  workspaceId={workspaceId}
+                  workflows={workflows}
+                  configuredIntegrations={configuredIntegrations}
+                  mailerliteGroups={mailerliteGroups}
+                  stripeProducts={stripeProducts}
+                  leadStages={leadStages}
+                  hideHeader
+                />
+              </div>
             )}
           </div>
         )}
@@ -302,7 +304,7 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
         )}
 
         {activeTab === 'integrations' && (
-          <div>
+          <div className="max-w-[1600px] mx-auto">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
               {integrations.map((integration) => {
                 const dependentWorkflows = getDependentWorkflows(integration.integration);
@@ -390,10 +392,14 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
           </div>
         )}
 
-        {activeTab === 'leads' && <LeadsView leads={leads} leadStages={leadStages} />}
+        {activeTab === 'leads' && (
+          <div className="max-w-[1600px] mx-auto">
+            <LeadsView leads={leads} leadStages={leadStages} />
+          </div>
+        )}
 
         {activeTab === 'events' && (
-          <div>
+          <div className="max-w-[1600px] mx-auto">
             <h2 className="text-lg font-semibold mb-4">
               Recent Events ({events.length} of {eventCount?.toLocaleString() ?? '...'})
             </h2>
@@ -448,16 +454,20 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
         )}
 
         {activeTab === 'testing' && (
-          <TestingTab workspaceId={workspaceId} />
+          <div className="max-w-[1600px] mx-auto">
+            <TestingTab workspaceId={workspaceId} />
+          </div>
         )}
 
         {activeTab === 'settings' && (
-          <WorkspaceSettings 
-            workspaceId={workspaceId} 
-            currentTimezone={timezone}
-            domainConfig={domainConfig}
-            leadStages={leadStages}
-          />
+          <div className="max-w-[1600px] mx-auto">
+            <WorkspaceSettings 
+              workspaceId={workspaceId} 
+              currentTimezone={timezone}
+              domainConfig={domainConfig}
+              leadStages={leadStages}
+            />
+          </div>
         )}
     </div>
   );
