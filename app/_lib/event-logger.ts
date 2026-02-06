@@ -77,20 +77,64 @@ export async function touchLead(leadId: string): Promise<void> {
  * Create or update a lead record
  * Returns the lead ID for event correlation
  * 
- * Uses unique constraint on (workspaceId, email) to prevent duplicates
+ * Uses unique constraint on (workspaceId, email) to prevent duplicates.
+ * When properties are provided:
+ * - On create: sets properties directly
+ * - On update: shallow-merges incoming properties with existing (incoming wins)
  */
 export async function upsertLead({
   workspaceId,
   email,
   source,
+  properties,
   tx,
 }: {
   workspaceId: string;
   email: string;
   source?: string;
+  properties?: Record<string, unknown>;
   tx?: Prisma.TransactionClient;
 }): Promise<string> {
   const db = tx || prisma;
+  const hasProperties = properties && Object.keys(properties).length > 0;
+
+  // If properties provided, we need to handle merge on update
+  if (hasProperties) {
+    const existing = await db.lead.findUnique({
+      where: { workspaceId_email: { workspaceId, email } },
+      select: { id: true, properties: true },
+    });
+
+    if (existing) {
+      // Merge: existing properties + incoming (incoming wins)
+      const existingProps = (existing.properties as Record<string, unknown>) ?? {};
+      const merged = { ...existingProps, ...properties };
+
+      await db.lead.update({
+        where: { id: existing.id },
+        data: {
+          lastEventAt: new Date(),
+          properties: merged as Prisma.InputJsonValue,
+        },
+      });
+
+      return existing.id;
+    }
+
+    // Lead doesn't exist -- create with properties
+    const lead = await db.lead.create({
+      data: {
+        workspaceId,
+        email,
+        source,
+        properties: properties as Prisma.InputJsonValue,
+      },
+    });
+
+    return lead.id;
+  }
+
+  // No properties -- use simple upsert (backward compatible)
   const lead = await db.lead.upsert({
     where: {
       workspaceId_email: {

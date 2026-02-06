@@ -45,6 +45,44 @@ export const DEFAULT_LEAD_STAGES: LeadStageDefinition[] = [
 ];
 
 // =============================================================================
+// LEAD PROPERTY TYPES
+// =============================================================================
+
+/**
+ * Supported value types for custom lead properties.
+ */
+export type LeadPropertyType = 'string' | 'number' | 'boolean' | 'email' | 'url';
+
+/**
+ * Definition for a single custom lead property.
+ * Stored as JSON array on the Workspace model (leadPropertySchema).
+ * 
+ * @example
+ * { key: "barcode", label: "Member Barcode", type: "string", required: true }
+ */
+export interface LeadPropertyDefinition {
+  /** Machine name, immutable once leads have data (e.g., "barcode"). Lowercase, alphanumeric + underscores. */
+  key: string;
+  /** Display name (e.g., "Member Barcode"). Renamable. */
+  label: string;
+  /** Value type for validation. */
+  type: LeadPropertyType;
+  /** Whether this property is required on new submissions. Not retroactive for existing leads. */
+  required: boolean;
+}
+
+/**
+ * Valid property key pattern: lowercase letters, numbers, and underscores.
+ * Must start with a letter.
+ */
+export const LEAD_PROPERTY_KEY_REGEX = /^[a-z][a-z0-9_]*$/;
+
+/**
+ * Maximum number of custom properties per workspace.
+ */
+export const MAX_LEAD_PROPERTIES = 25;
+
+// =============================================================================
 // ORGANIZATION TYPES
 // =============================================================================
 
@@ -585,6 +623,7 @@ export interface Lead {
   source: string | null;
   stage: string;
   errorState: string | null;
+  properties: Record<string, unknown> | null;
   createdAt: Date;
   lastEventAt: Date;
 }

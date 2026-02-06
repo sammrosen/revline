@@ -27,11 +27,11 @@ export function MailerLiteTab() {
       <section>
         <h2 className="text-xl font-semibold mb-4">Prerequisites</h2>
         <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
-          <p className="text-sm text-zinc-400 mb-3">Client needs to set up in MailerLite:</p>
+          <p className="text-sm text-zinc-400 mb-3">Set up in MailerLite:</p>
           <ol className="space-y-2 text-sm text-zinc-300">
             <li className="flex gap-2">
               <span className="text-zinc-500">1.</span>
-              <span>Create groups for each segment (e.g., &quot;Leads - ClientName&quot;, &quot;Customers - ClientName&quot;)</span>
+              <span>Create groups for each segment (e.g., &quot;Leads - BusinessName&quot;, &quot;Customers - BusinessName&quot;)</span>
             </li>
             <li className="flex gap-2">
               <span className="text-zinc-500">2.</span>
@@ -263,6 +263,31 @@ Workflow 3 (Premium only):
           Never put the API key in the meta/configuration field. It goes in the <strong>Secrets</strong> section 
           where it&apos;s encrypted.
         </WarningBox>
+      </section>
+
+      {/* For Developers */}
+      <section>
+        <h2 className="text-xl font-semibold mb-4">For Developers</h2>
+        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
+          <h3 className="font-medium text-white mb-2">Key Files</h3>
+          <div className="space-y-2 text-sm text-zinc-400">
+            <div>
+              <code className="text-white">app/_lib/integrations/mailerlite.adapter.ts</code>
+              <p className="text-xs text-zinc-500 mt-1">MailerLite adapter &mdash; API calls, group management, subscriber operations.</p>
+            </div>
+            <div>
+              <code className="text-white">app/_lib/workflow/executors/mailerlite.ts</code>
+              <p className="text-xs text-zinc-500 mt-1">Workflow executor for MailerLite actions (add_to_group, remove_from_group, add_tag).</p>
+            </div>
+          </div>
+          <h3 className="font-medium text-white mb-2 mt-4">Key Patterns</h3>
+          <ul className="text-sm text-zinc-400 space-y-1">
+            <li>- API key stored as encrypted secret, never in meta</li>
+            <li>- Group IDs validated against MailerLite API during health checks</li>
+            <li>- Subscriber operations use email as identifier</li>
+            <li>- Group key must exist in config before workflow action can reference it</li>
+          </ul>
+        </div>
       </section>
     </div>
   );

@@ -97,11 +97,13 @@ export class MailerLiteAdapter extends BaseIntegrationAdapter<MailerLiteMeta> {
 
   /**
    * Add subscriber to a specific group by ID
+   * Optionally pass custom subscriber fields (e.g., from lead properties)
    */
   async addToGroup(
     email: string,
     groupId: string,
-    name?: string
+    name?: string,
+    fields?: Record<string, unknown>
   ): Promise<IntegrationResult<AddSubscriberResult>> {
     try {
       const result = await addSubscriberToGroup({
@@ -109,6 +111,7 @@ export class MailerLiteAdapter extends BaseIntegrationAdapter<MailerLiteMeta> {
         name,
         groupId,
         apiKey: this.getApiKey(),
+        fields,
       });
 
       if (result.success) {

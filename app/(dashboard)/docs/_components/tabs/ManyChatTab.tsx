@@ -119,7 +119,7 @@ export function ManyChatTab() {
               <p className="text-xs text-zinc-500 mb-2">Example DM message:</p>
               <CodeBlock>{`Hey! 👋 Here's the link you asked for:
 
-https://yourdomain.com/client-page?utm_source=manychat&utm_medium=instagram&utm_campaign=comment
+https://yourdomain.com/workspace-page?utm_source=manychat&utm_medium=instagram&utm_campaign=comment
 
 Let me know if you have any questions!`}</CodeBlock>
             </div>
@@ -202,7 +202,7 @@ Let me know if you have any questions!`}</CodeBlock>
         </div>
 
         <TipBox>
-          For most clients, you don&apos;t need to add ManyChat as an integration in RevLine. 
+          For most workspaces, you don&apos;t need to add ManyChat as an integration in RevLine. 
           Just set up the comment automation in ManyChat with UTM-tracked links.
         </TipBox>
       </section>
@@ -235,6 +235,27 @@ Let me know if you have any questions!`}</CodeBlock>
               Comment on a test post yourself to verify the automation works end-to-end.
             </p>
           </div>
+        </div>
+      </section>
+      {/* For Developers */}
+      <section>
+        <h2 className="text-xl font-semibold mb-4">For Developers</h2>
+        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
+          <p className="text-sm text-zinc-400 mb-3">
+            ManyChat is primarily an external setup. RevLine&apos;s integration is minimal:
+          </p>
+          <div className="space-y-2 text-sm text-zinc-400">
+            <div>
+              <code className="text-white">app/_lib/workflow/executors/index.ts</code>
+              <p className="text-xs text-zinc-500 mt-1">ManyChat actions (<code>trigger_flow</code>, <code>add_tag</code>) if API is configured.</p>
+            </div>
+          </div>
+          <h3 className="font-medium text-white mb-2 mt-4">Key Patterns</h3>
+          <ul className="text-sm text-zinc-400 space-y-1">
+            <li>- ManyChat does not send webhooks to RevLine &mdash; it drives traffic to landing pages</li>
+            <li>- UTM parameters on landing page URLs are captured by RevLine during email capture</li>
+            <li>- The ManyChat API integration is optional and rarely used</li>
+          </ul>
         </div>
       </section>
     </div>

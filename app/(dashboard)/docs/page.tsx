@@ -2,14 +2,19 @@
 
 import Link from 'next/link';
 import { DocTabs, useDocTabs, type TabId } from './_components/DocTabs';
+import { TabNavigator } from './_components/shared';
 import {
   OverviewTab,
+  PlatformTab,
+  OrganizationsTab,
+  FormsTab,
   WorkflowsTab,
   MailerLiteTab,
   StripeTab,
   CalendlyTab,
   ManyChatTab,
   AbcIgniteTab,
+  ResendTab,
   TestingTab,
 } from './_components/tabs';
 
@@ -26,11 +31,11 @@ export default function DocsPage() {
               href="/workspaces"
               className="text-zinc-400 hover:text-white text-sm mb-2 inline-block"
             >
-              ← Back to Admin
+              &larr; Back to Dashboard
             </Link>
             <h1 className="text-2xl sm:text-3xl font-bold">RevLine Docs</h1>
             <p className="text-zinc-400 text-sm mt-1">
-              Reference guide for client setup and integrations
+              Reference guide for workspace setup, integrations, and platform architecture
             </p>
           </div>
         </div>
@@ -41,6 +46,7 @@ export default function DocsPage() {
         {/* Tab Content */}
         <div className="min-h-[60vh]">
           <TabContent activeTab={activeTab} />
+          <TabNavigator activeTab={activeTab} onTabChange={setActiveTab} />
         </div>
 
         {/* Footer */}
@@ -50,13 +56,13 @@ export default function DocsPage() {
               href="/workspaces/new"
               className="px-4 py-2 bg-white text-black rounded font-medium hover:bg-zinc-200 transition-colors"
             >
-              + New Client
+              + New Workspace
             </Link>
             <Link
               href="/workspaces"
               className="px-4 py-2 border border-zinc-700 text-white rounded hover:border-zinc-600 transition-colors"
             >
-              View Clients
+              View Workspaces
             </Link>
           </div>
         </div>
@@ -69,6 +75,12 @@ function TabContent({ activeTab }: { activeTab: TabId }) {
   switch (activeTab) {
     case 'overview':
       return <OverviewTab />;
+    case 'platform':
+      return <PlatformTab />;
+    case 'organizations':
+      return <OrganizationsTab />;
+    case 'forms':
+      return <FormsTab />;
     case 'workflows':
       return <WorkflowsTab />;
     case 'mailerlite':
@@ -81,6 +93,8 @@ function TabContent({ activeTab }: { activeTab: TabId }) {
       return <ManyChatTab />;
     case 'abc-ignite':
       return <AbcIgniteTab />;
+    case 'resend':
+      return <ResendTab />;
     case 'testing':
       return <TestingTab />;
     default:

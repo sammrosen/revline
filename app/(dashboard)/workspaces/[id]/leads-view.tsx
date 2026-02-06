@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { DEFAULT_LEAD_STAGES, LeadStageDefinition } from '@/app/_lib/types';
+import { DEFAULT_LEAD_STAGES, LeadStageDefinition, LeadPropertyDefinition } from '@/app/_lib/types';
 
 interface Lead {
   id: string;
   email: string;
   stage: string;
   source: string | null;
+  properties?: Record<string, unknown> | null;
   lastEventAt: Date | string | null;
   createdAt: Date | string;
 }
@@ -15,6 +16,7 @@ interface Lead {
 interface LeadsViewProps {
   leads: Lead[];
   leadStages?: LeadStageDefinition[];
+  leadPropertySchema?: LeadPropertyDefinition[] | null;
 }
 
 function formatDate(date: Date | string) {
@@ -44,8 +46,15 @@ function StageBadge({ stage, stages }: { stage: string; stages: LeadStageDefinit
   );
 }
 
-export function LeadsView({ leads, leadStages }: LeadsViewProps) {
+function formatPropertyValue(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  return String(value);
+}
+
+export function LeadsView({ leads, leadStages, leadPropertySchema }: LeadsViewProps) {
   const stages = leadStages ?? DEFAULT_LEAD_STAGES;
+  const propertyDefs = leadPropertySchema ?? [];
   const [selectedStage, setSelectedStage] = useState<string>('ALL');
   
   // Capture current time once using useState lazy initialization
@@ -110,12 +119,15 @@ export function LeadsView({ leads, leadStages }: LeadsViewProps) {
           </div>
         ) : (
           <div className="overflow-x-auto scrollbar-hide">
-            <table className="w-full text-sm min-w-[640px]">
+            <table className={`w-full text-sm ${propertyDefs.length > 0 ? 'min-w-[800px]' : 'min-w-[640px]'}`}>
               <thead>
                 <tr className="border-b border-zinc-800 text-left text-zinc-400">
                   <th className="px-4 py-2 font-medium">Email</th>
                   <th className="px-4 py-2 font-medium">Stage</th>
                   <th className="px-4 py-2 font-medium">Source</th>
+                  {propertyDefs.map(prop => (
+                    <th key={prop.key} className="px-4 py-2 font-medium">{prop.label}</th>
+                  ))}
                   <th className="px-4 py-2 font-medium">Last Activity</th>
                   <th className="px-4 py-2 font-medium">Captured</th>
                 </tr>
@@ -140,6 +152,11 @@ export function LeadsView({ leads, leadStages }: LeadsViewProps) {
                         <StageBadge stage={lead.stage} stages={stages} />
                       </td>
                       <td className="px-4 py-2 text-zinc-400 whitespace-nowrap">{lead.source || '—'}</td>
+                      {propertyDefs.map(prop => (
+                        <td key={prop.key} className="px-4 py-2 text-zinc-400 whitespace-nowrap">
+                          {formatPropertyValue(lead.properties?.[prop.key])}
+                        </td>
+                      ))}
                       <td className="px-4 py-2 text-zinc-400 whitespace-nowrap">
                         {lead.lastEventAt ? formatDate(lead.lastEventAt) : '—'}
                         {isStale && lead.lastEventAt && (

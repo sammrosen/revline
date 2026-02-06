@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { HealthStatus } from '@prisma/client';
+import { LeadPropertyDefinition } from '@/app/_lib/types';
 import { IntegrationActions } from './integration-actions';
 import { AddIntegrationForm } from './add-integration-form';
 import { LeadsView } from './leads-view';
@@ -88,6 +89,7 @@ interface WorkspaceTabsProps {
     domainVerifiedAt: string | null;
   };
   leadStages?: Array<{ key: string; label: string; color: string }>;
+  leadPropertySchema?: LeadPropertyDefinition[] | null;
 }
 
 // Parse secrets from JSON, returning only id and name (never values)
@@ -131,7 +133,7 @@ interface IntegrationDependency {
 
 const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'testing', 'settings'];
 
-export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York', domainConfig, leadStages }: WorkspaceTabsProps) {
+export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York', domainConfig, leadStages, leadPropertySchema }: WorkspaceTabsProps) {
   // Initialize with default to avoid hydration mismatch, then sync from hash in useEffect
   const [activeTab, setActiveTab] = useState<TabType>('workflows');
   const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
@@ -394,7 +396,7 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
 
         {activeTab === 'leads' && (
           <div className="max-w-[1600px] mx-auto">
-            <LeadsView leads={leads} leadStages={leadStages} />
+            <LeadsView leads={leads} leadStages={leadStages} leadPropertySchema={leadPropertySchema} />
           </div>
         )}
 

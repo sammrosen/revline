@@ -2,7 +2,7 @@
  * RevLine Action Executors
  *
  * Executors for RevLine internal operations.
- * Handles lead management and event logging.
+ * Handles lead management, event logging, and custom lead properties.
  */
 
 import {
@@ -12,8 +12,72 @@ import {
   EventSystem,
 } from '@/app/_lib/event-logger';
 import { prisma } from '@/app/_lib/db';
-import { LeadStageDefinition, DEFAULT_LEAD_STAGES } from '@/app/_lib/types';
+import { LeadStageDefinition, LeadPropertyDefinition, DEFAULT_LEAD_STAGES } from '@/app/_lib/types';
+import {
+  validateProperties,
+  extractPropertiesFromPayload,
+  mergeProperties,
+} from '@/app/_lib/services/lead-properties';
 import { WorkflowContext, ActionResult, ActionExecutor } from '../types';
+import { Prisma } from '@prisma/client';
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+
+/**
+ * Load the workspace's lead property schema from the database.
+ */
+async function getPropertySchema(workspaceId: string): Promise<LeadPropertyDefinition[]> {
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { leadPropertySchema: true },
+  });
+  return (workspace?.leadPropertySchema as LeadPropertyDefinition[] | null) ?? [];
+}
+
+/**
+ * Resolve properties from params and/or payload, validated against workspace schema.
+ * Returns validated properties or null if none to set.
+ */
+async function resolveProperties(
+  ctx: WorkflowContext,
+  params: Record<string, unknown>
+): Promise<{ properties: Record<string, unknown> | null; error?: string }> {
+  const schema = await getPropertySchema(ctx.workspaceId);
+  if (schema.length === 0) {
+    return { properties: null };
+  }
+
+  const explicitProps = params.properties as Record<string, unknown> | undefined;
+  const captureFromPayload = params.captureProperties as boolean | undefined;
+
+  let resolved: Record<string, unknown> = {};
+
+  // Option 1: Explicit properties in params
+  if (explicitProps && typeof explicitProps === 'object') {
+    const validation = validateProperties(schema, explicitProps, false);
+    if (!validation.success) {
+      const errorMsg = Object.values(validation.errors || {}).join('; ');
+      return { properties: null, error: `Property validation failed: ${errorMsg}` };
+    }
+    resolved = { ...resolved, ...validation.data };
+  }
+
+  // Option 2: Auto-extract from trigger payload (when captureProperties is true or no explicit props)
+  if (captureFromPayload || (!explicitProps && ctx.trigger.payload)) {
+    const extraction = extractPropertiesFromPayload(schema, ctx.trigger.payload);
+    if (extraction.success && extraction.data && Object.keys(extraction.data).length > 0) {
+      resolved = { ...resolved, ...extraction.data };
+    }
+  }
+
+  if (Object.keys(resolved).length === 0) {
+    return { properties: null };
+  }
+
+  return { properties: resolved };
+}
 
 // =============================================================================
 // EXECUTORS
@@ -21,6 +85,12 @@ import { WorkflowContext, ActionResult, ActionExecutor } from '../types';
 
 /**
  * Create or update a lead record
+ * 
+ * Params:
+ * - source: Override source (defaults to trigger adapter)
+ * - properties: Explicit property values to set (e.g., { barcode: "ABC123" })
+ * - captureProperties: If true, auto-extract properties from trigger payload
+ *   (also auto-extracts if no explicit properties provided and payload has matching fields)
  */
 const createLead: ActionExecutor = {
   async execute(
@@ -34,10 +104,18 @@ const createLead: ActionExecutor = {
     }
 
     try {
+      // Resolve custom properties from params and/or payload
+      const { properties, error: propError } = await resolveProperties(ctx, params);
+      if (propError) {
+        // Log warning but don't fail lead creation -- properties are best-effort
+        console.warn('[Workflow] Property validation warning on create_lead:', propError);
+      }
+
       const leadId = await upsertLead({
         workspaceId: ctx.workspaceId,
         email: ctx.email,
         source,
+        properties: properties ?? undefined,
       });
 
       await emitEvent({
@@ -50,7 +128,11 @@ const createLead: ActionExecutor = {
 
       return {
         success: true,
-        data: { leadId, source },
+        data: {
+          leadId,
+          source,
+          ...(properties ? { properties } : {}),
+        },
       };
     } catch (error) {
       return {
@@ -168,6 +250,120 @@ const emitEventAction: ActionExecutor = {
   },
 };
 
+/**
+ * Update custom properties on an existing lead
+ * 
+ * Params:
+ * - properties: Explicit property values to set (e.g., { barcode: "ABC123" })
+ * - fromPayload: If true, auto-extract properties from trigger payload
+ * 
+ * Merges with existing properties (incoming values overwrite existing).
+ * Requires a lead to exist -- will create one if ctx.email is available.
+ */
+const updateLeadPropertiesAction: ActionExecutor = {
+  async execute(
+    ctx: WorkflowContext,
+    params: Record<string, unknown>
+  ): Promise<ActionResult> {
+    // Resolve lead
+    let leadId = ctx.leadId;
+    if (!leadId) {
+      if (!ctx.email) {
+        return { success: false, error: 'No email or leadId in workflow context' };
+      }
+
+      try {
+        leadId = await upsertLead({
+          workspaceId: ctx.workspaceId,
+          email: ctx.email,
+          source: ctx.trigger.adapter,
+        });
+      } catch (error) {
+        return {
+          success: false,
+          error: `Failed to find/create lead: ${error instanceof Error ? error.message : 'Unknown'}`,
+        };
+      }
+    }
+
+    try {
+      // Load schema
+      const schema = await getPropertySchema(ctx.workspaceId);
+      if (schema.length === 0) {
+        return {
+          success: true,
+          data: { leadId, skipped: true, reason: 'No property schema defined' },
+        };
+      }
+
+      // Resolve incoming properties
+      const fromPayload = params.fromPayload as boolean | undefined;
+      const explicitProps = params.properties as Record<string, unknown> | undefined;
+
+      let incoming: Record<string, unknown> = {};
+
+      if (explicitProps && typeof explicitProps === 'object') {
+        const validation = validateProperties(schema, explicitProps, false);
+        if (!validation.success) {
+          const errorMsg = Object.values(validation.errors || {}).join('; ');
+          return { success: false, error: `Property validation failed: ${errorMsg}` };
+        }
+        incoming = { ...incoming, ...validation.data };
+      }
+
+      if (fromPayload && ctx.trigger.payload) {
+        const extraction = extractPropertiesFromPayload(schema, ctx.trigger.payload);
+        if (extraction.success && extraction.data) {
+          incoming = { ...incoming, ...extraction.data };
+        }
+      }
+
+      if (Object.keys(incoming).length === 0) {
+        return {
+          success: true,
+          data: { leadId, skipped: true, reason: 'No matching properties to update' },
+        };
+      }
+
+      // Read existing properties and merge
+      const existingLead = await prisma.lead.findUnique({
+        where: { id: leadId },
+        select: { properties: true },
+      });
+
+      const existingProps = (existingLead?.properties as Record<string, unknown>) ?? {};
+      const merged = mergeProperties(existingProps, incoming);
+
+      // Write merged properties
+      await prisma.lead.update({
+        where: { id: leadId },
+        data: {
+          properties: merged as Prisma.InputJsonValue,
+          lastEventAt: new Date(),
+        },
+      });
+
+      await emitEvent({
+        workspaceId: ctx.workspaceId,
+        leadId,
+        system: EventSystem.BACKEND,
+        eventType: 'lead_properties_updated',
+        success: true,
+      });
+
+      return {
+        success: true,
+        data: { leadId, properties: merged },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update lead properties',
+      };
+    }
+  },
+};
+
 // =============================================================================
 // EXPORT
 // =============================================================================
@@ -175,6 +371,7 @@ const emitEventAction: ActionExecutor = {
 export const revlineExecutors: Record<string, ActionExecutor> = {
   create_lead: createLead,
   update_lead_stage: updateLeadStageAction,
+  update_lead_properties: updateLeadPropertiesAction,
   emit_event: emitEventAction,
 };
 

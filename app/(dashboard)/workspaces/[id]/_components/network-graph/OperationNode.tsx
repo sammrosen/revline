@@ -25,6 +25,10 @@ function OperationNodeComponent({ data, selected }: NodeProps<OperationNodeData>
     operation,
     label,
     conditional,
+    hasLeftConnection,
+    hasRightConnection,
+    hasTopConnection,
+    hasBottomConnection,
   } = data;
 
   const style = getIntegrationStyle(adapter);
@@ -46,36 +50,44 @@ function OperationNodeComponent({ data, selected }: NodeProps<OperationNodeData>
       }}
     >
       {/* Left handle (incoming from previous phase) */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="left"
-        className="!w-3 !h-3 !bg-zinc-600 !border-2 !border-zinc-500"
-      />
+      {hasLeftConnection && (
+        <Handle
+          type="target"
+          position={Position.Left}
+          id="left"
+          className="!w-3 !h-3 !bg-zinc-600 !border-2 !border-zinc-500"
+        />
+      )}
 
       {/* Right handle (outgoing to next phase) */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="right"
-        className="!w-3 !h-3 !bg-zinc-600 !border-2 !border-zinc-500"
-      />
+      {hasRightConnection && (
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="right"
+          className="!w-3 !h-3 !bg-zinc-600 !border-2 !border-zinc-500"
+        />
+      )}
 
       {/* Top handle (incoming from op above) */}
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="top"
-        className="!w-3 !h-3 !bg-zinc-600 !border-2 !border-zinc-500"
-      />
+      {hasTopConnection && (
+        <Handle
+          type="target"
+          position={Position.Top}
+          id="top"
+          className="!w-3 !h-3 !bg-zinc-600 !border-2 !border-zinc-500"
+        />
+      )}
 
       {/* Bottom handle (outgoing to op below) */}
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="bottom"
-        className="!w-3 !h-3 !bg-zinc-600 !border-2 !border-zinc-500"
-      />
+      {hasBottomConnection && (
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          id="bottom"
+          className="!w-3 !h-3 !bg-zinc-600 !border-2 !border-zinc-500"
+        />
+      )}
 
       {/* Conditional indicator */}
       {conditional && (

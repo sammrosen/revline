@@ -3,7 +3,8 @@ import { getUserIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { pauseClient, unpauseClient } from '@/app/_lib/client-gate';
 import { getWorkspaceAccess, WorkspaceRole } from '@/app/_lib/workspace-access';
-import { LeadStageDefinition } from '@/app/_lib/types';
+import { LeadStageDefinition, LeadPropertyDefinition } from '@/app/_lib/types';
+import { validatePropertySchema } from '@/app/_lib/services/lead-properties';
 import { Prisma } from '@prisma/client';
 
 // GET /api/v1/workspaces/[id] - Get workspace details with events
@@ -58,6 +59,7 @@ export async function GET(
             email: true,
             stage: true,
             source: true,
+            properties: true,
             lastEventAt: true,
             createdAt: true,
           },
@@ -206,6 +208,61 @@ export async function PATCH(
     });
 
     return NextResponse.json({ success: true, leadStages: stages });
+  }
+
+  // Handle lead property schema update
+  if (body.leadPropertySchema !== undefined) {
+    // Allow null to clear the schema
+    if (body.leadPropertySchema === null) {
+      await prisma.workspace.update({
+        where: { id },
+        data: { leadPropertySchema: Prisma.DbNull },
+      });
+      return NextResponse.json({ success: true, leadPropertySchema: null });
+    }
+
+    // Validate schema structure using Zod
+    const schemaValidation = validatePropertySchema(body.leadPropertySchema);
+    if (!schemaValidation.success) {
+      return NextResponse.json({ error: schemaValidation.error }, { status: 400 });
+    }
+
+    const propertyDefs = schemaValidation.data;
+
+    // Check that no removed property keys have existing lead data
+    const currentWorkspace = await prisma.workspace.findUnique({
+      where: { id },
+      select: { leadPropertySchema: true },
+    });
+    const currentSchema = (currentWorkspace?.leadPropertySchema as LeadPropertyDefinition[] | null) ?? [];
+    const currentKeys = currentSchema.map(d => d.key);
+    const newKeys = propertyDefs.map(d => d.key);
+    const removedKeys = currentKeys.filter(k => !newKeys.includes(k));
+
+    if (removedKeys.length > 0) {
+      // Check if any leads have data for the removed property keys
+      // We use a raw query since Prisma can't filter inside JSON easily
+      const leadsWithRemovedProps = await prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*) as count FROM leads
+        WHERE workspace_id = ${id}
+        AND properties IS NOT NULL
+        AND (${Prisma.join(removedKeys.map(k => Prisma.sql`properties ? ${k}`), ' OR ')})
+      `;
+
+      const count = Number(leadsWithRemovedProps[0]?.count ?? 0);
+      if (count > 0) {
+        return NextResponse.json({
+          error: `Cannot remove property keys that have existing lead data. ${count} lead(s) have data for: ${removedKeys.join(', ')}`,
+        }, { status: 400 });
+      }
+    }
+
+    await prisma.workspace.update({
+      where: { id },
+      data: { leadPropertySchema: propertyDefs as unknown as Prisma.InputJsonValue },
+    });
+
+    return NextResponse.json({ success: true, leadPropertySchema: propertyDefs });
   }
 
   return NextResponse.json({ error: 'Invalid action or missing fields' }, { status: 400 });

@@ -3,10 +3,12 @@
  *
  * Executors for MailerLite operations.
  * Uses the existing MailerLiteAdapter for API calls.
+ * Supports mapping custom lead properties to MailerLite subscriber fields.
  */
 
 import { MailerLiteAdapter } from '@/app/_lib/integrations';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
+import { prisma } from '@/app/_lib/db';
 import { WorkflowContext, ActionResult, ActionExecutor } from '../types';
 
 // =============================================================================
@@ -15,6 +17,12 @@ import { WorkflowContext, ActionResult, ActionExecutor } from '../types';
 
 /**
  * Add subscriber to a MailerLite group
+ * 
+ * Params:
+ * - group: Group key (required)
+ * - fields: Optional mapping of MailerLite field names to lead property keys
+ *   e.g., { "barcode": "barcode", "member_type": "memberType" }
+ *   Maps lead.properties[value] → MailerLite subscriber field[key]
  */
 const addToGroup: ActionExecutor = {
   async execute(
@@ -42,8 +50,33 @@ const addToGroup: ActionExecutor = {
       };
     }
 
-    // Add subscriber to group
-    const result = await adapter.addToGroup(ctx.email, group.id, ctx.name);
+    // Resolve custom subscriber fields from lead properties
+    let subscriberFields: Record<string, unknown> | undefined;
+    const fieldMapping = params.fields as Record<string, string> | undefined;
+
+    if (fieldMapping && typeof fieldMapping === 'object' && ctx.leadId) {
+      const lead = await prisma.lead.findUnique({
+        where: { id: ctx.leadId },
+        select: { properties: true },
+      });
+      const leadProps = (lead?.properties as Record<string, unknown>) ?? {};
+
+      subscriberFields = {};
+      for (const [mlFieldName, leadPropKey] of Object.entries(fieldMapping)) {
+        const value = leadProps[leadPropKey];
+        if (value !== undefined && value !== null) {
+          subscriberFields[mlFieldName] = value;
+        }
+      }
+
+      // Only pass if we have actual values
+      if (Object.keys(subscriberFields).length === 0) {
+        subscriberFields = undefined;
+      }
+    }
+
+    // Add subscriber to group with optional custom fields
+    const result = await adapter.addToGroup(ctx.email, group.id, ctx.name, subscriberFields);
 
     // Emit event for tracking
     await emitEvent({
@@ -67,6 +100,7 @@ const addToGroup: ActionExecutor = {
         subscriberId: result.data?.subscriberId,
         groupId: group.id,
         groupName: group.name,
+        ...(subscriberFields ? { fieldsSent: Object.keys(subscriberFields) } : {}),
       },
     };
   },

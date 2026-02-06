@@ -9,20 +9,28 @@ export function WorkflowsTab() {
         <p className="text-zinc-300 mb-4">
           A workflow connects a <strong>trigger</strong> (an event that happens) to one or more 
           <strong> actions</strong> (operations to execute). When the trigger fires, all actions 
-          run in sequence.
+          run in sequence. Workflows are <strong>Layer 2</strong> of RevLine&apos;s automation 
+          system &mdash; they react to events from forms (Layer 1) and external webhooks.
         </p>
         <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg font-mono text-sm">
           <div className="flex items-center gap-2 text-zinc-400">
             <span className="text-purple-400">Trigger</span>
-            <span>→</span>
+            <span>&rarr;</span>
             <span className="text-zinc-500">[Filter]</span>
-            <span>→</span>
+            <span>&rarr;</span>
             <span className="text-green-400">Action 1</span>
-            <span>→</span>
+            <span>&rarr;</span>
             <span className="text-green-400">Action 2</span>
-            <span>→</span>
+            <span>&rarr;</span>
             <span className="text-green-400">...</span>
           </div>
+        </div>
+        <div className="mt-4 p-3 bg-amber-950/20 border border-amber-900/30 rounded-lg">
+          <p className="text-sm text-amber-200">
+            <strong>Two-Layer Context:</strong> Baked-in operations (Layer 1) run automatically 
+            from form definitions regardless of workflows. Workflows (Layer 2) are user-configured 
+            responses to triggers. Both layers are visible on the network graph.
+          </p>
         </div>
       </section>
 
@@ -30,9 +38,12 @@ export function WorkflowsTab() {
       <section>
         <h2 className="text-2xl font-semibold mb-4">Available Triggers</h2>
         <p className="text-zinc-400 text-sm mb-4">
-          Triggers are events that start a workflow. Each comes from an integration.
+          Triggers are events that start a workflow. They come from integrations or form events.
         </p>
-        <div className="overflow-x-auto scrollbar-hide">
+
+        {/* External Triggers */}
+        <h3 className="text-lg font-medium text-zinc-300 mb-3">External Triggers (Webhooks)</h3>
+        <div className="overflow-x-auto scrollbar-hide mb-6">
           <table className="w-full text-sm min-w-[600px]">
             <thead>
               <tr className="text-left text-zinc-500 border-b border-zinc-800">
@@ -80,6 +91,55 @@ export function WorkflowsTab() {
             </tbody>
           </table>
         </div>
+
+        {/* Form Triggers */}
+        <h3 className="text-lg font-medium text-zinc-300 mb-3">Form Triggers (RevLine)</h3>
+        <p className="text-zinc-400 text-sm mb-3">
+          These triggers come from enabled forms. They are <strong>workspace-scoped</strong> &mdash; a trigger 
+          only appears in the workflow builder if that form is enabled on the workspace.
+        </p>
+        <div className="overflow-x-auto scrollbar-hide">
+          <table className="w-full text-sm min-w-[600px]">
+            <thead>
+              <tr className="text-left text-zinc-500 border-b border-zinc-800">
+                <th className="pb-2 font-medium">Trigger</th>
+                <th className="pb-2 font-medium">Form</th>
+                <th className="pb-2 font-medium">Description</th>
+              </tr>
+            </thead>
+            <tbody className="text-zinc-300">
+              <tr className="border-b border-zinc-800/50">
+                <td className="py-3"><code className="text-purple-400">revline.booking-confirmed</code></td>
+                <td className="py-3 text-zinc-400">ABC Appointment Booking</td>
+                <td className="py-3 text-zinc-400">User confirms booking via magic link</td>
+              </tr>
+              <tr className="border-b border-zinc-800/50">
+                <td className="py-3"><code className="text-purple-400">revline.booking-waitlisted</code></td>
+                <td className="py-3 text-zinc-400">ABC Appointment Booking</td>
+                <td className="py-3 text-zinc-400">Booking added to waitlist (event full)</td>
+              </tr>
+              <tr className="border-b border-zinc-800/50">
+                <td className="py-3"><code className="text-purple-400">revline.signup-completed</code></td>
+                <td className="py-3 text-zinc-400">Membership Signup</td>
+                <td className="py-3 text-zinc-400">User completes all signup steps</td>
+              </tr>
+              <tr className="border-b border-zinc-800/50">
+                <td className="py-3"><code className="text-purple-400">revline.signup-started</code></td>
+                <td className="py-3 text-zinc-400">Membership Signup</td>
+                <td className="py-3 text-zinc-400">User begins the signup flow</td>
+              </tr>
+              <tr className="border-b border-zinc-800/50">
+                <td className="py-3"><code className="text-purple-400">revline.signup-abandoned</code></td>
+                <td className="py-3 text-zinc-400">Membership Signup</td>
+                <td className="py-3 text-zinc-400">User leaves without completing</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <TipBox title="Dynamic Triggers">
+          RevLine form triggers only appear if the form is enabled on the workspace. Enable forms 
+          in the RevLine integration configuration. See the <strong>Forms &amp; Sites</strong> tab.
+        </TipBox>
       </section>
 
       {/* Available Actions */}
@@ -95,14 +155,27 @@ export function WorkflowsTab() {
           <ActionCard
             name="revline.create_lead"
             label="Create/Update Lead"
-            description="Create or update a lead record in the database"
-            params={[{ key: 'source', description: 'Lead source identifier (optional)' }]}
+            description="Create or update a lead record. Can set custom properties on creation."
+            params={[
+              { key: 'source', description: 'Lead source identifier (optional)' },
+              { key: 'properties', description: 'Custom property values (optional)' },
+              { key: 'captureProperties', description: 'true to auto-extract from trigger payload (optional)' },
+            ]}
           />
           <ActionCard
             name="revline.update_lead_stage"
             label="Update Lead Stage"
-            description="Update the stage of a lead"
-            params={[{ key: 'stage', description: 'CAPTURED | BOOKED | PAID | DEAD' }]}
+            description="Update the stage of a lead (supports custom stages)"
+            params={[{ key: 'stage', description: 'Stage name (e.g., CAPTURED, BOOKED, PAID, or custom)' }]}
+          />
+          <ActionCard
+            name="revline.update_lead_properties"
+            label="Update Lead Properties"
+            description="Set or merge custom properties on an existing lead"
+            params={[
+              { key: 'properties', description: 'Property values to set (merged with existing)' },
+              { key: 'fromPayload', description: 'true to auto-extract from trigger payload (optional)' },
+            ]}
           />
           <ActionCard
             name="revline.emit_event"
@@ -121,8 +194,11 @@ export function WorkflowsTab() {
           <ActionCard
             name="mailerlite.add_to_group"
             label="Add to Group"
-            description="Add subscriber to a MailerLite group"
-            params={[{ key: 'group', description: 'Group key from config (e.g., "leads", "customers")' }]}
+            description="Add subscriber to a MailerLite group, optionally mapping lead properties to subscriber fields"
+            params={[
+              { key: 'group', description: 'Group key from config (e.g., "leads", "customers")' },
+              { key: 'fields', description: 'Map lead properties to MailerLite fields (optional)' },
+            ]}
           />
           <ActionCard
             name="mailerlite.remove_from_group"
@@ -173,6 +249,20 @@ export function WorkflowsTab() {
           />
         </div>
 
+        {/* Resend Actions */}
+        <h3 className="text-lg font-medium text-pink-400 mb-3">Resend</h3>
+        <div className="space-y-2 mb-6">
+          <ActionCard
+            name="resend.send_email"
+            label="Send Email"
+            description="Send a transactional email via Resend. Templates support {{lead.propertyKey}} variables."
+            params={[
+              { key: 'template', description: 'Email template identifier' },
+              { key: 'subject', description: 'Email subject (optional, uses template default)' },
+            ]}
+          />
+        </div>
+
         {/* ManyChat Actions */}
         <h3 className="text-lg font-medium text-blue-400 mb-3">ManyChat</h3>
         <div className="space-y-2">
@@ -198,39 +288,44 @@ export function WorkflowsTab() {
           <li className="flex gap-4">
             <span className="flex items-center justify-center w-8 h-8 rounded-full bg-zinc-800 text-white font-medium shrink-0">1</span>
             <div>
-              <p className="font-medium text-white">Go to the client&apos;s Workflows tab</p>
-              <p className="text-sm text-zinc-400">Navigate to the client detail page and click &quot;Workflows&quot;</p>
+              <p className="font-medium text-white">Go to the workspace&apos;s Workflows tab</p>
+              <p className="text-sm text-zinc-400">Navigate to the workspace detail page, switch to the &quot;Workflows&quot; tab, and toggle to list view</p>
             </div>
           </li>
           <li className="flex gap-4">
             <span className="flex items-center justify-center w-8 h-8 rounded-full bg-zinc-800 text-white font-medium shrink-0">2</span>
             <div>
               <p className="font-medium text-white">Click &quot;+ New Workflow&quot;</p>
-              <p className="text-sm text-zinc-400">Opens the workflow editor</p>
+              <p className="text-sm text-zinc-400">Opens the workflow editor modal</p>
             </div>
           </li>
           <li className="flex gap-4">
             <span className="flex items-center justify-center w-8 h-8 rounded-full bg-zinc-800 text-white font-medium shrink-0">3</span>
             <div>
               <p className="font-medium text-white">Select a trigger</p>
-              <p className="text-sm text-zinc-400">Choose what event should start this workflow</p>
+              <p className="text-sm text-zinc-400">Choose what event should start this workflow. RevLine form triggers only appear if the form is enabled.</p>
             </div>
           </li>
           <li className="flex gap-4">
             <span className="flex items-center justify-center w-8 h-8 rounded-full bg-zinc-800 text-white font-medium shrink-0">4</span>
             <div>
               <p className="font-medium text-white">Add actions</p>
-              <p className="text-sm text-zinc-400">Add one or more actions with their parameters</p>
+              <p className="text-sm text-zinc-400">Add one or more actions with their parameters. Actions run in sequence.</p>
             </div>
           </li>
           <li className="flex gap-4">
             <span className="flex items-center justify-center w-8 h-8 rounded-full bg-zinc-800 text-white font-medium shrink-0">5</span>
             <div>
               <p className="font-medium text-white">Save and enable</p>
-              <p className="text-sm text-zinc-400">Workflow is now active and will run when trigger fires</p>
+              <p className="text-sm text-zinc-400">The workflow is validated before it can be enabled. Fix any errors shown.</p>
             </div>
           </li>
         </ol>
+        <WarningBox title="Validation Required">
+          Workflows are validated before they can be enabled. The system checks that required 
+          integrations are configured, action parameters are valid, and trigger operations exist. 
+          Active workflows cannot be edited &mdash; disable first, then edit.
+        </WarningBox>
       </section>
 
       {/* Trigger Filters */}
@@ -262,7 +357,7 @@ export function WorkflowsTab() {
         
         <div className="space-y-6">
           <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
-            <h3 className="font-medium text-white mb-2">Email Capture → MailerLite</h3>
+            <h3 className="font-medium text-white mb-2">Email Capture &rarr; MailerLite</h3>
             <p className="text-sm text-zinc-400 mb-3">Add new leads to a MailerLite group</p>
             <CodeBlock language="json">{`{
   "trigger": "revline.email_captured",
@@ -274,7 +369,7 @@ export function WorkflowsTab() {
           </div>
 
           <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
-            <h3 className="font-medium text-white mb-2">Payment → Update Stage + Customer Group</h3>
+            <h3 className="font-medium text-white mb-2">Payment &rarr; Update Stage + Customer Group</h3>
             <p className="text-sm text-zinc-400 mb-3">Mark lead as paid and add to customers group</p>
             <CodeBlock language="json">{`{
   "trigger": "stripe.payment_succeeded",
@@ -286,24 +381,27 @@ export function WorkflowsTab() {
           </div>
 
           <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
-            <h3 className="font-medium text-white mb-2">Booking → Update Stage</h3>
-            <p className="text-sm text-zinc-400 mb-3">Mark lead as booked when they schedule a call</p>
+            <h3 className="font-medium text-white mb-2">Booking Confirmed &rarr; Lead Pipeline</h3>
+            <p className="text-sm text-zinc-400 mb-3">Update lead and notify when a booking is confirmed via magic link</p>
             <CodeBlock language="json">{`{
-  "trigger": "calendly.booking_created",
+  "trigger": "revline.booking-confirmed",
   "actions": [
-    { "action": "revline.update_lead_stage", "params": { "stage": "BOOKED" } }
+    { "action": "revline.create_lead", "params": {} },
+    { "action": "revline.update_lead_stage", "params": { "stage": "BOOKED" } },
+    { "action": "mailerlite.add_to_group", "params": { "group": "booked" } }
   ]
 }`}</CodeBlock>
           </div>
 
           <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
-            <h3 className="font-medium text-white mb-2">Email Capture → ABC Ignite Booking</h3>
-            <p className="text-sm text-zinc-400 mb-3">Automatically book an intro appointment for new leads</p>
+            <h3 className="font-medium text-white mb-2">Signup Completed &rarr; Welcome Flow</h3>
+            <p className="text-sm text-zinc-400 mb-3">Add new signups to lead pipeline and email list</p>
             <CodeBlock language="json">{`{
-  "trigger": "revline.email_captured",
+  "trigger": "revline.signup-completed",
   "actions": [
-    { "action": "revline.create_lead", "params": {} },
-    { "action": "abc_ignite.enroll_member", "params": { "eventId": "intro_session" } }
+    { "action": "revline.create_lead", "params": { "source": "signup" } },
+    { "action": "revline.update_lead_stage", "params": { "stage": "PAID" } },
+    { "action": "mailerlite.add_to_group", "params": { "group": "members" } }
   ]
 }`}</CodeBlock>
           </div>
@@ -318,14 +416,21 @@ export function WorkflowsTab() {
             <h3 className="font-medium text-white mb-2">View Execution History</h3>
             <p className="text-sm text-zinc-400">
               Click the clock icon on any workflow to see recent executions, including success/failure 
-              status, timing, and any error messages.
+              status, timing, and any error messages. Failed executions can be retried.
             </p>
           </div>
           <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
             <h3 className="font-medium text-white mb-2">Check Event Log</h3>
             <p className="text-sm text-zinc-400">
-              The Events tab on the client detail page shows all events including workflow executions. 
+              The Events tab on the workspace detail page shows all events including workflow executions. 
               Filter by &quot;WORKFLOW&quot; system to see only workflow events.
+            </p>
+          </div>
+          <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
+            <h3 className="font-medium text-white mb-2">Network Graph</h3>
+            <p className="text-sm text-zinc-400">
+              Switch to the graph view on the Workflows tab to see a visual representation of all 
+              forms, integrations, and workflow connections. Workflow edges show validation status.
             </p>
           </div>
         </div>
@@ -333,6 +438,46 @@ export function WorkflowsTab() {
           When an action fails, the workflow stops immediately. Remaining actions are skipped. 
           Check execution history to see which action failed and why.
         </WarningBox>
+      </section>
+
+      {/* For Developers */}
+      <section>
+        <h2 className="text-xl font-semibold mb-4">For Developers</h2>
+        <div className="space-y-4">
+          <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
+            <h3 className="font-medium text-white mb-2">Key Files</h3>
+            <div className="space-y-2 text-sm text-zinc-400">
+              <div>
+                <code className="text-white">app/_lib/workflow/engine.ts</code>
+                <p className="text-xs text-zinc-500 mt-1">Core execution engine &mdash; matches triggers, runs actions sequentially, handles errors.</p>
+              </div>
+              <div>
+                <code className="text-white">app/_lib/workflow/executors/</code>
+                <p className="text-xs text-zinc-500 mt-1">Per-adapter action executors (mailerlite.ts, resend.ts, revline.ts, abc-ignite.ts).</p>
+              </div>
+              <div>
+                <code className="text-white">app/_lib/workflow/validation.ts</code>
+                <p className="text-xs text-zinc-500 mt-1">Validation rules that run before a workflow can be enabled.</p>
+              </div>
+              <div>
+                <code className="text-white">app/_lib/workflow/registry.ts</code>
+                <p className="text-xs text-zinc-500 mt-1">Available triggers and actions registry, including dynamic form triggers.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
+            <h3 className="font-medium text-white mb-2">Key Patterns</h3>
+            <ul className="text-sm text-zinc-400 space-y-1">
+              <li>- Actions execute sequentially; failure stops the chain</li>
+              <li>- Workflow validation prevents enabling invalid configurations</li>
+              <li>- Active workflows are locked from edits (must disable first)</li>
+              <li>- Integrations used by active workflows cannot be deleted</li>
+              <li>- Execution history includes correlation IDs for debugging</li>
+              <li>- Failed executions can be retried via the UI</li>
+            </ul>
+          </div>
+        </div>
       </section>
     </div>
   );
@@ -354,7 +499,7 @@ function ActionCard({
       <div className="flex items-start justify-between gap-2">
         <div>
           <code className="text-white text-sm">{name}</code>
-          <span className="text-zinc-500 text-sm ml-2">— {label}</span>
+          <span className="text-zinc-500 text-sm ml-2">&mdash; {label}</span>
         </div>
       </div>
       <p className="text-xs text-zinc-400 mt-1">{description}</p>
