@@ -11,25 +11,81 @@ datasource db {
 }
 
 // =============================================================================
+// ORGANIZATION MANAGEMENT
+// =============================================================================
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique // Used for org identification (e.g., "revline", "acme")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  members    OrganizationMember[]
+  workspaces Workspace[]
+  templates  OrganizationTemplate[]
+
+  @@map("organizations")
+}
+
+// Join table for user-organization access with permissions
+model OrganizationMember {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  userId         String   @map("user_id")
+  isOwner        Boolean  @default(false) @map("is_owner")
+  permissions    Json     @default("{}") // OrgPermissions type
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+// Organization-scoped templates (forms become org-scoped)
+model OrganizationTemplate {
+  id              String   @id @default(uuid())
+  organizationId  String   @map("organization_id")
+  type            String   // 'booking', 'signup', etc.
+  name            String
+  schema          Json     // Field definitions (copy schema)
+  defaultCopy     Json     @map("default_copy")
+  defaultBranding Json?    @map("default_branding")
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, type])
+  @@map("organization_templates")
+}
+
+// =============================================================================
 // WORKSPACE MANAGEMENT
 // =============================================================================
 
 model Workspace {
-  id          String          @id @default(uuid())
-  name        String
-  slug        String          @unique // Used for ?source= routing (e.g., "sam", "demo")
-  status      WorkspaceStatus @default(ACTIVE)
-  timezone    String          @default("America/New_York") // IANA timezone for health check business hours
-  createdById String?         @map("created_by_id") // User who created this workspace
-  createdAt   DateTime        @default(now()) @map("created_at")
+  id             String          @id @default(uuid())
+  organizationId String?         @map("organization_id") // Optional during migration, required by app logic
+  name           String
+  slug           String          @unique // Used for ?source= routing (e.g., "sam", "demo")
+  status         WorkspaceStatus @default(ACTIVE)
+  timezone       String          @default("America/New_York") // IANA timezone for health check business hours
+  createdById    String?         @map("created_by_id") // User who created this workspace
+  createdAt      DateTime        @default(now()) @map("created_at")
 
   // Custom domain configuration
-  customDomain       String?   @unique @map("custom_domain") // e.g., "book.clientgym.com"
-  domainVerifyToken  String?   @map("domain_verify_token") // TXT record verification token
-  domainVerified     Boolean   @default(false) @map("domain_verified")
-  domainVerifiedAt   DateTime? @map("domain_verified_at")
+  customDomain      String?   @unique @map("custom_domain") // e.g., "book.clientgym.com"
+  domainVerifyToken String?   @map("domain_verify_token") // TXT record verification token
+  domainVerified    Boolean   @default(false) @map("domain_verified")
+  domainVerifiedAt  DateTime? @map("domain_verified_at")
 
+  organization       Organization?          @relation(fields: [organizationId], references: [id])
   members            WorkspaceMember[]
+  assignments        WorkspaceAssignment[]
   integrations       WorkspaceIntegration[]
   leads              Lead[]
   events             Event[]
@@ -39,7 +95,23 @@ model Workspace {
   idempotencyKeys    IdempotencyKey[]
   pendingBookings    PendingBooking[]
 
+  @@index([organizationId])
   @@map("workspaces")
+}
+
+// Optional per-workspace user assignment (for granular access control)
+model WorkspaceAssignment {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  workspaceId String   @map("workspace_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+  @@map("workspace_assignments")
 }
 
 enum WorkspaceStatus {
@@ -162,8 +234,10 @@ model User {
   recoveryCodes  Json?    @map("recovery_codes") // Array of {hash: string, used: boolean}
   createdAt      DateTime @default(now()) @map("created_at")
 
-  sessions    Session[]
-  memberships WorkspaceMember[]
+  sessions                Session[]
+  memberships             WorkspaceMember[]
+  organizationMemberships OrganizationMember[]
+  workspaceAssignments    WorkspaceAssignment[]
 
   @@map("users")
 }

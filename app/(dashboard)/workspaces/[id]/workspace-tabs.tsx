@@ -5,14 +5,14 @@ import { HealthStatus, LeadStage } from '@prisma/client';
 import { IntegrationActions } from './integration-actions';
 import { AddIntegrationForm } from './add-integration-form';
 import { LeadsView } from './leads-view';
-import MailerLiteInsights from './mailerlite-insights';
 import { WorkflowList } from './workflows/workflow-list';
+import { IntegrationNetworkGraph } from './_components/network-graph';
 import { TestingTab } from './testing-tab';
 import { WorkspaceSettings } from './workspace-settings';
-import { Workflow as WorkflowIcon, FlaskConical, Settings } from 'lucide-react';
+import { Workflow as WorkflowIcon, Plus, List } from 'lucide-react';
 import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
 
-type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'insights' | 'testing' | 'settings';
+type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'testing' | 'settings';
 
 interface SecretSummary {
   id: string;
@@ -126,35 +126,34 @@ interface IntegrationDependency {
   usedBy: Array<{ workflowId: string; workflowName: string }>;
 }
 
-const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'insights', 'testing', 'settings'];
+const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'testing', 'settings'];
 
 export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York', domainConfig }: WorkspaceTabsProps) {
   // Initialize with default to avoid hydration mismatch, then sync from hash in useEffect
   const [activeTab, setActiveTab] = useState<TabType>('workflows');
   const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
 
-  // Sync tab from URL hash after mount (client-only)
+  // Sync tab from URL hash after mount and on hash changes (driven by sidebar)
   const hasAppliedHash = useRef(false);
   
   useEffect(() => {
-    if (hasAppliedHash.current) return;
-    hasAppliedHash.current = true;
-    
-    const hash = window.location.hash.slice(1);
-    if (hash && VALID_TABS.includes(hash as TabType)) {
-      // Use setTimeout to avoid React's strict mode double-render issues
-      // and to ensure hydration is complete before changing state
-      setTimeout(() => {
+    const syncHash = () => {
+      const hash = window.location.hash.slice(1);
+      if (hash && VALID_TABS.includes(hash as TabType)) {
         setActiveTab(hash as TabType);
-      }, 0);
-    }
-  }, []);
+      }
+    };
 
-  // Update URL hash when tab changes (without triggering navigation)
-  const handleTabChange = (tab: TabType) => {
-    setActiveTab(tab);
-    window.history.replaceState(null, '', `#${tab}`);
-  };
+    // Initial sync
+    if (!hasAppliedHash.current) {
+      hasAppliedHash.current = true;
+      setTimeout(syncHash, 0);
+    }
+
+    // Listen for hash changes from sidebar navigation
+    window.addEventListener('hashchange', syncHash);
+    return () => window.removeEventListener('hashchange', syncHash);
+  }, []);
 
   // Fetch integration dependencies when integrations tab is active
   const fetchDependencies = useCallback(async () => {
@@ -194,80 +193,89 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
       .map((u: { workflowId: string; workflowName: string; workflowEnabled?: boolean }) => ({ id: u.workflowId, name: u.workflowName }));
   };
 
-  const tabs: { id: TabType; label: string; count?: number }[] = [
-    { id: 'workflows', label: 'Workflows', count: workflows.length },
-    { id: 'integrations', label: 'Integrations', count: integrations.length },
-    { id: 'leads', label: 'Leads', count: leads.length },
-    { id: 'insights', label: 'Insights' },
-    { id: 'events', label: 'Events', count: events.length },
-    { id: 'testing', label: 'Testing' },
-    { id: 'settings', label: 'Settings' },
-  ];
+  // State for workflow view mode: 'graph' (default) or 'list'
+  const [workflowViewMode, setWorkflowViewMode] = useState<'graph' | 'list'>('graph');
 
   return (
-    <div>
-      {/* Mobile: Dropdown Tab Selector */}
-      <div className="sm:hidden mb-4">
-        <select
-          value={activeTab}
-          onChange={(e) => handleTabChange(e.target.value as TabType)}
-          className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-white text-sm font-medium focus:outline-none focus:border-zinc-700"
-        >
-          {tabs.map((tab) => (
-            <option key={tab.id} value={tab.id}>
-              {tab.label} {tab.count !== undefined ? `(${tab.count})` : ''}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Desktop: Horizontal Tab Navigation */}
-      <div className="hidden sm:block border-b border-zinc-800 mb-4">
-        <div className="flex gap-1 overflow-x-auto scrollbar-hide">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => handleTabChange(tab.id)}
-              className={`px-4 py-2 text-sm font-medium transition-colors relative flex items-center gap-1.5 whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'text-white'
-                  : 'text-zinc-400 hover:text-zinc-300'
-              }`}
-            >
-              {tab.id === 'workflows' && (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-                </svg>
-              )}
-              {tab.id === 'testing' && (
-                <FlaskConical className="w-4 h-4" />
-              )}
-              {tab.id === 'settings' && (
-                <Settings className="w-4 h-4" />
-              )}
-              {tab.label}
-              {tab.count !== undefined && (
-                <span className="ml-2 text-xs text-zinc-500">({tab.count})</span>
-              )}
-              {activeTab === tab.id && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white" />
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Tab Content */}
-      <div className="min-h-[400px]">
+    <div className="min-h-[400px]">
         {activeTab === 'workflows' && (
-          <div>
-            <WorkflowList
-              workspaceId={workspaceId}
-              workflows={workflows}
-              configuredIntegrations={configuredIntegrations}
-              mailerliteGroups={mailerliteGroups}
-              stripeProducts={stripeProducts}
-            />
+          <div className="relative">
+            {/* Integration badges and controls header */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                {configuredIntegrations.map((integration) => {
+                  const style = getIntegrationStyle(integration.toLowerCase());
+                  const Icon = style.icon;
+                  return (
+                    <span
+                      key={integration}
+                      className={`inline-flex items-center gap-1.5 px-2 py-1 ${style.bgClass} ${style.textClass} text-xs rounded`}
+                    >
+                      {style.logo ? (
+                        <img src={style.logo} alt={integration} className="w-3 h-3 object-contain" />
+                      ) : (
+                        <Icon className="w-3 h-3" />
+                      )}
+                      {integration}
+                    </span>
+                  );
+                })}
+                {configuredIntegrations.length === 0 && (
+                  <span className="text-xs text-zinc-500">No integrations</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {/* View toggle */}
+                <div className="flex items-center bg-zinc-800 rounded p-0.5">
+                  <button
+                    onClick={() => setWorkflowViewMode('list')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-sm transition-colors ${
+                      workflowViewMode === 'list'
+                        ? 'bg-zinc-700 text-white'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                    title="List view"
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setWorkflowViewMode('graph')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-sm transition-colors ${
+                      workflowViewMode === 'graph'
+                        ? 'bg-zinc-700 text-white'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                    title="Graph view"
+                  >
+                    <WorkflowIcon className="w-4 h-4" />
+                  </button>
+                </div>
+                <button
+                  onClick={() => setWorkflowViewMode('list')}
+                  className="p-2 bg-white text-black rounded hover:bg-zinc-200 transition-colors"
+                  title="New Workflow"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            
+            {/* Network Graph view */}
+            {workflowViewMode === 'graph' && (
+              <IntegrationNetworkGraph workspaceId={workspaceId} />
+            )}
+
+            {/* Workflow List view */}
+            {workflowViewMode === 'list' && (
+              <WorkflowList
+                workspaceId={workspaceId}
+                workflows={workflows}
+                configuredIntegrations={configuredIntegrations}
+                mailerliteGroups={mailerliteGroups}
+                stripeProducts={stripeProducts}
+                hideHeader
+              />
+            )}
           </div>
         )}
 
@@ -289,7 +297,11 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
                     {/* Header: Title and Actions */}
                     <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center relative">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <IntegrationIcon className={`w-4 h-4 ${integrationStyle.textClass}`} />
+                        {integrationStyle.logo ? (
+                          <img src={integrationStyle.logo} alt={integration.integration} className="w-4 h-4 object-contain" />
+                        ) : (
+                          <IntegrationIcon className={`w-4 h-4 ${integrationStyle.textClass}`} />
+                        )}
                         <span className={`font-bold tracking-tight ${integrationStyle.textClass}`}>{integration.integration}</span>
                         <HealthBadge status={integration.healthStatus} />
                         {usedByCount > 0 && (
@@ -358,8 +370,6 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
 
         {activeTab === 'leads' && <LeadsView leads={leads} />}
 
-        {activeTab === 'insights' && <MailerLiteInsights workspaceId={workspaceId} />}
-
         {activeTab === 'events' && (
           <div>
             <h2 className="text-lg font-semibold mb-4">
@@ -426,7 +436,6 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
             domainConfig={domainConfig}
           />
         )}
-      </div>
     </div>
   );
 }

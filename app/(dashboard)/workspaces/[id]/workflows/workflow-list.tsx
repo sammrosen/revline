@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Plus, Workflow, AlertTriangle, RefreshCw, List, GitBranch } from 'lucide-react';
 import { WorkflowEditor } from './workflow-editor';
 import { WorkflowCard } from '../_components/workflow-card';
-import { DependencyTree } from '../_components/dependency-tree';
-import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
+import { IntegrationNetworkGraph } from '../_components/network-graph';
 
 interface WorkflowAction {
   adapter: string;
@@ -40,6 +39,8 @@ export interface WorkflowListProps {
   configuredIntegrations: string[];
   mailerliteGroups?: Record<string, { id: string; name: string }>;
   stripeProducts?: Record<string, string>;
+  /** Hide the header when embedded in another component that provides its own controls */
+  hideHeader?: boolean;
 }
 
 export function WorkflowList({
@@ -48,6 +49,7 @@ export function WorkflowList({
   configuredIntegrations,
   mailerliteGroups = {},
   stripeProducts = {},
+  hideHeader = false,
 }: WorkflowListProps) {
   const router = useRouter();
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -233,29 +235,9 @@ export function WorkflowList({
       )}
 
       <div className="space-y-3">
-        {/* Header: Integrations + View Toggle + Add Button */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 flex-wrap">
-            {configuredIntegrations.map((integration) => {
-              const style = getIntegrationStyle(integration.toLowerCase());
-              return (
-                <span
-                  key={integration}
-                  className={`inline-flex items-center gap-1.5 px-2 py-1 ${style.bgClass} ${style.textClass} text-xs rounded`}
-                >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full"
-                    style={{ backgroundColor: style.color }}
-                  />
-                  {integration}
-                </span>
-              );
-            })}
-            {configuredIntegrations.length === 0 && (
-              <span className="text-xs text-zinc-500">No integrations</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
+        {/* Header: View Toggle + Add Button - only show when not embedded */}
+        {!hideHeader && (
+          <div className="flex items-center justify-end gap-2">
             {/* View Mode Toggle */}
             <div className="flex items-center bg-zinc-800 rounded p-0.5">
               <button
@@ -299,11 +281,11 @@ export function WorkflowList({
               <Plus className="w-4 h-4" />
             </button>
           </div>
-        </div>
+        )}
 
-        {/* Dependency Tree View */}
-        {viewMode === 'dependencies' ? (
-          <DependencyTree workspaceId={workspaceId} />
+        {/* Network Graph View (Business Process Visualization) - only when header shown */}
+        {!hideHeader && viewMode === 'dependencies' ? (
+          <IntegrationNetworkGraph workspaceId={workspaceId} />
         ) : (
           <>
             {/* Toggle Error Banner */}

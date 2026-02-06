@@ -132,6 +132,7 @@ const PROTECTED_PAGE_PREFIXES = [
   '/settings',
   '/docs',
   '/onboarding',
+  '/templates',
 ];
 
 // Protected API routes (require authentication)
@@ -144,6 +145,7 @@ const PROTECTED_API_PREFIXES = [
   '/api/v1/check-form-id',
   '/api/v1/workflow-registry',
   '/api/v1/auth/2fa',
+  '/api/v1/organizations',
 ];
 
 // Public auth routes (no authentication required)

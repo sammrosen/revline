@@ -1,11 +1,19 @@
 import { prisma } from '@/app/_lib/db';
 import { HealthStatus } from '@prisma/client';
 import Link from 'next/link';
+import { getUserIdFromHeaders } from '@/app/_lib/auth';
+import { getUserWorkspaces } from '@/app/_lib/workspace-access';
 
 export const dynamic = 'force-dynamic';
 
-async function getWorkspaces() {
+async function getWorkspacesForUser(userId: string) {
+  // Get workspaces user has access to (direct + org-level)
+  const accessibleWorkspaces = await getUserWorkspaces(userId);
+  const workspaceIds = accessibleWorkspaces.map((w) => w.id);
+
+  // Fetch workspace details with integrations and events
   const workspaces = await prisma.workspace.findMany({
+    where: { id: { in: workspaceIds } },
     include: {
       integrations: {
         select: {
@@ -20,7 +28,7 @@ async function getWorkspaces() {
         select: { createdAt: true },
       },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { name: 'asc' },
   });
 
   return workspaces.map((workspace) => {
@@ -33,10 +41,14 @@ async function getWorkspaces() {
       derivedHealth = HealthStatus.YELLOW;
     }
 
+    // Find the user's role for this workspace
+    const accessInfo = accessibleWorkspaces.find((w) => w.id === workspace.id);
+
     return {
       ...workspace,
       derivedHealth,
       lastEventAt: workspace.events[0]?.createdAt || null,
+      userRole: accessInfo?.userRole,
     };
   });
 }
@@ -80,44 +92,49 @@ function formatDate(date: Date | null) {
 
 export default async function AdminWorkspacesPage() {
   // Middleware handles auth - if we reach here, user is authenticated
-  const workspaces = await getWorkspaces();
+  const userId = await getUserIdFromHeaders();
+  
+  if (!userId) {
+    return (
+      <div className="p-8">
+        <div className="text-center py-12 text-zinc-500">
+          Please log in to view workspaces.
+        </div>
+      </div>
+    );
+  }
+
+  const workspaces = await getWorkspacesForUser(userId);
 
   return (
-    <div className="min-h-screen p-8">
+    <div className="p-4 sm:p-8">
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-          <h1 className="text-2xl font-bold">Workspaces</h1>
-          <div className="flex flex-wrap gap-2 sm:gap-3">
-            <Link
-              href="/onboarding"
-              className="px-4 py-2 border border-zinc-700 text-white rounded hover:border-zinc-600 transition-colors text-sm font-medium"
-            >
-              Onboarding Guide
-            </Link>
-            <Link
-              href="/workspaces/new"
-              className="px-4 py-2 bg-white text-black rounded hover:bg-zinc-200 transition-colors text-sm font-medium"
-            >
-              Add Workspace
-            </Link>
-            <Link
-              href="/settings"
-              className="px-4 py-2 border border-zinc-700 text-white rounded hover:border-zinc-600 transition-colors text-sm font-medium"
-            >
-              Settings
-            </Link>
-            <Link
-              href="/api/auth/logout"
-              className="px-4 py-2 border border-zinc-700 text-zinc-400 rounded hover:border-zinc-600 hover:text-white transition-colors text-sm font-medium"
-            >
-              Sign Out
-            </Link>
+          <div>
+            <h1 className="text-2xl font-bold">Workspaces</h1>
+            <p className="text-sm text-zinc-500 mt-1">
+              Manage your client workspaces and integrations
+            </p>
           </div>
+          <Link
+            href="/workspaces/new"
+            className="px-4 py-2 bg-white text-black rounded-lg hover:bg-zinc-200 transition-colors text-sm font-medium"
+          >
+            Add Workspace
+          </Link>
         </div>
 
         {workspaces.length === 0 ? (
-          <div className="text-center py-12 text-zinc-500">
-            No workspaces yet. Add your first workspace to get started.
+          <div className="text-center py-12">
+            <div className="text-zinc-500 mb-4">
+              No workspaces yet. Add your first workspace to get started.
+            </div>
+            <Link
+              href="/workspaces/new"
+              className="inline-block px-4 py-2 bg-white text-black rounded-lg hover:bg-zinc-200 transition-colors text-sm font-medium"
+            >
+              Create Workspace
+            </Link>
           </div>
         ) : (
           <div className="bg-zinc-900 rounded-lg border border-zinc-800 overflow-hidden">

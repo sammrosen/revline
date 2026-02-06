@@ -1,8 +1,10 @@
 /**
  * Workspace Configuration Service
  * 
- * Resolves workspace configuration by merging global defaults with
- * workspace-specific overrides from RevLine integration.
+ * Resolves workspace configuration by merging:
+ * 1. Global code defaults (lowest priority)
+ * 2. Organization template defaults (middle priority)
+ * 3. Workspace-specific overrides from RevLine integration (highest priority)
  * 
  * STANDARDS:
  * - Always returns fully resolved config (no undefined values)
@@ -174,34 +176,71 @@ export class WorkspaceConfigService {
   /**
    * Resolve config for booking template
    * Includes branding, features, and booking-specific copy
+   * 
+   * Priority: code defaults -> org template defaults -> workspace overrides
    */
   static async resolveForBooking(workspaceId: string): Promise<ResolvedBookingConfig> {
-    const meta = await this.loadRevlineMeta(workspaceId);
+    // Load both org template and workspace-level config in parallel
+    const [orgTemplate, meta] = await Promise.all([
+      this.loadOrgTemplate(workspaceId, 'booking'),
+      this.loadRevlineMeta(workspaceId),
+    ]);
     
+    // Merge branding: code defaults -> org defaults -> workspace overrides
+    const orgBranding = orgTemplate?.defaultBranding || undefined;
+    const mergedBranding = orgBranding 
+      ? { ...orgBranding, ...(meta?.branding || {}) }
+      : meta?.branding;
+
+    // Merge copy: code defaults -> org defaults -> workspace overrides
+    const orgCopy = orgTemplate?.defaultCopy as BookingCopyConfig | undefined;
+    const mergedCopy = orgCopy
+      ? { ...orgCopy, ...(meta?.copy?.booking || {}) }
+      : meta?.copy?.booking;
+
     return {
       workspaceId,
-      branding: this.resolveBranding(meta?.branding),
+      branding: this.resolveBranding(mergedBranding),
       features: this.resolveFeatures(meta?.features),
-      copy: this.resolveBookingCopy(meta?.copy?.booking),
+      copy: this.resolveBookingCopy(mergedCopy),
     };
   }
 
   /**
    * Resolve config for signup template
    * Includes branding, features, club info, plans, copy, and policies
+   * 
+   * Priority: code defaults -> org template defaults -> workspace overrides
    */
   static async resolveForSignup(workspaceId: string): Promise<ResolvedSignupConfig> {
-    const meta = await this.loadRevlineMeta(workspaceId);
+    // Load both org template and workspace-level config in parallel
+    const [orgTemplate, meta] = await Promise.all([
+      this.loadOrgTemplate(workspaceId, 'signup'),
+      this.loadRevlineMeta(workspaceId),
+    ]);
+    
     const signupConfig = meta?.signup;
+
+    // Merge branding: code defaults -> org defaults -> workspace overrides
+    const orgBranding = orgTemplate?.defaultBranding || undefined;
+    const mergedBranding = orgBranding 
+      ? { ...orgBranding, ...(meta?.branding || {}) }
+      : meta?.branding;
+
+    // Merge signup copy: code defaults -> org defaults -> workspace overrides
+    const orgCopy = orgTemplate?.defaultCopy as SignupCopyConfig | undefined;
+    const mergedCopy = orgCopy
+      ? { ...orgCopy, ...(signupConfig?.copy || {}) }
+      : signupConfig?.copy;
     
     return {
       workspaceId,
-      branding: this.resolveBranding(meta?.branding),
+      branding: this.resolveBranding(mergedBranding),
       features: this.resolveFeatures(meta?.features),
       enabled: signupConfig?.enabled ?? false,
       club: this.resolveSignupClub(signupConfig?.club),
       plans: this.resolveSignupPlans(signupConfig?.plans),
-      copy: this.resolveSignupCopy(signupConfig?.copy),
+      copy: this.resolveSignupCopy(mergedCopy),
       policies: this.resolveSignupPolicies(signupConfig?.policies),
       signupFeatures: this.resolveSignupFeatures(signupConfig?.features),
     };
@@ -233,6 +272,61 @@ export class WorkspaceConfigService {
     } catch (error) {
       console.error('Failed to load RevLine config:', {
         workspaceId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Load organization template defaults for a workspace
+   * Returns null if org or template not found
+   */
+  private static async loadOrgTemplate(
+    workspaceId: string,
+    templateType: string
+  ): Promise<{
+    defaultCopy: Record<string, unknown>;
+    defaultBranding: BrandingConfig | null;
+  } | null> {
+    try {
+      // Get workspace's organization
+      const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { organizationId: true },
+      });
+
+      if (!workspace?.organizationId) {
+        return null;
+      }
+
+      // Get org template for this type
+      const template = await prisma.organizationTemplate.findUnique({
+        where: {
+          organizationId_type: {
+            organizationId: workspace.organizationId,
+            type: templateType,
+          },
+        },
+        select: {
+          defaultCopy: true,
+          defaultBranding: true,
+          enabled: true,
+        },
+      });
+
+      if (!template || !template.enabled) {
+        return null;
+      }
+
+      return {
+        defaultCopy: template.defaultCopy as Record<string, unknown>,
+        defaultBranding: template.defaultBranding as BrandingConfig | null,
+      };
+    } catch (error) {
+      console.error('Failed to load org template:', {
+        workspaceId,
+        templateType,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
       return null;

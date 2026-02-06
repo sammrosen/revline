@@ -1,9 +1,6 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/app/_lib/db';
-import Link from 'next/link';
-import { WorkspaceActionsDropdown } from './workspace-actions-dropdown';
 import { WorkspaceTabs } from './workspace-tabs';
-import { WorkspaceSettingsButton } from './workspace-settings-button';
 import { IntegrationType } from '@prisma/client';
 import { MailerLiteMeta, isMailerLiteMeta, StripeMeta } from '@/app/_lib/types';
 
@@ -89,41 +86,12 @@ export default async function WorkspaceDetailPage({
     ?? {};
 
   return (
-    <div className="min-h-screen p-4 sm:p-8">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex flex-wrap gap-4 text-xs">
-              <Link
-                href="/workspaces"
-                className="text-zinc-400 hover:text-white inline-block"
-              >
-                ← Back to Workspaces
-              </Link>
-              <Link
-                href="/onboarding"
-                className="text-zinc-400 hover:text-white inline-block"
-              >
-                Onboarding Guide
-              </Link>
-            </div>
-            <div className="flex items-center gap-2">
-              <WorkspaceSettingsButton 
-                workspaceId={workspace.id}
-                currentTimezone={workspace.timezone}
-              />
-              <WorkspaceActionsDropdown 
-                workspaceId={workspace.id} 
-                workspaceName={workspace.name}
-                currentStatus={workspace.status}
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-white">{workspace.name}</h1>
-            <span className="text-zinc-500 font-mono text-xs bg-zinc-900/50 px-2 py-0.5 rounded border border-zinc-800/50">{workspace.slug}</span>
-          </div>
+    <div className="min-h-screen p-4 sm:p-6">
+      <div className="max-w-[1600px] mx-auto">
+        {/* Compact Header */}
+        <div className="mb-4 flex items-center gap-3">
+          <h1 className="text-xl font-bold tracking-tight text-white">{workspace.name}</h1>
+          <span className="text-zinc-500 font-mono text-xs bg-zinc-900/50 px-2 py-0.5 rounded border border-zinc-800/50">{workspace.slug}</span>
         </div>
 
         {/* Tabbed Content */}

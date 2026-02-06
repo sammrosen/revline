@@ -4,6 +4,7 @@
  * GET /api/v1/workspaces/[id]/dependency-graph
  *
  * Returns the full dependency graph for a workspace showing:
+ * - Which forms are enabled and their baked-in operations
  * - Which integrations are configured and their status
  * - Which workflows depend on which integrations
  * - Validation status for each workflow
@@ -22,11 +23,27 @@ import {
   getAdapter,
   WorkflowAction,
 } from '@/app/_lib/workflow';
-import { IntegrationSecret } from '@/app/_lib/types';
+import { IntegrationSecret, RevlineMeta } from '@/app/_lib/types';
+import { 
+  FORM_REGISTRY, 
+  getFormIntegrationDependencies,
+  FormOperation,
+  FormTrigger,
+} from '@/app/_lib/forms/registry';
 
 // =============================================================================
 // TYPES
 // =============================================================================
+
+interface IntegrationUsage {
+  type: 'workflow' | 'form';
+  id: string;
+  name: string;
+  enabled: boolean;
+  asTrigger: boolean;
+  asAction: boolean;
+  operations: string[];
+}
 
 interface IntegrationNode {
   type: string;
@@ -35,14 +52,32 @@ interface IntegrationNode {
   healthStatus: HealthStatus | null;
   secretNames: string[];
   metaKeys: string[];
-  usedBy: Array<{
-    workflowId: string;
-    workflowName: string;
-    workflowEnabled: boolean;
-    asTrigger: boolean;
-    asAction: boolean;
-    operations: string[];
+  usedBy: IntegrationUsage[];
+}
+
+interface FormNode {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  path: string;
+  enabled: boolean;
+  operations: Array<{
+    adapter: string;
+    operation: string;
+    label?: string;
+    conditional?: boolean;
+    phase?: 'pre' | 'trigger';
+    parallel?: boolean;
   }>;
+  triggers: Array<{
+    id: string;
+    label: string;
+    description?: string;
+  }>;
+  dependencies: {
+    integrations: string[];
+  };
 }
 
 interface WorkflowNode {
@@ -76,10 +111,13 @@ interface WorkflowNode {
 }
 
 interface DependencyGraph {
+  forms: FormNode[];
   integrations: Record<string, IntegrationNode>;
   workflows: WorkflowNode[];
   warnings: string[];
   stats: {
+    totalForms: number;
+    enabledForms: number;
     totalWorkflows: number;
     enabledWorkflows: number;
     validWorkflows: number;
@@ -239,12 +277,12 @@ export async function GET(
 
       workflowNodes.push(workflowNode);
 
-      // Update integration usage
+      // Update integration usage for workflows
       // Trigger
       const triggerIntKey = workflow.triggerAdapter.toLowerCase();
       if (integrationNodes[triggerIntKey]) {
         const existing = integrationNodes[triggerIntKey].usedBy.find(
-          (u) => u.workflowId === workflow.id
+          (u) => u.type === 'workflow' && u.id === workflow.id
         );
         if (existing) {
           existing.asTrigger = true;
@@ -253,9 +291,10 @@ export async function GET(
           }
         } else {
           integrationNodes[triggerIntKey].usedBy.push({
-            workflowId: workflow.id,
-            workflowName: workflow.name,
-            workflowEnabled: workflow.enabled,
+            type: 'workflow',
+            id: workflow.id,
+            name: workflow.name,
+            enabled: workflow.enabled,
             asTrigger: true,
             asAction: false,
             operations: [workflow.triggerOperation],
@@ -268,7 +307,7 @@ export async function GET(
         const actionIntKey = action.adapter.toLowerCase();
         if (integrationNodes[actionIntKey]) {
           const existing = integrationNodes[actionIntKey].usedBy.find(
-            (u) => u.workflowId === workflow.id
+            (u) => u.type === 'workflow' && u.id === workflow.id
           );
           if (existing) {
             existing.asAction = true;
@@ -277,9 +316,10 @@ export async function GET(
             }
           } else {
             integrationNodes[actionIntKey].usedBy.push({
-              workflowId: workflow.id,
-              workflowName: workflow.name,
-              workflowEnabled: workflow.enabled,
+              type: 'workflow',
+              id: workflow.id,
+              name: workflow.name,
+              enabled: workflow.enabled,
               asTrigger: false,
               asAction: true,
               operations: [action.operation],
@@ -296,12 +336,104 @@ export async function GET(
       }
     }
 
+    // =========================================================================
+    // BUILD FORM NODES
+    // =========================================================================
+    
+    // Get RevLine config to determine which forms are enabled for this workspace
+    const revlineIntegration = integrations.find(i => i.integration === IntegrationType.REVLINE);
+    const revlineMeta = revlineIntegration?.meta as RevlineMeta | null;
+    const enabledFormIds = new Set<string>(
+      Object.entries(revlineMeta?.forms || {})
+        .filter(([, config]) => config?.enabled)
+        .map(([formId]) => formId)
+    );
+
+    // Build form nodes from the registry
+    const formNodes: FormNode[] = [];
+
+    for (const form of FORM_REGISTRY) {
+      const isEnabled = enabledFormIds.has(form.id);
+      const formDependencies = getFormIntegrationDependencies(form.id);
+
+      const formNode: FormNode = {
+        id: form.id,
+        name: form.name,
+        description: form.description,
+        type: form.type,
+        path: form.path,
+        enabled: isEnabled,
+        operations: (form.operations || []).map(op => ({
+          adapter: op.adapter,
+          operation: op.operation,
+          label: op.label,
+          conditional: op.conditional,
+          phase: op.phase,
+          parallel: op.parallel,
+        })),
+        triggers: form.triggers.map(t => ({
+          id: t.id,
+          label: t.label,
+          description: t.description,
+        })),
+        dependencies: {
+          integrations: formDependencies,
+        },
+      };
+
+      formNodes.push(formNode);
+
+      // Update integration usage for forms (baked-in operations)
+      if (isEnabled && form.operations) {
+        for (const op of form.operations) {
+          const intKey = op.adapter.toLowerCase();
+          if (integrationNodes[intKey]) {
+            const existing = integrationNodes[intKey].usedBy.find(
+              (u) => u.type === 'form' && u.id === form.id
+            );
+            if (existing) {
+              if (!existing.operations.includes(op.operation)) {
+                existing.operations.push(op.operation);
+              }
+            } else {
+              integrationNodes[intKey].usedBy.push({
+                type: 'form',
+                id: form.id,
+                name: form.name,
+                enabled: isEnabled,
+                asTrigger: false,
+                asAction: true, // Form operations are like actions - they call integrations
+                operations: [op.operation],
+              });
+            }
+          }
+        }
+      }
+
+      // Add warnings for enabled forms with unhealthy dependencies
+      if (isEnabled && formDependencies.length > 0) {
+        for (const dep of formDependencies) {
+          const intNode = integrationNodes[dep.toLowerCase()];
+          if (intNode && intNode.configured && !intNode.healthy) {
+            warnings.push(
+              `Form "${form.name}" uses ${intNode.type} which is unhealthy (${intNode.healthStatus})`
+            );
+          }
+          if (intNode && !intNode.configured) {
+            warnings.push(
+              `Form "${form.name}" requires ${intNode.type} but it is not configured`
+            );
+          }
+        }
+      }
+    }
+
     // Add warnings for unhealthy integrations that are in use
     for (const [, node] of Object.entries(integrationNodes)) {
       if (node.configured && !node.healthy && node.usedBy.length > 0) {
-        const workflowNames = node.usedBy.map((u) => u.workflowName).join(', ');
+        const usageNames = node.usedBy.map((u) => u.name).join(', ');
         warnings.push(
-          `Integration ${node.type} is unhealthy (${node.healthStatus}) and used by: ${workflowNames}`
+          `Integration ${node.type} is unhealthy (${node.healthStatus}) and used by: ${usageNames}`
         );
       }
     }
@@ -315,12 +447,17 @@ export async function GET(
     ).length;
     const validWorkflows = workflowNodes.filter((w) => w.canEnable).length;
     const enabledWorkflows = workflowNodes.filter((w) => w.enabled).length;
+    const totalForms = formNodes.length;
+    const enabledForms = formNodes.filter((f) => f.enabled).length;
 
     const graph: DependencyGraph = {
+      forms: formNodes,
       integrations: integrationNodes,
       workflows: workflowNodes,
       warnings,
       stats: {
+        totalForms,
+        enabledForms,
         totalWorkflows: workflowNodes.length,
         enabledWorkflows,
         validWorkflows,

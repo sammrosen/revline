@@ -17,6 +17,81 @@ import { IntegrationType, HealthStatus, LeadStage, EventSystem, WorkspaceStatus,
 export { IntegrationType, HealthStatus, LeadStage, EventSystem, WorkspaceStatus, WorkspaceRole };
 
 // =============================================================================
+// ORGANIZATION TYPES
+// =============================================================================
+
+/**
+ * Organization permission toggles
+ * Owners bypass all checks (implicit all-true)
+ * Members get explicit permissions set by owner
+ */
+export interface OrgPermissions {
+  /** Can add/edit/remove integrations and see secrets */
+  canManageIntegrations: boolean;
+  /** Can create/edit/delete workflows */
+  canManageWorkflows: boolean;
+  /** Can create/edit org templates */
+  canManageTemplates: boolean;
+  /** Can invite/remove other members (not owner) */
+  canInviteMembers: boolean;
+  /** Can create new workspaces in org */
+  canCreateWorkspaces: boolean;
+  /** Can access all org workspaces vs only assigned ones */
+  canAccessAllWorkspaces: boolean;
+}
+
+/**
+ * Default permissions for new organization members
+ */
+export const DEFAULT_MEMBER_PERMISSIONS: OrgPermissions = {
+  canManageIntegrations: false,
+  canManageWorkflows: true,
+  canManageTemplates: false,
+  canInviteMembers: false,
+  canCreateWorkspaces: false,
+  canAccessAllWorkspaces: false,
+};
+
+/**
+ * Full permissions (for owners)
+ */
+export const OWNER_PERMISSIONS: OrgPermissions = {
+  canManageIntegrations: true,
+  canManageWorkflows: true,
+  canManageTemplates: true,
+  canInviteMembers: true,
+  canCreateWorkspaces: true,
+  canAccessAllWorkspaces: true,
+};
+
+/**
+ * Organization access information for a user
+ */
+export interface OrganizationAccess {
+  organizationId: string;
+  userId: string;
+  isOwner: boolean;
+  permissions: OrgPermissions;
+}
+
+/**
+ * Organization context with basic info
+ */
+export interface OrganizationContext {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+/**
+ * Organization with user's access attached
+ */
+export interface OrganizationWithAccess extends OrganizationContext {
+  isOwner: boolean;
+  permissions: OrgPermissions;
+}
+
+// =============================================================================
 // USER TYPES
 // =============================================================================
 
