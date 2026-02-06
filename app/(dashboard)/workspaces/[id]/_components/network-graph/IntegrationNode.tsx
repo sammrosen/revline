@@ -20,12 +20,15 @@ function IntegrationNodeComponent({ data, selected }: NodeProps<NetworkNodeData>
     color,
     configured,
     healthy,
+    healthStatus,
     triggerCount,
     actionCount,
   } = data;
 
   const style = getIntegrationStyle(integrationKey);
   const Icon = style.icon;
+  const isRed = healthStatus === 'RED';
+  const isYellow = healthStatus === 'YELLOW' || !configured;
   const hasIssues = !configured || !healthy;
   const isTrigger = triggerCount > 0;
   const isAction = actionCount > 0;
@@ -37,9 +40,11 @@ function IntegrationNodeComponent({ data, selected }: NodeProps<NetworkNodeData>
         transition-all duration-200
         ${selected 
           ? 'border-white shadow-lg shadow-white/20' 
-          : hasIssues 
-            ? 'border-yellow-500/50 bg-yellow-500/5' 
-            : 'border-zinc-700 bg-zinc-800/80'
+          : isRed
+            ? 'border-red-500/50 bg-red-500/5'
+            : isYellow 
+              ? 'border-yellow-500/50 bg-yellow-500/5' 
+              : 'border-zinc-700 bg-zinc-800/80'
         }
         hover:border-zinc-500
       `}
@@ -65,10 +70,10 @@ function IntegrationNodeComponent({ data, selected }: NodeProps<NetworkNodeData>
         />
       )}
 
-      {/* Warning indicator */}
+      {/* Warning/Error indicator */}
       {hasIssues && (
         <div className="absolute -top-2 -right-2">
-          <AlertTriangle className="w-4 h-4 text-yellow-500" />
+          <AlertTriangle className={`w-4 h-4 ${isRed ? 'text-red-500' : 'text-yellow-500'}`} />
         </div>
       )}
 
@@ -120,13 +125,18 @@ function IntegrationNodeComponent({ data, selected }: NodeProps<NetworkNodeData>
         {/* Health indicator */}
         <div
           className={`w-2 h-2 rounded-full shrink-0 ${
-            hasIssues ? 'bg-yellow-500' : 'bg-emerald-500'
+            isRed ? 'bg-red-500 animate-pulse' : hasIssues ? 'bg-yellow-500' : 'bg-emerald-500'
           }`}
         />
       </div>
 
-      {/* Not configured warning */}
-      {!configured && (
+      {/* Status message */}
+      {isRed && (
+        <div className="text-[10px] text-red-400 mt-1 font-medium">
+          Unhealthy
+        </div>
+      )}
+      {!configured && !isRed && (
         <div className="text-[10px] text-yellow-400 mt-1">
           Not configured
         </div>

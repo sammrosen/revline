@@ -116,7 +116,7 @@ export async function upsertLead({
  */
 export async function updateLeadStage(
   leadId: string,
-  stage: 'CAPTURED' | 'BOOKED' | 'PAID' | 'DEAD',
+  stage: string,
   tx?: Prisma.TransactionClient
 ): Promise<void> {
   const db = tx || prisma;

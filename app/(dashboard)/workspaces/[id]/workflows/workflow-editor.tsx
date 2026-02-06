@@ -38,6 +38,7 @@ export interface WorkflowEditorProps {
   configuredIntegrations: string[];
   mailerliteGroups?: Record<string, { id: string; name: string }>;
   stripeProducts?: Record<string, string>; // key -> product name
+  leadStages?: Array<{ key: string; label: string; color: string }>;
 }
 
 export interface WorkflowEditorModalProps extends WorkflowEditorProps {
@@ -52,6 +53,7 @@ export function WorkflowEditor({
   configuredIntegrations,
   mailerliteGroups = {},
   stripeProducts = {},
+  leadStages,
   onClose,
   onSave,
 }: WorkflowEditorModalProps) {
@@ -634,6 +636,7 @@ export function WorkflowEditor({
                 allActionOptions={actionOptions}
                 configuredIntegrations={configuredIntegrations}
                 mailerliteGroups={mailerliteGroups}
+                leadStages={leadStages}
                 onChange={handleActionChange}
                 onParamChange={handleParamChange}
                 onRemove={() => handleRemoveAction(index)}
@@ -770,6 +773,7 @@ interface ActionEditorProps {
   allActionOptions: ActionOption[]; // All options including unconfigured
   configuredIntegrations: string[];
   mailerliteGroups: Record<string, { id: string; name: string }>;
+  leadStages?: Array<{ key: string; label: string; color: string }>;
   onChange: (index: number, field: keyof WorkflowAction, value: unknown) => void;
   onParamChange: (index: number, param: string, value: unknown) => void;
   onRemove: () => void;
@@ -782,6 +786,7 @@ function ActionEditor({
   allActionOptions,
   configuredIntegrations,
   mailerliteGroups,
+  leadStages,
   onChange,
   onParamChange,
   onRemove,
@@ -937,10 +942,14 @@ function ActionEditor({
             className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm focus:outline-none focus:border-zinc-600"
           >
             <option value="">Select stage...</option>
-            <option value="CAPTURED">Captured</option>
-            <option value="BOOKED">Booked</option>
-            <option value="PAID">Paid</option>
-            <option value="DEAD">Dead</option>
+            {(leadStages ?? [
+              { key: 'CAPTURED', label: 'Captured', color: '#6B7280' },
+              { key: 'BOOKED', label: 'Booked', color: '#3B82F6' },
+              { key: 'PAID', label: 'Paid', color: '#10B981' },
+              { key: 'DEAD', label: 'Dead', color: '#EF4444' },
+            ]).map(stage => (
+              <option key={stage.key} value={stage.key}>{stage.label}</option>
+            ))}
           </select>
         </div>
       )}

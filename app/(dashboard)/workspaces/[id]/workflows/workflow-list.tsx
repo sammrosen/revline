@@ -39,6 +39,7 @@ export interface WorkflowListProps {
   configuredIntegrations: string[];
   mailerliteGroups?: Record<string, { id: string; name: string }>;
   stripeProducts?: Record<string, string>;
+  leadStages?: Array<{ key: string; label: string; color: string }>;
   /** Hide the header when embedded in another component that provides its own controls */
   hideHeader?: boolean;
 }
@@ -49,6 +50,7 @@ export function WorkflowList({
   configuredIntegrations,
   mailerliteGroups = {},
   stripeProducts = {},
+  leadStages,
   hideHeader = false,
 }: WorkflowListProps) {
   const router = useRouter();
@@ -194,6 +196,7 @@ export function WorkflowList({
             configuredIntegrations={configuredIntegrations}
             mailerliteGroups={mailerliteGroups}
             stripeProducts={stripeProducts}
+            leadStages={leadStages}
             onClose={handleCloseEditor}
             onSave={handleSaveWorkflow}
           />
@@ -229,6 +232,7 @@ export function WorkflowList({
           configuredIntegrations={configuredIntegrations}
           mailerliteGroups={mailerliteGroups}
           stripeProducts={stripeProducts}
+          leadStages={leadStages}
           onClose={handleCloseEditor}
           onSave={handleSaveWorkflow}
         />

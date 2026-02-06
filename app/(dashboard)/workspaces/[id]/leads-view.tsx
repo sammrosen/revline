@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { LeadStage } from '@prisma/client';
+import { DEFAULT_LEAD_STAGES, LeadStageDefinition } from '@/app/_lib/types';
 
 interface Lead {
   id: string;
   email: string;
-  stage: LeadStage;
+  stage: string;
   source: string | null;
   lastEventAt: Date | string | null;
   createdAt: Date | string;
@@ -14,15 +14,8 @@ interface Lead {
 
 interface LeadsViewProps {
   leads: Lead[];
+  leadStages?: LeadStageDefinition[];
 }
-
-const STAGES: { value: LeadStage | 'ALL'; label: string }[] = [
-  { value: 'ALL', label: 'All Leads' },
-  { value: 'CAPTURED', label: 'Captured' },
-  { value: 'BOOKED', label: 'Booked' },
-  { value: 'PAID', label: 'Paid' },
-  { value: 'DEAD', label: 'Dead' },
-];
 
 function formatDate(date: Date | string) {
   return new Intl.DateTimeFormat('en-US', {
@@ -33,23 +26,27 @@ function formatDate(date: Date | string) {
   }).format(new Date(date));
 }
 
-function StageBadge({ stage }: { stage: LeadStage }) {
-  const colors = {
-    CAPTURED: 'bg-blue-500/20 text-blue-400',
-    BOOKED: 'bg-emerald-500/20 text-emerald-400',
-    PAID: 'bg-green-500/20 text-green-400',
-    DEAD: 'bg-red-500/20 text-red-400',
-  };
+function StageBadge({ stage, stages }: { stage: string; stages: LeadStageDefinition[] }) {
+  const def = stages.find(s => s.key === stage);
+  const color = def?.color ?? '#6B7280';
+  const label = def?.label ?? stage;
 
   return (
-    <span className={`px-2 py-1 text-xs rounded font-medium ${colors[stage]}`}>
-      {stage}
+    <span
+      className="px-2 py-1 text-xs rounded font-medium"
+      style={{
+        backgroundColor: `${color}20`,
+        color: color,
+      }}
+    >
+      {label}
     </span>
   );
 }
 
-export function LeadsView({ leads }: LeadsViewProps) {
-  const [selectedStage, setSelectedStage] = useState<LeadStage | 'ALL'>('ALL');
+export function LeadsView({ leads, leadStages }: LeadsViewProps) {
+  const stages = leadStages ?? DEFAULT_LEAD_STAGES;
+  const [selectedStage, setSelectedStage] = useState<string>('ALL');
   
   // Capture current time once using useState lazy initialization
   // This avoids calling Date.now() during render
@@ -59,13 +56,11 @@ export function LeadsView({ leads }: LeadsViewProps) {
     ? leads 
     : leads.filter(lead => lead.stage === selectedStage);
 
-  const stageCounts = {
-    ALL: leads.length,
-    CAPTURED: leads.filter(l => l.stage === 'CAPTURED').length,
-    BOOKED: leads.filter(l => l.stage === 'BOOKED').length,
-    PAID: leads.filter(l => l.stage === 'PAID').length,
-    DEAD: leads.filter(l => l.stage === 'DEAD').length,
-  };
+  // Build stage counts dynamically
+  const stageCounts: Record<string, number> = { ALL: leads.length };
+  for (const s of stages) {
+    stageCounts[s.key] = leads.filter(l => l.stage === s.key).length;
+  }
 
   return (
     <div>
@@ -78,17 +73,31 @@ export function LeadsView({ leads }: LeadsViewProps) {
 
       {/* Stage tabs */}
       <div className="flex gap-2 mb-4 flex-wrap">
-        {STAGES.map(stage => (
+        <button
+          onClick={() => setSelectedStage('ALL')}
+          className={`px-3 py-1.5 text-sm rounded transition-colors ${
+            selectedStage === 'ALL'
+              ? 'bg-white text-black font-medium'
+              : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+          }`}
+        >
+          All Leads ({stageCounts.ALL})
+        </button>
+        {stages.map(stage => (
           <button
-            key={stage.value}
-            onClick={() => setSelectedStage(stage.value)}
+            key={stage.key}
+            onClick={() => setSelectedStage(stage.key)}
             className={`px-3 py-1.5 text-sm rounded transition-colors ${
-              selectedStage === stage.value
+              selectedStage === stage.key
                 ? 'bg-white text-black font-medium'
                 : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
             }`}
           >
-            {stage.label} ({stageCounts[stage.value]})
+            <span
+              className="inline-block w-2 h-2 rounded-full mr-1.5"
+              style={{ backgroundColor: stage.color }}
+            />
+            {stage.label} ({stageCounts[stage.key] ?? 0})
           </button>
         ))}
       </div>
@@ -97,7 +106,7 @@ export function LeadsView({ leads }: LeadsViewProps) {
       <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
         {filteredLeads.length === 0 ? (
           <div className="px-4 py-12 text-center text-zinc-500">
-            No leads in {selectedStage === 'ALL' ? 'any stage' : selectedStage.toLowerCase()} yet
+            No leads in {selectedStage === 'ALL' ? 'any stage' : (stages.find(s => s.key === selectedStage)?.label ?? selectedStage).toLowerCase()} yet
           </div>
         ) : (
           <div className="overflow-x-auto scrollbar-hide">
@@ -128,7 +137,7 @@ export function LeadsView({ leads }: LeadsViewProps) {
                     >
                       <td className="px-4 py-2 font-mono text-xs whitespace-nowrap">{lead.email}</td>
                       <td className="px-4 py-2 whitespace-nowrap">
-                        <StageBadge stage={lead.stage} />
+                        <StageBadge stage={lead.stage} stages={stages} />
                       </td>
                       <td className="px-4 py-2 text-zinc-400 whitespace-nowrap">{lead.source || '—'}</td>
                       <td className="px-4 py-2 text-zinc-400 whitespace-nowrap">
@@ -153,7 +162,3 @@ export function LeadsView({ leads }: LeadsViewProps) {
     </div>
   );
 }
-
-
-
-

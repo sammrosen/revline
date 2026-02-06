@@ -242,8 +242,8 @@ export const CapturePayloadSchema = z.object({
   source: z.string(),
 });
 
-/** Lead stage values */
-export const LeadStageSchema = z.enum(['CAPTURED', 'BOOKED', 'PAID', 'DEAD']);
+/** Lead stage values — validated at runtime against workspace config */
+export const LeadStageSchema = z.string().min(1);
 
 // =============================================================================
 // TEST FIELD DEFINITIONS

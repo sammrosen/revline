@@ -133,6 +133,7 @@ export default async function WorkspaceDetailPage({
             domainVerified: workspace.domainVerified ?? false,
             domainVerifiedAt: workspace.domainVerifiedAt?.toISOString() ?? null,
           }}
+          leadStages={workspace.leadStages as Array<{ key: string; label: string; color: string }> | undefined}
         />
       </div>
     </div>

@@ -117,6 +117,8 @@ export interface NetworkNodeData {
   configured: boolean;
   /** Whether integration is healthy */
   healthy: boolean;
+  /** Health status: GREEN, YELLOW, RED, UNKNOWN */
+  healthStatus: string | null;
   /** Number of workflows where this is the trigger */
   triggerCount: number;
   /** Number of workflows where this is an action */

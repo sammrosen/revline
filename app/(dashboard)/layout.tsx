@@ -56,7 +56,7 @@ export default async function AdminLayout({
         currentOrg={currentOrg}
         user={user}
       />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto pl-14 lg:pl-0">
         {children}
       </main>
     </div>

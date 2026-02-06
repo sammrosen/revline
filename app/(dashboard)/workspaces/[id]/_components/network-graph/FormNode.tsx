@@ -10,7 +10,7 @@
 
 import { memo } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { FileText, AlertTriangle, Zap, ArrowRight } from 'lucide-react';
+import { AlertTriangle, Zap, ArrowRight } from 'lucide-react';
 import { FormNodeData } from './types';
 
 function FormNodeComponent({ data, selected }: NodeProps<FormNodeData>) {
@@ -49,7 +49,7 @@ function FormNodeComponent({ data, selected }: NodeProps<FormNodeData>) {
       {/* Header */}
       <div className="flex items-center gap-2">
         <div className="p-1.5 rounded bg-violet-600/20">
-          <FileText className="w-4 h-4 text-violet-400" />
+          <img src="/logos/RevLine.png" alt="RevLine" className="w-4 h-4 object-contain" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-white truncate">{name}</div>
