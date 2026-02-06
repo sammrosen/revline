@@ -281,6 +281,8 @@ export interface BookingCopyConfig {
   successMessage?: string;
   /** Footer text (default: "Powered by RevLine") */
   footerText?: string;
+  /** Footer email address */
+  footerEmail?: string;
 }
 
 /**

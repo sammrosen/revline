@@ -52,6 +52,7 @@ export const DEFAULT_BOOKING_COPY: Required<BookingCopyConfig> = {
   successTitle: 'Check Your Email',
   successMessage: "If your information matches our records, you'll receive a confirmation email shortly.",
   footerText: 'Powered by RevLine',
+  footerEmail: 'hi@revlineops.com',
 };
 
 // =============================================================================

@@ -9,6 +9,7 @@ import {
   isValidLogoUrl,
 } from '@/app/_lib/config';
 import type { SignupConfig, SignupPlan } from '@/app/_lib/types';
+import { FormPreviewMock } from './_components/form-preview-mock';
 
 /**
  * Resolve a path template by replacing {slug} with actual workspace slug
@@ -18,27 +19,15 @@ function resolveFormPath(pathTemplate: string, workspaceSlug: string): string {
 }
 
 /**
- * Get the preview URL for a given form type
- */
-function getPreviewUrl(workspaceSlug: string, formId: string): string {
-  // Map form IDs to their public paths
-  if (formId.includes('signup') || formId === 'membership-signup') {
-    return `/public/${workspaceSlug}/signup?preview=true`;
-  }
-  // Default to booking form
-  return `/public/${workspaceSlug}/book?preview=true`;
-}
-
-/**
  * RevLine configuration editor.
  * 
  * Tabs:
  * - Settings: Default source, general config
  * - Forms: Enable/disable forms for workflows
  * - Branding: Colors, logo, fonts
- * - Copy: Template-specific text (only for enabled templates)
+ * - Build: Template-specific text and config (only for enabled templates)
  * 
- * Includes live preview iframe for visual feedback.
+ * Includes live mock preview for visual feedback (no API calls).
  */
 
 // =============================================================================
@@ -64,6 +53,7 @@ interface BookingCopyConfig {
   successTitle?: string;
   successMessage?: string;
   footerText?: string;
+  footerEmail?: string;
 }
 
 interface CopyConfig {
@@ -161,31 +151,18 @@ export function RevlineConfigEditor({
   const [isJsonMode, setIsJsonMode] = useState(false);
   const [meta, setMeta] = useState<RevlineMeta>(() => parseMeta(value));
   const [jsonText, setJsonText] = useState(value);
-  const [previewKey, setPreviewKey] = useState(0);
-  const [previewError, setPreviewError] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const [previewForm, setPreviewForm] = useState<string>(''); // Which form to preview (empty = auto based on tab)
   
-  // Resizable panel state - deferred to avoid hydration mismatch
-  const [hasMounted, setHasMounted] = useState(false);
+  // Resizable panel state
   const [editorWidth, setEditorWidth] = useState(50); // percentage
   const [isDragging, setIsDragging] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(100); // percentage
   const containerRef = useRef<HTMLDivElement>(null);
   
-  // Track if there are unsaved changes (compare current meta to original value)
-  const [savedValue, setSavedValue] = useState(value);
-  const hasUnsavedChanges = JSON.stringify(meta) !== JSON.stringify(parseMeta(savedValue));
-  
-  // Update savedValue when value prop changes (after external save)
-  useEffect(() => {
-    setSavedValue(value);
-  }, [value]);
-  
-  // Mark as mounted after hydration
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
+  // Simple unsaved changes detection: compare serialized meta to value prop
+  // value prop = what's saved in parent/database, meta = current editor state
+  const hasUnsavedChanges = JSON.stringify(meta, null, 2) !== value;
   
   // Form registry state
   const [registeredForms, setRegisteredForms] = useState<RegisteredForm[]>([]);
@@ -236,8 +213,6 @@ export function RevlineConfigEditor({
   const updateMeta = useCallback((newMeta: RevlineMeta) => {
     setMeta(newMeta);
     onChange(JSON.stringify(newMeta, null, 2));
-    // Trigger preview refresh with debounce
-    setPreviewKey(k => k + 1);
   }, [onChange]);
 
   // Toggle between JSON and structured mode
@@ -273,21 +248,13 @@ export function RevlineConfigEditor({
   const hasEnabledForms = enabledFormIds.length > 0;
   
   // Selected form for Build tab (track which form is being edited)
-  const [selectedBuildForm, setSelectedBuildForm] = useState<string>(() => {
-    // Default to first enabled form
-    const firstEnabled = Object.keys(meta.forms).find(id => meta.forms[id]?.enabled);
-    return firstEnabled || '';
-  });
+  // Store raw selection in state, derive effective selection below
+  const [selectedBuildFormRaw, setSelectedBuildForm] = useState<string>('');
   
-  // Sync selectedBuildForm when forms change
-  useEffect(() => {
-    const enabledIds = Object.keys(meta.forms).filter(id => meta.forms[id]?.enabled);
-    if (enabledIds.length > 0 && !enabledIds.includes(selectedBuildForm)) {
-      setSelectedBuildForm(enabledIds[0]);
-    } else if (enabledIds.length === 0) {
-      setSelectedBuildForm('');
-    }
-  }, [meta.forms, selectedBuildForm]);
+  // Derive effective selected form: use raw selection if valid, else first enabled form
+  const selectedBuildForm = enabledFormIds.includes(selectedBuildFormRaw) 
+    ? selectedBuildFormRaw 
+    : (enabledFormIds[0] || '');
 
   const tabs: { id: TabType; label: string; show: boolean }[] = [
     { id: 'settings', label: 'Settings', show: true },
@@ -341,12 +308,12 @@ export function RevlineConfigEditor({
         <div 
           ref={containerRef}
           className="flex h-[calc(100vh-280px)] min-h-[400px]"
-          style={hasMounted && isDragging ? { cursor: 'col-resize' } : undefined}
+          style={isDragging ? { cursor: 'col-resize' } : undefined}
         >
           {/* Editor Panel */}
           <div 
             className="overflow-y-auto pr-2"
-            style={{ width: hasMounted && showPreview && (activeTab === 'branding' || activeTab === 'build') && workspaceSlug ? `${editorWidth}%` : '100%' }}
+            style={{ width: showPreview && (activeTab === 'branding' || activeTab === 'build') && workspaceSlug ? `${editorWidth}%` : '100%' }}
           >
             <div className="space-y-4">
               {activeTab === 'settings' && (
@@ -400,25 +367,22 @@ export function RevlineConfigEditor({
           {(activeTab === 'branding' || activeTab === 'build') && workspaceSlug && (
             <div 
               className="flex flex-col pl-2"
-              style={{ width: hasMounted && showPreview ? `${100 - editorWidth}%` : 'auto' }}
+              style={{ width: showPreview ? `${100 - editorWidth}%` : 'auto' }}
             >
               {/* Preview Header */}
               <div className="text-xs text-zinc-500 mb-2 flex items-center justify-between gap-2 shrink-0">
                 <div className="flex items-center gap-2">
                   <span>Live Preview</span>
                   {showPreview && (
-                    <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded text-[10px]">
-                      Interactive
+                    <span className="px-1.5 py-0.5 bg-zinc-700 text-zinc-300 rounded text-[10px]">
+                      Preview
                     </span>
                   )}
                   {/* Form selector for preview */}
                   {showPreview && enabledFormIds.length > 0 && (
                     <select
                       value={previewForm || (activeTab === 'build' ? selectedBuildForm : enabledFormIds[0])}
-                      onChange={(e) => {
-                        setPreviewForm(e.target.value);
-                        setPreviewKey(k => k + 1);
-                      }}
+                      onChange={(e) => setPreviewForm(e.target.value)}
                       className="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-[11px] text-zinc-300 focus:border-amber-500/50 outline-none"
                     >
                       {enabledFormIds.map(formId => {
@@ -467,17 +431,6 @@ export function RevlineConfigEditor({
                       >
                         Reset
                       </button>
-                      <div className="w-px h-3 bg-zinc-700 mx-1" />
-                      <button
-                        type="button"
-                        onClick={() => setPreviewKey(k => k + 1)}
-                        className="text-zinc-400 hover:text-zinc-300 p-1"
-                        title="Refresh preview"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                      </button>
                     </>
                   )}
                   <button
@@ -502,31 +455,24 @@ export function RevlineConfigEditor({
 
               {/* Preview Content */}
               {showPreview && (
-                <div className="flex-1 overflow-hidden rounded border border-zinc-800 bg-zinc-950">
-                  {previewError ? (
-                    <div className="h-full flex items-center justify-center">
-                      <p className="text-xs text-zinc-500">Preview unavailable</p>
-                    </div>
-                  ) : (
-                    <div 
-                      className="h-full overflow-auto"
-                      style={{ 
-                        transform: `scale(${previewZoom / 100})`,
-                        transformOrigin: 'top left',
-                        width: `${10000 / previewZoom}%`,
-                        height: `${10000 / previewZoom}%`,
-                      }}
-                    >
-                      <iframe
-                        key={`${previewKey}-${previewForm || selectedBuildForm}`}
-                        src={getPreviewUrl(workspaceSlug, previewForm || (activeTab === 'build' ? selectedBuildForm : enabledFormIds[0] || 'magic-link-booking'))}
-                        className="w-full h-full bg-white"
-                        style={{ minHeight: '800px' }}
-                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                        onError={() => setPreviewError(true)}
-                      />
-                    </div>
-                  )}
+                <div className="flex-1 overflow-hidden rounded border border-zinc-800 bg-white">
+                  <div 
+                    className="h-full overflow-auto"
+                    style={{ 
+                      transform: `scale(${previewZoom / 100})`,
+                      transformOrigin: 'top left',
+                      width: `${10000 / previewZoom}%`,
+                      height: `${10000 / previewZoom}%`,
+                    }}
+                  >
+                    <FormPreviewMock
+                      branding={meta.branding}
+                      copy={meta.copy?.booking}
+                      workspaceName={workspaceSlug}
+                      formType={(previewForm || selectedBuildForm || '').includes('signup') ? 'signup' : 'booking'}
+                      signupConfig={meta.signup}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -537,11 +483,11 @@ export function RevlineConfigEditor({
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                       </svg>
-                      Preview shows saved state. Save to see changes.
+                      Unsaved changes
                     </p>
                   )}
                   <p className="text-[10px] text-zinc-600">
-                    Drag divider to resize • Fully interactive
+                    Drag divider to resize
                   </p>
                 </div>
               )}
