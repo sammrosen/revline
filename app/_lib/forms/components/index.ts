@@ -12,6 +12,7 @@ export { TextareaField } from './TextareaField';
 export { SelectField } from './SelectField';
 export { CheckboxField } from './CheckboxField';
 export { DateField } from './DateField';
+export { StepIndicator } from './StepIndicator';
 
 // Re-export types that component consumers might need
 export type { EmailFieldProps } from './EmailField';

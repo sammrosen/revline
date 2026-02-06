@@ -143,81 +143,81 @@ export function MemberInfoStep({
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Main form */}
       <div className="lg:col-span-2">
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          <div className="p-6 border-b" style={{ borderColor: brand.border }}>
-            <h2 className="text-xl font-semibold" style={{ color: brand.text }}>
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="p-6" style={{ backgroundColor: brand.primary }}>
+            <h2 className="text-base font-bold uppercase tracking-wide text-white">
               Member Info
             </h2>
           </div>
           
-          <div className="p-6 space-y-6">
+          <div className="p-8 space-y-6">
             {/* Display info from step 2 (readonly) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: brand.textMuted }}>
+                <label className="block text-sm font-medium text-gray-500 mb-2">
                   First Name
                 </label>
-                <p className="px-4 py-3 bg-zinc-50 rounded-lg" style={{ color: brand.text }}>
+                <p className="px-4 py-4 bg-gray-50 rounded-lg font-medium" style={{ color: brand.text }}>
                   {formState.firstName}
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: brand.textMuted }}>
+                <label className="block text-sm font-medium text-gray-500 mb-2">
                   Last Name
                 </label>
-                <p className="px-4 py-3 bg-zinc-50 rounded-lg" style={{ color: brand.text }}>
+                <p className="px-4 py-4 bg-gray-50 rounded-lg font-medium" style={{ color: brand.text }}>
                   {formState.lastName}
                 </p>
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: brand.textMuted }}>
+                <label className="block text-sm font-medium text-gray-500 mb-2">
                   Email
                 </label>
-                <p className="px-4 py-3 bg-zinc-50 rounded-lg text-sm" style={{ color: brand.primary }}>
+                <p className="px-4 py-4 bg-gray-50 rounded-lg text-sm font-medium" style={{ color: brand.primary }}>
                   {formState.email}
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: brand.textMuted }}>
+                <label className="block text-sm font-medium text-gray-500 mb-2">
                   Mobile Phone
                 </label>
-                <p className="px-4 py-3 bg-zinc-50 rounded-lg" style={{ color: brand.primary }}>
+                <p className="px-4 py-4 bg-gray-50 rounded-lg font-medium" style={{ color: brand.primary }}>
                   {formState.phone}
                 </p>
               </div>
             </div>
             
             {/* Address fields */}
-            <div className="pt-4 border-t" style={{ borderColor: brand.border }}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="pt-6 border-t" style={{ borderColor: brand.border }}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">
                     Mailing Address *
                   </label>
                   <input
                     type="text"
                     value={formState.address}
                     onChange={(e) => updateForm('address', e.target.value)}
-                    className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                    style={{ borderColor: brand.border, color: brand.text }}
+                    className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+                    style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                     placeholder="123 Main Street"
                     disabled={loading}
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">
                     City *
                   </label>
                   <input
                     type="text"
                     value={formState.city}
                     onChange={(e) => updateForm('city', e.target.value)}
-                    className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                    style={{ borderColor: brand.border, color: brand.text }}
+                    className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+                    style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                     placeholder="City"
                     disabled={loading}
                   />
@@ -225,14 +225,14 @@ export function MemberInfoStep({
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       State *
                     </label>
                     <select
                       value={formState.state}
                       onChange={(e) => updateForm('state', e.target.value)}
-                      className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                      style={{ borderColor: brand.border, color: brand.text }}
+                      className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors appearance-none cursor-pointer"
+                      style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                       disabled={loading}
                     >
                       {US_STATES.map((state) => (
@@ -244,15 +244,15 @@ export function MemberInfoStep({
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       ZIP Code *
                     </label>
                     <input
                       type="text"
                       value={formState.zipCode}
                       onChange={(e) => updateForm('zipCode', e.target.value.replace(/\D/g, '').slice(0, 5))}
-                      className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                      style={{ borderColor: brand.border, color: brand.text }}
+                      className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+                      style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                       placeholder="12345"
                       maxLength={5}
                       disabled={loading}
@@ -263,17 +263,17 @@ export function MemberInfoStep({
             </div>
             
             {/* Birthday */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   Birthday *
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   <select
                     value={formState.birthMonth}
                     onChange={(e) => updateForm('birthMonth', e.target.value)}
-                    className="px-3 py-3 border rounded-lg focus:outline-none focus:ring-2 text-sm"
-                    style={{ borderColor: brand.border, color: brand.text }}
+                    className="px-3 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 text-sm focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors appearance-none cursor-pointer"
+                    style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                     disabled={loading}
                   >
                     {MONTHS.map((m) => (
@@ -283,8 +283,8 @@ export function MemberInfoStep({
                   <select
                     value={formState.birthDay}
                     onChange={(e) => updateForm('birthDay', e.target.value)}
-                    className="px-3 py-3 border rounded-lg focus:outline-none focus:ring-2 text-sm"
-                    style={{ borderColor: brand.border, color: brand.text }}
+                    className="px-3 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 text-sm focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors appearance-none cursor-pointer"
+                    style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                     disabled={loading}
                   >
                     {DAYS.map((d) => (
@@ -294,8 +294,8 @@ export function MemberInfoStep({
                   <select
                     value={formState.birthYear}
                     onChange={(e) => updateForm('birthYear', e.target.value)}
-                    className="px-3 py-3 border rounded-lg focus:outline-none focus:ring-2 text-sm"
-                    style={{ borderColor: brand.border, color: brand.text }}
+                    className="px-3 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 text-sm focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors appearance-none cursor-pointer"
+                    style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                     disabled={loading}
                   >
                     {YEARS.map((y) => (
@@ -306,14 +306,14 @@ export function MemberInfoStep({
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   Gender
                 </label>
                 <select
                   value={formState.gender}
                   onChange={(e) => updateForm('gender', e.target.value)}
-                  className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                  style={{ borderColor: brand.border, color: brand.text }}
+                  className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors appearance-none cursor-pointer"
+                  style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                   disabled={loading}
                 >
                   {GENDERS.map((g) => (
@@ -324,9 +324,9 @@ export function MemberInfoStep({
             </div>
             
             {/* Home phone */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   Home Phone (optional)
                 </label>
                 <input
@@ -344,8 +344,8 @@ export function MemberInfoStep({
                     }
                     updateForm('homePhone', formatted);
                   }}
-                  className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-                  style={{ borderColor: brand.border, color: brand.text }}
+                  className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+                  style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
                   placeholder="(555) 123-4567"
                   disabled={loading}
                 />
@@ -354,19 +354,19 @@ export function MemberInfoStep({
           </div>
           
           {/* Actions */}
-          <div className="p-6 border-t flex justify-between" style={{ borderColor: brand.border, backgroundColor: '#f9fafb' }}>
+          <div className="px-8 py-6 border-t flex justify-between" style={{ borderColor: brand.border, backgroundColor: '#f9fafb' }}>
             <button
               onClick={onBack}
               disabled={loading}
-              className="px-6 py-3 border rounded-lg font-medium hover:bg-white disabled:opacity-50"
-              style={{ borderColor: brand.border, color: brand.text }}
+              className="px-6 py-3 bg-gray-100 rounded-lg font-semibold hover:bg-gray-200 disabled:opacity-50 transition-colors"
+              style={{ color: brand.text }}
             >
               Back
             </button>
             <button
               onClick={onNext}
               disabled={loading}
-              className="px-8 py-3 text-white font-medium rounded-lg disabled:opacity-50"
+              className="px-8 py-4 text-white font-semibold rounded-lg disabled:opacity-50 transition-all hover:shadow-lg"
               style={{ backgroundColor: brand.primary }}
             >
               Proceed to Payment

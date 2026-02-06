@@ -25,6 +25,7 @@ import {
   TimeSlot,
 } from '@/app/_lib/booking';
 import type { ResolvedBranding, ResolvedBookingCopy, ResolvedFeatures } from '@/app/_lib/config';
+import { StepIndicator } from '@/app/_lib/forms/components';
 
 // =============================================================================
 // TYPES
@@ -401,28 +402,16 @@ export function MagicLinkBookingClient({
         
         {/* Step indicator */}
         {state.step !== 'pending' && (
-          <div className="bg-zinc-700">
+          <div className="bg-white py-3 border-b" style={{ borderColor: brand.border }}>
             <div className="max-w-4xl mx-auto px-4">
-              <div className="flex">
-                {(['select', 'submit'] as const).map((step, index) => {
-                  const stepsOrder: MagicLinkStep[] = ['select', 'submit', 'pending'];
-                  const currentIndex = stepsOrder.indexOf(state.step);
-                  return (
-                    <div
-                      key={step}
-                      className={`flex-1 py-3 text-center text-sm font-medium border-b-2 transition-colors ${
-                        state.step === step
-                          ? 'border-white text-white'
-                          : index < currentIndex
-                            ? 'border-zinc-500 text-zinc-400'
-                            : 'border-transparent text-zinc-500'
-                      }`}
-                    >
-                      {step === 'select' ? 'SELECT TIME' : 'CONFIRM'}
-                    </div>
-                  );
-                })}
-              </div>
+              <StepIndicator
+                steps={[
+                  { label: 'Select Time' },
+                  { label: 'Confirm' },
+                ]}
+                currentStep={state.step === 'select' ? 1 : 2}
+                primaryColor={brand.primary}
+              />
             </div>
           </div>
         )}
@@ -559,44 +548,55 @@ function SelectStep({
     <div className="space-y-6">
       {/* Employee selector */}
       {supportsEmployeeSelection && employees.length > 0 && (
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-lg font-semibold mb-4" style={{ color: brand.text }}>
-            Select Your Trainer
-          </h2>
-          <div className="flex flex-wrap gap-3">
-            {employees.map((employee) => (
-              <button
-                key={employee.key}
-                onClick={() => onSelectEmployee(employee)}
-                className={`px-4 py-2 rounded-lg border-2 font-medium transition-colors ${
-                  selectedEmployee?.key === employee.key
-                    ? 'border-current text-white'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-                style={
-                  selectedEmployee?.key === employee.key
-                    ? { backgroundColor: brand.primary, borderColor: brand.primary }
-                    : { color: brand.text }
-                }
-              >
-                {employee.name}
-                {employee.title && (
-                  <span className="block text-xs opacity-75">{employee.title}</span>
-                )}
-              </button>
-            ))}
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="p-6" style={{ backgroundColor: brand.primary }}>
+            <h2 className="text-base font-bold uppercase tracking-wide text-white">
+              Select Your Trainer
+            </h2>
+          </div>
+          <div className="p-8">
+            <div className="flex flex-wrap gap-3">
+              {employees.map((employee) => (
+                <button
+                  key={employee.key}
+                  onClick={() => onSelectEmployee(employee)}
+                  className={`px-5 py-3 rounded-lg border-2 font-medium transition-all ${
+                    selectedEmployee?.key === employee.key
+                      ? 'border-current text-white shadow-md'
+                      : 'bg-gray-100 border-transparent hover:bg-gray-200'
+                  }`}
+                  style={
+                    selectedEmployee?.key === employee.key
+                      ? { backgroundColor: brand.primary, borderColor: brand.primary }
+                      : { color: brand.text }
+                  }
+                >
+                  {employee.name}
+                  {employee.title && (
+                    <span className="block text-xs opacity-75 mt-0.5">{employee.title}</span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
       {/* Time slots */}
-      <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-        {/* Date navigation header */}
-        <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: brand.border, backgroundColor: '#f9fafb' }}>
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        {/* Section header */}
+        <div className="p-6" style={{ backgroundColor: brand.primary }}>
+          <h2 className="text-base font-bold uppercase tracking-wide text-white">
+            {loading ? 'Loading availability...' : 'Select a Time'}
+          </h2>
+        </div>
+        
+        {/* Date navigation */}
+        <div className="px-8 py-4 border-b flex items-center justify-between" style={{ borderColor: brand.border, backgroundColor: '#f9fafb' }}>
           <button
             onClick={goToPreviousWeek}
             disabled={!canGoPrevious || loading}
-            className="p-2 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="p-2 rounded-lg hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             style={{ color: brand.text }}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -604,14 +604,14 @@ function SelectStep({
             </svg>
           </button>
           
-          <span className="font-medium" style={{ color: brand.text }}>
+          <span className="font-semibold" style={{ color: brand.text }}>
             {formatDateRange(selectedDate)}
           </span>
           
           <button
             onClick={goToNextWeek}
             disabled={loading}
-            className="p-2 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="p-2 rounded-lg hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             style={{ color: brand.text }}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -620,10 +620,7 @@ function SelectStep({
           </button>
         </div>
 
-        <div className="p-6">
-          <h2 className="text-lg font-semibold mb-4" style={{ color: brand.text }}>
-            {loading ? 'Loading availability...' : 'Select a Time'}
-          </h2>
+        <div className="p-8">
 
           {loading ? (
             <div className="flex justify-center py-12">
@@ -633,15 +630,20 @@ function SelectStep({
               />
             </div>
           ) : Object.keys(slotsByDate).length === 0 ? (
-            <div className="text-center py-12" style={{ color: brand.textMuted }}>
-              <p>No available times found for this week.</p>
-              <p className="text-sm mt-2">Try another week or a different trainer.</p>
+            <div className="text-center py-16 px-4" style={{ color: brand.textMuted }}>
+              <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <p className="font-medium text-gray-700">No available times found for this week.</p>
+              <p className="text-sm mt-1">Try another week or a different trainer.</p>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-8">
               {Object.entries(slotsByDate).map(([date, dateSlots]) => (
                 <div key={date}>
-                  <h3 className="text-sm font-medium mb-3" style={{ color: brand.textMuted }}>
+                  <h3 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: brand.textMuted }}>
                     {formatDate(date)}
                   </h3>
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
@@ -649,8 +651,8 @@ function SelectStep({
                       <button
                         key={slot.id}
                         onClick={() => onSelectSlot(slot)}
-                        className="px-3 py-2 text-sm rounded border hover:border-gray-400 transition-colors"
-                        style={{ borderColor: brand.border, color: brand.text }}
+                        className="px-3 py-3 text-sm font-medium rounded-lg bg-gray-100 hover:bg-gray-200 transition-all hover:shadow-sm"
+                        style={{ color: brand.text }}
                       >
                         {formatTime(slot.startTime)}
                       </button>
@@ -702,32 +704,34 @@ function SubmitStep({
   const startTime = new Date(slot.startTime);
 
   return (
-    <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-      <div className="p-6 border-b" style={{ borderColor: brand.border }}>
-        <h2 className="text-xl font-semibold" style={{ color: brand.text }}>
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="p-6" style={{ backgroundColor: brand.primary }}>
+        <h2 className="text-base font-bold uppercase tracking-wide text-white">
           Confirm Your Session
         </h2>
-        <p style={{ color: brand.textMuted }}>
+        <p className="mt-1 text-white/80 text-sm">
           Enter your details to receive a confirmation email.
         </p>
       </div>
 
       {/* Selected session info */}
-      <div className="p-6 border-b" style={{ borderColor: brand.border, backgroundColor: '#f9fafb' }}>
-        <div className="flex items-start gap-3">
-          <svg className="w-5 h-5 mt-0.5" style={{ color: brand.textMuted }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
+      <div className="px-8 py-6 border-b" style={{ borderColor: brand.border, backgroundColor: '#f9fafb' }}>
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
+            <svg className="w-5 h-5" style={{ color: brand.textMuted }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
           <div>
-            <div className="font-medium" style={{ color: brand.text }}>{slot.title}</div>
-            <div style={{ color: brand.textMuted }}>
+            <div className="font-semibold" style={{ color: brand.text }}>{slot.title}</div>
+            <div className="text-sm mt-1" style={{ color: brand.textMuted }}>
               {startTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
             </div>
-            <div style={{ color: brand.textMuted }}>
+            <div className="text-sm" style={{ color: brand.textMuted }}>
               {startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
             </div>
             {(employee?.name || slot.staffName) && (
-              <div className="mt-1" style={{ color: brand.text }}>
+              <div className="text-sm mt-1 font-medium" style={{ color: brand.text }}>
                 with {employee?.name || slot.staffName}
               </div>
             )}
@@ -736,9 +740,9 @@ function SubmitStep({
       </div>
 
       {/* Form */}
-      <div className="p-6 space-y-4">
+      <div className="p-8 space-y-6">
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+          <label className="block text-sm font-medium text-gray-600 mb-2">
             Member Barcode *
           </label>
           <input
@@ -746,14 +750,14 @@ function SubmitStep({
             value={barcode}
             onChange={(e) => onBarcodeChange(e.target.value)}
             placeholder="fgj6"
-            className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-            style={{ borderColor: brand.border, backgroundColor: brand.card, color: brand.text }}
+            className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+            style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
             disabled={loading}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+          <label className="block text-sm font-medium text-gray-600 mb-2">
             Email Address *
           </label>
           <input
@@ -761,17 +765,17 @@ function SubmitStep({
             value={email}
             onChange={(e) => onEmailChange(e.target.value)}
             placeholder="you@example.com"
-            className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-            style={{ borderColor: brand.border, backgroundColor: brand.card, color: brand.text }}
+            className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+            style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
             disabled={loading}
           />
-          <p className="text-xs mt-1" style={{ color: brand.textMuted }}>
+          <p className="text-xs mt-2 text-gray-500">
             Must match the email on your membership
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: brand.text }}>
+          <label className="block text-sm font-medium text-gray-600 mb-2">
             Last 4 Digits of Phone *
           </label>
           <input
@@ -780,30 +784,30 @@ function SubmitStep({
             onChange={(e) => onPhoneChange(e.target.value.replace(/\D/g, '').slice(0, 4))}
             placeholder="1234"
             maxLength={4}
-            className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
-            style={{ borderColor: brand.border, backgroundColor: brand.card, color: brand.text }}
+            className="w-full px-4 py-4 bg-gray-100 border-0 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-gray-50 focus:ring-2 focus:outline-none transition-colors"
+            style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
             disabled={loading}
           />
-          <p className="text-xs mt-1" style={{ color: brand.textMuted }}>
+          <p className="text-xs mt-2 text-gray-500">
             For verification purposes
           </p>
         </div>
       </div>
 
       {/* Actions */}
-      <div className="p-6 border-t flex gap-4" style={{ borderColor: brand.border, backgroundColor: '#f9fafb' }}>
+      <div className="px-8 py-6 border-t flex gap-4" style={{ borderColor: brand.border, backgroundColor: '#f9fafb' }}>
         <button
           onClick={onBack}
           disabled={loading}
-          className="px-6 py-3 border rounded font-medium hover:bg-white disabled:opacity-50"
-          style={{ borderColor: brand.border, color: brand.text }}
+          className="px-6 py-3 bg-gray-100 rounded-lg font-semibold hover:bg-gray-200 disabled:opacity-50 transition-colors"
+          style={{ color: brand.text }}
         >
           Back
         </button>
         <button
           onClick={onSubmit}
           disabled={loading}
-          className="flex-1 py-3 text-white font-medium rounded disabled:opacity-50 flex items-center justify-center gap-2"
+          className="flex-1 py-4 text-white font-semibold rounded-lg disabled:opacity-50 flex items-center justify-center gap-2 transition-all hover:shadow-lg"
           style={{ backgroundColor: brand.primary }}
         >
           {loading ? (
@@ -836,15 +840,15 @@ function PendingStep({
   copy: ResolvedBookingCopy;
 }) {
   return (
-    <div className="bg-white rounded-lg shadow-lg overflow-hidden text-center">
-      <div className="p-8">
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden text-center">
+      <div className="p-10">
         {/* Success icon */}
         <div
-          className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"
-          style={{ backgroundColor: `${brand.success}20` }}
+          className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-8"
+          style={{ backgroundColor: `${brand.success}15` }}
         >
           <svg
-            className="w-8 h-8"
+            className="w-10 h-10"
             style={{ color: brand.success }}
             fill="none"
             stroke="currentColor"
@@ -859,24 +863,24 @@ function PendingStep({
           </svg>
         </div>
 
-        <h2 className="text-2xl font-semibold mb-3" style={{ color: brand.text }}>
+        <h2 className="text-2xl font-bold mb-3" style={{ color: brand.text }}>
           {copy.successTitle}
         </h2>
 
-        <p className="mb-2" style={{ color: brand.textMuted }}>
+        <p className="text-lg mb-2" style={{ color: brand.textMuted }}>
           {copy.successMessage}
         </p>
 
-        <p className="text-sm mb-6" style={{ color: brand.textMuted }}>
+        <p className="text-sm mb-8" style={{ color: brand.textMuted }}>
           Sent to: <strong style={{ color: brand.text }}>{email}</strong>
         </p>
 
         <div
-          className="p-4 rounded-lg text-sm text-left space-y-2 mb-6"
+          className="p-5 rounded-xl text-sm text-left space-y-3 mb-8"
           style={{ backgroundColor: '#fef3c7', color: '#92400e' }}
         >
-          <p className="font-medium">What happens next?</p>
-          <ul className="list-disc list-inside space-y-1 text-xs">
+          <p className="font-semibold">What happens next?</p>
+          <ul className="list-disc list-inside space-y-1.5 text-sm">
             <li>Check your inbox (and spam folder) for a confirmation email</li>
             <li>Click the link in the email to confirm your booking</li>
             <li>The link expires in 15 minutes</li>
@@ -885,8 +889,8 @@ function PendingStep({
 
         <button
           onClick={onReset}
-          className="px-6 py-2 border rounded font-medium hover:bg-gray-50 transition-colors"
-          style={{ borderColor: brand.border, color: brand.text }}
+          className="px-8 py-3 bg-gray-100 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+          style={{ color: brand.text }}
         >
           Book Another Session
         </button>
