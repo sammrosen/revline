@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { HealthStatus } from '@prisma/client';
 import { IntegrationActions } from './integration-actions';
 import { AddIntegrationForm } from './add-integration-form';
 import { LeadsView } from './leads-view';
 import { WorkflowList } from './workflows/workflow-list';
+import { WorkflowEditor } from './workflows/workflow-editor';
 import { IntegrationNetworkGraph } from './_components/network-graph';
 import { TestingTab } from './testing-tab';
 import { WorkspaceSettings } from './workspace-settings';
@@ -196,6 +198,8 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
 
   // State for workflow view mode: 'graph' (default) or 'list'
   const [workflowViewMode, setWorkflowViewMode] = useState<'graph' | 'list'>('graph');
+  const [showNewWorkflow, setShowNewWorkflow] = useState(false);
+  const router = useRouter();
 
   return (
     <div className="min-h-[400px]">
@@ -252,7 +256,7 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
                   </button>
                 </div>
                 <button
-                  onClick={() => setWorkflowViewMode('list')}
+                  onClick={() => setShowNewWorkflow(true)}
                   className="flex items-center justify-center w-8 h-8 bg-white text-black rounded hover:bg-zinc-200 transition-colors"
                   title="New Workflow"
                 >
@@ -279,6 +283,22 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
               />
             )}
           </div>
+        )}
+
+        {/* New Workflow Editor — renders as overlay from any view */}
+        {showNewWorkflow && (
+          <WorkflowEditor
+            workspaceId={workspaceId}
+            configuredIntegrations={configuredIntegrations}
+            mailerliteGroups={mailerliteGroups}
+            stripeProducts={stripeProducts}
+            leadStages={leadStages}
+            onClose={() => setShowNewWorkflow(false)}
+            onSave={() => {
+              setShowNewWorkflow(false);
+              router.refresh();
+            }}
+          />
         )}
 
         {activeTab === 'integrations' && (
