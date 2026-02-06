@@ -151,7 +151,7 @@ export const MAILERLITE_ADAPTER: AdapterDefinition = {
       payloadSchema: CommonPayloadSchema,
       paramsSchema: z.object({
         group: z.string().describe('Group key from client config'),
-        fields: z.record(z.string()).optional().describe('Map MailerLite field names to lead property keys (e.g., { "barcode": "barcode" })'),
+        fields: z.record(z.string(), z.string()).optional().describe('Map MailerLite field names to lead property keys (e.g., { "barcode": "barcode" })'),
       }),
       paramRequirements: {
         group: 'meta.groups', // params.group must be a key in meta.groups
@@ -207,7 +207,7 @@ export const REVLINE_ADAPTER: AdapterDefinition = {
       payloadSchema: CommonPayloadSchema,
       paramsSchema: z.object({
         source: z.string().optional().describe('Lead source identifier'),
-        properties: z.record(z.unknown()).optional().describe('Explicit property values to set (e.g., { barcode: "ABC123" })'),
+        properties: z.record(z.string(), z.unknown()).optional().describe('Explicit property values to set (e.g., { barcode: "ABC123" })'),
         captureProperties: z.boolean().optional().describe('Auto-extract properties from trigger payload matching workspace schema'),
       }),
     },
@@ -217,7 +217,7 @@ export const REVLINE_ADAPTER: AdapterDefinition = {
       description: 'Update custom properties on an existing lead. Merges with existing values.',
       payloadSchema: z.object({ email: z.string().email() }),
       paramsSchema: z.object({
-        properties: z.record(z.unknown()).optional().describe('Explicit property values to set'),
+        properties: z.record(z.string(), z.unknown()).optional().describe('Explicit property values to set'),
         fromPayload: z.boolean().optional().describe('Auto-extract properties from trigger payload'),
       }),
     },

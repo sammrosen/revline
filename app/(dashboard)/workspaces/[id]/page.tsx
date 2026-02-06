@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/app/_lib/db';
 import { WorkspaceTabs } from './workspace-tabs';
 import { IntegrationType } from '@prisma/client';
-import { MailerLiteMeta, isMailerLiteMeta, StripeMeta } from '@/app/_lib/types';
+import { MailerLiteMeta, isMailerLiteMeta, StripeMeta, LeadPropertyDefinition } from '@/app/_lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -134,7 +134,7 @@ export default async function WorkspaceDetailPage({
             domainVerifiedAt: workspace.domainVerifiedAt?.toISOString() ?? null,
           }}
           leadStages={workspace.leadStages as Array<{ key: string; label: string; color: string }> | undefined}
-          leadPropertySchema={workspace.leadPropertySchema as Array<{ key: string; label: string; type: string; required: boolean }> | null}
+          leadPropertySchema={workspace.leadPropertySchema as LeadPropertyDefinition[] | null}
         />
     </div>
   );

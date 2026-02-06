@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { HealthStatus } from '@prisma/client';
+import { LeadPropertyDefinition } from '@/app/_lib/types';
 import { IntegrationActions } from './integration-actions';
 import { AddIntegrationForm } from './add-integration-form';
 import { LeadsView } from './leads-view';
@@ -88,7 +89,7 @@ interface WorkspaceTabsProps {
     domainVerifiedAt: string | null;
   };
   leadStages?: Array<{ key: string; label: string; color: string }>;
-  leadPropertySchema?: Array<{ key: string; label: string; type: string; required: boolean }> | null;
+  leadPropertySchema?: LeadPropertyDefinition[] | null;
 }
 
 // Parse secrets from JSON, returning only id and name (never values)
