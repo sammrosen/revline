@@ -120,7 +120,7 @@ export function IntegrationNetworkGraph({ workspaceId }: IntegrationNetworkGraph
   // Loading state
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-180px)] min-h-[400px]">
+      <div className="flex items-center justify-center h-[calc(100vh-140px)] min-h-[400px]">
         <RefreshCw className="w-6 h-6 text-zinc-400 animate-spin" />
       </div>
     );
@@ -129,7 +129,7 @@ export function IntegrationNetworkGraph({ workspaceId }: IntegrationNetworkGraph
   // Error state
   if (error) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-180px)] min-h-[400px]">
+      <div className="flex items-center justify-center h-[calc(100vh-140px)] min-h-[400px]">
         <div className="text-center">
           <AlertTriangle className="w-8 h-8 text-red-500 mx-auto mb-2" />
           <div className="text-red-400">{error}</div>
@@ -147,7 +147,7 @@ export function IntegrationNetworkGraph({ workspaceId }: IntegrationNetworkGraph
   // Empty state
   if (!graph || initialNodes.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-180px)] min-h-[400px]">
+      <div className="flex items-center justify-center h-[calc(100vh-140px)] min-h-[400px]">
         <div className="text-center text-zinc-500">
           <div className="text-lg mb-2">No workflows or forms configured</div>
           <div className="text-sm">Create a workflow or enable a form to see the business process graph</div>
@@ -157,7 +157,7 @@ export function IntegrationNetworkGraph({ workspaceId }: IntegrationNetworkGraph
   }
 
   return (
-    <div className="relative h-[calc(100vh-180px)] min-h-[400px] overflow-hidden">
+    <div className="relative h-[calc(100vh-140px)] min-h-[400px] overflow-hidden">
       {/* SVG marker definitions */}
       <EdgeMarkerDefs />
       <TriggerEdgeMarkerDefs />
@@ -168,10 +168,22 @@ export function IntegrationNetworkGraph({ workspaceId }: IntegrationNetworkGraph
           <span className="text-zinc-400">
             {graph.stats.enabledForms} forms, {graph.stats.enabledWorkflows} of {graph.stats.totalWorkflows} workflows active
           </span>
+          {/* Health indicator */}
+          {graph.stats.healthyIntegrations < graph.stats.configuredIntegrations ? (
+            <span className="flex items-center gap-1.5 px-2 py-0.5 bg-red-500/10 text-red-400 rounded">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              {graph.stats.configuredIntegrations - graph.stats.healthyIntegrations} integration{graph.stats.configuredIntegrations - graph.stats.healthyIntegrations > 1 ? 's' : ''} unhealthy
+            </span>
+          ) : graph.stats.configuredIntegrations > 0 ? (
+            <span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              All systems healthy
+            </span>
+          ) : null}
           {graph.stats.validWorkflows < graph.stats.totalWorkflows && (
             <span className="flex items-center gap-1 text-yellow-500">
               <AlertTriangle className="w-4 h-4" />
-              {graph.stats.totalWorkflows - graph.stats.validWorkflows} need attention
+              {graph.stats.totalWorkflows - graph.stats.validWorkflows} workflow{graph.stats.totalWorkflows - graph.stats.validWorkflows > 1 ? 's' : ''} need attention
             </span>
           )}
         </div>
@@ -248,15 +260,15 @@ export function IntegrationNetworkGraph({ workspaceId }: IntegrationNetworkGraph
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          <span>Active</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-zinc-500" />
-          <span>Inactive</span>
+          <span>Healthy</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-yellow-500" />
-          <span>Issues</span>
+          <span>Warning</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-red-500" />
+          <span>Unhealthy</span>
         </div>
       </div>
     </div>

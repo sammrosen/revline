@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { HealthStatus, LeadStage } from '@prisma/client';
+import { HealthStatus } from '@prisma/client';
 import { IntegrationActions } from './integration-actions';
 import { AddIntegrationForm } from './add-integration-form';
 import { LeadsView } from './leads-view';
@@ -41,7 +41,7 @@ interface Event {
 interface Lead {
   id: string;
   email: string;
-  stage: LeadStage;
+  stage: string;
   source: string | null;
   lastEventAt: Date | null;
   createdAt: Date;
@@ -85,6 +85,7 @@ interface WorkspaceTabsProps {
     domainVerified: boolean;
     domainVerifiedAt: string | null;
   };
+  leadStages?: Array<{ key: string; label: string; color: string }>;
 }
 
 // Parse secrets from JSON, returning only id and name (never values)
@@ -128,7 +129,7 @@ interface IntegrationDependency {
 
 const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'testing', 'settings'];
 
-export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York', domainConfig }: WorkspaceTabsProps) {
+export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York', domainConfig, leadStages }: WorkspaceTabsProps) {
   // Initialize with default to avoid hydration mismatch, then sync from hash in useEffect
   const [activeTab, setActiveTab] = useState<TabType>('workflows');
   const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
@@ -199,7 +200,7 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
   return (
     <div className="min-h-[400px]">
         {activeTab === 'workflows' && (
-          <div className="relative">
+          <div className={`relative ${workflowViewMode === 'graph' ? '-mx-4 sm:-mx-6 px-4 sm:px-6' : ''}`}>
             {/* Integration badges and controls header */}
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 flex-wrap">
@@ -225,22 +226,11 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {/* View toggle */}
+                {/* View toggle - graph first since it's default */}
                 <div className="flex items-center bg-zinc-800 rounded p-0.5">
                   <button
-                    onClick={() => setWorkflowViewMode('list')}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-sm transition-colors ${
-                      workflowViewMode === 'list'
-                        ? 'bg-zinc-700 text-white'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
-                    title="List view"
-                  >
-                    <List className="w-4 h-4" />
-                  </button>
-                  <button
                     onClick={() => setWorkflowViewMode('graph')}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-sm transition-colors ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-sm transition-colors ${
                       workflowViewMode === 'graph'
                         ? 'bg-zinc-700 text-white'
                         : 'text-zinc-400 hover:text-white'
@@ -249,10 +239,21 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
                   >
                     <WorkflowIcon className="w-4 h-4" />
                   </button>
+                  <button
+                    onClick={() => setWorkflowViewMode('list')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-sm transition-colors ${
+                      workflowViewMode === 'list'
+                        ? 'bg-zinc-700 text-white'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                    title="List view"
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
                 </div>
                 <button
                   onClick={() => setWorkflowViewMode('list')}
-                  className="p-2 bg-white text-black rounded hover:bg-zinc-200 transition-colors"
+                  className="flex items-center justify-center w-8 h-8 bg-white text-black rounded hover:bg-zinc-200 transition-colors"
                   title="New Workflow"
                 >
                   <Plus className="w-4 h-4" />
@@ -273,6 +274,7 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
                 configuredIntegrations={configuredIntegrations}
                 mailerliteGroups={mailerliteGroups}
                 stripeProducts={stripeProducts}
+                leadStages={leadStages}
                 hideHeader
               />
             )}
@@ -368,7 +370,7 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
           </div>
         )}
 
-        {activeTab === 'leads' && <LeadsView leads={leads} />}
+        {activeTab === 'leads' && <LeadsView leads={leads} leadStages={leadStages} />}
 
         {activeTab === 'events' && (
           <div>
@@ -434,6 +436,7 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
             workspaceId={workspaceId} 
             currentTimezone={timezone}
             domainConfig={domainConfig}
+            leadStages={leadStages}
           />
         )}
     </div>

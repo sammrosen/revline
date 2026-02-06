@@ -30,6 +30,7 @@ export async function GET(
         name: true,
         slug: true,
         status: true,
+        leadStages: true,
       },
     }),
     prisma.$transaction([
@@ -49,6 +50,7 @@ export async function GET(
     name: workspace.name,
     slug: workspace.slug,
     status: workspace.status,
+    leadStages: workspace.leadStages,
     counts: {
       workflows: counts[0],
       integrations: counts[1],

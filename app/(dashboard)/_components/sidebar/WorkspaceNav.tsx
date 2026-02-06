@@ -312,7 +312,7 @@ export function WorkspaceNav() {
       </div>
 
       {/* Workspace Selector Dropdown */}
-      <div className="px-2" ref={dropdownRef}>
+      <div className="px-2 relative" ref={dropdownRef}>
         <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
           className="w-full flex items-center gap-2 px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg hover:border-zinc-700 transition-colors"
@@ -325,7 +325,7 @@ export function WorkspaceNav() {
 
         {/* Dropdown Menu */}
         {isDropdownOpen && (
-          <div className="absolute left-2 right-2 mt-1 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
+          <div className="absolute left-0 right-0 mt-1 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
             {workspaces.map((workspace) => (
               <button
                 key={workspace.id}

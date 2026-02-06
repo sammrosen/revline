@@ -11,10 +11,38 @@
  * - Keep integration-specific types with their meta definitions
  */
 
-import { IntegrationType, HealthStatus, LeadStage, EventSystem, WorkspaceStatus, WorkspaceRole } from '@prisma/client';
+import { IntegrationType, HealthStatus, EventSystem, WorkspaceStatus, WorkspaceRole } from '@prisma/client';
 
 // Re-export Prisma enums for convenience
-export { IntegrationType, HealthStatus, LeadStage, EventSystem, WorkspaceStatus, WorkspaceRole };
+export { IntegrationType, HealthStatus, EventSystem, WorkspaceStatus, WorkspaceRole };
+
+// =============================================================================
+// LEAD STAGE TYPES
+// =============================================================================
+
+/**
+ * Definition for a single lead pipeline stage.
+ * Stored as JSON array on the Workspace model.
+ */
+export interface LeadStageDefinition {
+  /** Stored value, uppercase (e.g., "CAPTURED"). Immutable once leads exist with it. */
+  key: string;
+  /** Display name (e.g., "Captured"). Renamable. */
+  label: string;
+  /** Hex color for badges (e.g., "#6B7280"). */
+  color: string;
+}
+
+/**
+ * Default lead stages for new workspaces.
+ * CAPTURED is always required as the first/default stage.
+ */
+export const DEFAULT_LEAD_STAGES: LeadStageDefinition[] = [
+  { key: 'CAPTURED', label: 'Captured', color: '#6B7280' },
+  { key: 'BOOKED', label: 'Booked', color: '#3B82F6' },
+  { key: 'PAID', label: 'Paid', color: '#10B981' },
+  { key: 'DEAD', label: 'Dead', color: '#EF4444' },
+];
 
 // =============================================================================
 // ORGANIZATION TYPES
@@ -555,7 +583,7 @@ export interface Lead {
   workspaceId: string;
   email: string;
   source: string | null;
-  stage: LeadStage;
+  stage: string;
   errorState: string | null;
   createdAt: Date;
   lastEventAt: Date;

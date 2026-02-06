@@ -173,11 +173,16 @@ export function isValidHexColor(color: string): boolean {
 }
 
 /**
- * Validate a logo URL
- * Must be https for security
+ * Validate a logo URL or data URL
+ * Accepts https URLs or base64 data URLs for uploaded images
  */
 export function isValidLogoUrl(url: string): boolean {
   if (!url) return true; // Empty is valid (no logo)
+  
+  // Accept data URLs (base64 encoded images)
+  if (url.startsWith('data:image/')) return true;
+  
+  // Accept https URLs
   try {
     const parsed = new URL(url);
     return parsed.protocol === 'https:';

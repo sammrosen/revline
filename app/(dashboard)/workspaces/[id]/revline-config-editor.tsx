@@ -741,6 +741,128 @@ function FormsTab({
 }
 
 // =============================================================================
+// LOGO UPLOAD FIELD
+// =============================================================================
+
+function LogoUploadField({ 
+  value, 
+  onChange 
+}: { 
+  value: string; 
+  onChange: (v: string) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setError(null);
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file');
+      return;
+    }
+    
+    // Validate file size (500KB limit)
+    if (file.size > 500 * 1024) {
+      setError('Image must be under 500KB');
+      return;
+    }
+    
+    // Convert to base64
+    const reader = new FileReader();
+    reader.onload = () => {
+      onChange(reader.result as string);
+    };
+    reader.onerror = () => {
+      setError('Failed to read file');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const isDataUrl = value?.startsWith('data:');
+
+  return (
+    <div className="space-y-2">
+      {/* Preview thumbnail if logo exists */}
+      {value && (
+        <div className="flex items-center gap-3 p-2 bg-zinc-900 rounded border border-zinc-700">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img 
+            src={value} 
+            alt="Logo preview" 
+            className="h-10 w-auto max-w-[120px] object-contain rounded"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-zinc-400 truncate">
+              {isDataUrl ? 'Uploaded image' : value}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="p-1 text-zinc-500 hover:text-red-400 transition-colors"
+            title="Remove logo"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+      
+      {/* Upload and URL input row */}
+      <div className="flex gap-2">
+        {/* Hidden file input */}
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          accept="image/*" 
+          onChange={handleFileChange} 
+          className="hidden"
+        />
+        
+        {/* Upload button */}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-sm text-zinc-300 transition-colors flex items-center gap-2 shrink-0"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          Upload
+        </button>
+        
+        {/* URL input */}
+        <input
+          type="text"
+          value={isDataUrl ? '' : value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Or paste https:// URL"
+          className={`flex-1 px-3 py-2 bg-zinc-900 border rounded text-sm font-mono text-white focus:border-amber-500/50 outline-none transition-colors ${
+            value && !isDataUrl && !isValidLogoUrl(value)
+              ? 'border-red-500/50'
+              : 'border-zinc-700'
+          }`}
+        />
+      </div>
+      
+      {/* Error message */}
+      {error && (
+        <p className="text-xs text-red-400">{error}</p>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
 // BRANDING TAB
 // =============================================================================
 
@@ -793,7 +915,14 @@ function BrandingTab({
               </div>
             )}
             
-            {field.type === 'url' && (
+            {field.type === 'url' && field.key === 'logo' && (
+              <LogoUploadField
+                value={(branding as Record<string, string>)[field.key] || ''}
+                onChange={(value) => updateBranding(field.key as keyof BrandingConfig, value)}
+              />
+            )}
+            
+            {field.type === 'url' && field.key !== 'logo' && (
               <input
                 type="text"
                 value={(branding as Record<string, string>)[field.key] || ''}

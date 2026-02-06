@@ -11,7 +11,8 @@ import {
   emitEvent,
   EventSystem,
 } from '@/app/_lib/event-logger';
-import { LeadStage } from '@prisma/client';
+import { prisma } from '@/app/_lib/db';
+import { LeadStageDefinition, DEFAULT_LEAD_STAGES } from '@/app/_lib/types';
 import { WorkflowContext, ActionResult, ActionExecutor } from '../types';
 
 // =============================================================================
@@ -68,16 +69,21 @@ const updateLeadStageAction: ActionExecutor = {
     ctx: WorkflowContext,
     params: Record<string, unknown>
   ): Promise<ActionResult> {
-    const stage = params.stage as LeadStage;
+    const stage = params.stage as string;
 
     if (!stage) {
       return { success: false, error: 'Missing stage parameter' };
     }
 
-    // Validate stage value
-    const validStages: LeadStage[] = ['CAPTURED', 'BOOKED', 'PAID', 'DEAD'];
-    if (!validStages.includes(stage)) {
-      return { success: false, error: `Invalid stage: ${stage}` };
+    // Validate stage against workspace's configured stages
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: ctx.workspaceId },
+      select: { leadStages: true },
+    });
+    const stages = (workspace?.leadStages as LeadStageDefinition[] | null) ?? DEFAULT_LEAD_STAGES;
+    const validKeys = stages.map(s => s.key);
+    if (!validKeys.includes(stage)) {
+      return { success: false, error: `Invalid stage: ${stage}. Valid stages: ${validKeys.join(', ')}` };
     }
 
     // Need a lead to update - create one if not exists

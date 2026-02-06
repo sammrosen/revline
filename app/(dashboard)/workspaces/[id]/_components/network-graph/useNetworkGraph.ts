@@ -535,6 +535,7 @@ function buildNetworkGraph(graph: DependencyGraph): {
       color: style.color,
       configured: isBuiltin || (integration?.configured ?? false),
       healthy: isBuiltin || (integration?.healthy ?? false),
+      healthStatus: isBuiltin ? 'GREEN' : (integration?.healthStatus ?? null),
       triggerCount,
       actionCount,
     };
