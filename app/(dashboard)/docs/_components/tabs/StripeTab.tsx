@@ -17,7 +17,7 @@ export function StripeTab() {
           <ol className="text-sm text-zinc-400 space-y-1">
             <li>1. Customer clicks payment link and completes checkout</li>
             <li>2. Stripe sends <code className="text-white">checkout.session.completed</code> webhook</li>
-            <li>3. RevLine validates signature and identifies client</li>
+            <li>3. RevLine validates signature and identifies workspace</li>
             <li>4. Matching workflows execute (update stage, add to groups, etc.)</li>
           </ol>
         </div>
@@ -27,7 +27,7 @@ export function StripeTab() {
       <section>
         <h2 className="text-xl font-semibold mb-4">Prerequisites</h2>
         <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
-          <p className="text-sm text-zinc-400 mb-3">Client needs to set up in Stripe:</p>
+          <p className="text-sm text-zinc-400 mb-3">Set up in Stripe:</p>
           <ol className="space-y-3 text-sm text-zinc-300">
             <li className="flex gap-2">
               <span className="text-zinc-500">1.</span>
@@ -61,9 +61,9 @@ export function StripeTab() {
         <div className="space-y-4">
           <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
             <h3 className="font-medium text-white mb-2">Webhook URL</h3>
-            <CodeBlock>{`https://yourdomain.com/api/stripe-webhook?source=CLIENT_SLUG`}</CodeBlock>
+            <CodeBlock>{`https://yourdomain.com/api/v1/stripe-webhook?source=WORKSPACE_SLUG`}</CodeBlock>
             <p className="text-xs text-zinc-500 mt-2">
-              Replace <code>CLIENT_SLUG</code> with the client&apos;s slug (e.g., <code>acme_fitness</code>)
+              Replace <code>WORKSPACE_SLUG</code> with the workspace slug (e.g., <code>acme_fitness</code>)
             </p>
           </div>
 
@@ -194,7 +194,7 @@ export function StripeTab() {
       <section>
         <h2 className="text-xl font-semibold mb-4">Multi-Product Setup</h2>
         <p className="text-zinc-300 mb-4">
-          For clients with multiple products, use trigger filters to route customers to different groups.
+          For workspaces with multiple products, use trigger filters to route customers to different groups.
         </p>
 
         <h3 className="font-medium text-zinc-300 mb-3">Step 1: Add Metadata to Payment Links</h3>
@@ -284,7 +284,7 @@ Actions:
               <tr className="border-b border-zinc-800/50">
                 <td className="py-3 text-zinc-400">Webhook returns 404</td>
                 <td className="py-3 text-zinc-400">Wrong URL or missing source param</td>
-                <td className="py-3 text-zinc-400">Check URL includes <code>?source=client_slug</code></td>
+                <td className="py-3 text-zinc-400">Check URL includes <code>?source=workspace_slug</code></td>
               </tr>
               <tr className="border-b border-zinc-800/50">
                 <td className="py-3 text-zinc-400">Payment not tracked</td>
@@ -298,6 +298,34 @@ Actions:
               </tr>
             </tbody>
           </table>
+        </div>
+      </section>
+      {/* For Developers */}
+      <section>
+        <h2 className="text-xl font-semibold mb-4">For Developers</h2>
+        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
+          <h3 className="font-medium text-white mb-2">Key Files</h3>
+          <div className="space-y-2 text-sm text-zinc-400">
+            <div>
+              <code className="text-white">app/_lib/integrations/stripe.adapter.ts</code>
+              <p className="text-xs text-zinc-500 mt-1">Stripe adapter &mdash; webhook verification, event parsing, product metadata extraction.</p>
+            </div>
+            <div>
+              <code className="text-white">app/api/v1/stripe-webhook/route.ts</code>
+              <p className="text-xs text-zinc-500 mt-1">Webhook route &mdash; signature verification, workspace lookup, workflow triggering.</p>
+            </div>
+            <div>
+              <code className="text-white">app/_lib/services/webhook.service.ts</code>
+              <p className="text-xs text-zinc-500 mt-1">Shared webhook processing logic with deduplication.</p>
+            </div>
+          </div>
+          <h3 className="font-medium text-white mb-2 mt-4">Key Patterns</h3>
+          <ul className="text-sm text-zinc-400 space-y-1">
+            <li>- Webhook signature verified with <code>crypto.timingSafeEqual</code></li>
+            <li>- Workspace identified by <code>source</code> query param before processing</li>
+            <li>- Product metadata extracted from both payment link metadata and products config</li>
+            <li>- Handler returns 200 even on partial failure to prevent Stripe retries</li>
+          </ul>
         </div>
       </section>
     </div>

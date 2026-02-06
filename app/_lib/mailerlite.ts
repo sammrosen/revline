@@ -29,6 +29,8 @@ interface AddSubscriberParams {
   name?: string;
   groupId: string;
   apiKey: string;
+  /** Custom subscriber fields to set (e.g., { barcode: "ABC123", member_type: "fit1" }) */
+  fields?: Record<string, unknown>;
 }
 
 interface MailerLiteResponse {
@@ -47,10 +49,17 @@ export async function addSubscriberToGroup({
   name,
   groupId,
   apiKey,
+  fields: customFields,
 }: AddSubscriberParams): Promise<MailerLiteResponse> {
   const correlationId = crypto.randomUUID();
   
   try {
+    // Build subscriber fields: name + any custom fields from lead properties
+    const subscriberFields: Record<string, unknown> = {
+      name: name || '',
+      ...customFields,
+    };
+
     const { response, attempts, totalTimeMs } = await resilientFetch(
       `${MAILERLITE_API_URL}/subscribers`,
       {
@@ -63,9 +72,7 @@ export async function addSubscriberToGroup({
         },
         body: JSON.stringify({
           email,
-          fields: {
-            name: name || '',
-          },
+          fields: subscriberFields,
           groups: [groupId],
           status: 'active',
         }),

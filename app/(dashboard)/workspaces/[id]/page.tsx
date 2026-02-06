@@ -24,6 +24,7 @@ async function getWorkspace(id: string) {
             email: true,
             stage: true,
             source: true,
+            properties: true,
             lastEventAt: true,
             createdAt: true,
           },
@@ -133,6 +134,7 @@ export default async function WorkspaceDetailPage({
             domainVerifiedAt: workspace.domainVerifiedAt?.toISOString() ?? null,
           }}
           leadStages={workspace.leadStages as Array<{ key: string; label: string; color: string }> | undefined}
+          leadPropertySchema={workspace.leadPropertySchema as Array<{ key: string; label: string; type: string; required: boolean }> | null}
         />
     </div>
   );

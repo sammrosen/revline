@@ -178,6 +178,14 @@ export interface OperationNodeData {
   phase: 'pre' | 'trigger';
   /** Whether this operation runs in parallel with others */
   parallel?: boolean;
+  /** Whether this node has a left (incoming horizontal) connection */
+  hasLeftConnection?: boolean;
+  /** Whether this node has a right (outgoing horizontal) connection */
+  hasRightConnection?: boolean;
+  /** Whether this node has a top (incoming vertical) connection */
+  hasTopConnection?: boolean;
+  /** Whether this node has a bottom (outgoing vertical) connection */
+  hasBottomConnection?: boolean;
 }
 
 export interface AsyncGapNodeData {

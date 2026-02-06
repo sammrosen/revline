@@ -1,8 +1,12 @@
 export { OverviewTab } from './OverviewTab';
+export { PlatformTab } from './PlatformTab';
+export { OrganizationsTab } from './OrganizationsTab';
+export { FormsTab } from './FormsTab';
 export { WorkflowsTab } from './WorkflowsTab';
 export { MailerLiteTab } from './MailerLiteTab';
 export { StripeTab } from './StripeTab';
 export { CalendlyTab } from './CalendlyTab';
 export { ManyChatTab } from './ManyChatTab';
 export { AbcIgniteTab } from './AbcIgniteTab';
+export { ResendTab } from './ResendTab';
 export { TestingTab } from './TestingTab';

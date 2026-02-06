@@ -27,7 +27,7 @@ export function AbcIgniteTab() {
       <section>
         <h2 className="text-xl font-semibold mb-4">Prerequisites</h2>
         <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
-          <p className="text-sm text-zinc-400 mb-3">Required from client / ABC Ignite:</p>
+          <p className="text-sm text-zinc-400 mb-3">Required from ABC Ignite:</p>
           <ul className="space-y-3 text-sm text-zinc-300">
             <li className="flex gap-2">
               <span className="text-zinc-500">•</span>
@@ -43,7 +43,7 @@ export function AbcIgniteTab() {
             </li>
           </ul>
           <p className="text-xs text-zinc-500 mt-3">
-            Contact ABC Ignite support or the client&apos;s IT admin to get API credentials.
+            Contact ABC Ignite support or the gym&apos;s IT admin to get API credentials.
           </p>
         </div>
       </section>
@@ -346,6 +346,68 @@ Actions:
           The club number is required for all ABC Ignite API calls. Make sure it&apos;s set in the 
           configuration before trying to sync or use any actions.
         </WarningBox>
+      </section>
+
+      {/* Booking System */}
+      <section>
+        <h2 className="text-xl font-semibold mb-4">Booking System (Magic Link)</h2>
+        <p className="text-zinc-300 mb-4">
+          ABC Ignite is the first provider for RevLine&apos;s provider-agnostic booking system. 
+          The <strong>ABC Appointment Booking</strong> form (<code>magic-link-booking</code>) uses 
+          ABC Ignite for the full booking flow.
+        </p>
+        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
+          <h3 className="font-medium text-white mb-3">Booking Flow</h3>
+          <ol className="space-y-2 text-sm text-zinc-300">
+            <li>1. User enters barcode &rarr; <code>abc_ignite.lookup_member</code></li>
+            <li>2. System checks eligibility &rarr; <code>abc_ignite.check_eligibility</code></li>
+            <li>3. User selects time slot &rarr; <code>abc_ignite.check_availability</code></li>
+            <li>4. System sends magic link email &rarr; <code>resend.send_email</code></li>
+            <li>5. User clicks magic link &rarr; re-verifies then <code>abc_ignite.enroll_member</code></li>
+          </ol>
+        </div>
+        <TipBox>
+          The booking system also supports <strong>sync endpoints</strong> for employees and event types. 
+          Use the &quot;Sync from ABC Ignite&quot; button in the structured editor to pull event types, 
+          or the testing panel to call <code>/api/v1/booking/employees</code> and <code>/api/v1/booking/availability</code>.
+        </TipBox>
+        <p className="text-sm text-zinc-400 mt-3">
+          See the <strong>Forms &amp; Sites</strong> tab for full details on the baked-in operations and triggers.
+        </p>
+      </section>
+
+      {/* For Developers */}
+      <section>
+        <h2 className="text-xl font-semibold mb-4">For Developers</h2>
+        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
+          <h3 className="font-medium text-white mb-2">Key Files</h3>
+          <div className="space-y-2 text-sm text-zinc-400">
+            <div>
+              <code className="text-white">app/_lib/integrations/abc-ignite.adapter.ts</code>
+              <p className="text-xs text-zinc-500 mt-1">ABC Ignite adapter &mdash; member lookup, availability, enrollment, waitlist.</p>
+            </div>
+            <div>
+              <code className="text-white">app/_lib/booking/providers/abc-ignite.ts</code>
+              <p className="text-xs text-zinc-500 mt-1">Booking provider implementation for the magic link flow.</p>
+            </div>
+            <div>
+              <code className="text-white">app/_lib/workflow/executors/abc-ignite.ts</code>
+              <p className="text-xs text-zinc-500 mt-1">Workflow executor for ABC Ignite actions.</p>
+            </div>
+            <div>
+              <code className="text-white">app/api/v1/booking/</code>
+              <p className="text-xs text-zinc-500 mt-1">Booking API routes (availability, eligibility, lookup, request, confirm).</p>
+            </div>
+          </div>
+          <h3 className="font-medium text-white mb-2 mt-4">Key Patterns</h3>
+          <ul className="text-sm text-zinc-400 space-y-1">
+            <li>- Magic link tokens are hashed before storage (never stored in plaintext)</li>
+            <li>- Booking confirmation re-verifies eligibility before creating the booking</li>
+            <li>- All booking endpoints return generic responses (no enumeration)</li>
+            <li>- Timing is normalized on security-sensitive endpoints</li>
+            <li>- Club number required in all API calls to ABC Ignite</li>
+          </ul>
+        </div>
       </section>
     </div>
   );

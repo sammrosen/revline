@@ -27,7 +27,7 @@ export function CalendlyTab() {
       <section>
         <h2 className="text-xl font-semibold mb-4">Prerequisites</h2>
         <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
-          <p className="text-sm text-zinc-400 mb-3">Client needs to set up in Calendly:</p>
+          <p className="text-sm text-zinc-400 mb-3">Set up in Calendly:</p>
           <ol className="space-y-3 text-sm text-zinc-300">
             <li className="flex gap-2">
               <span className="text-zinc-500">1.</span>
@@ -58,7 +58,7 @@ export function CalendlyTab() {
             <h3 className="font-medium text-white mb-2">Webhook URL</h3>
             <CodeBlock>{`https://yourdomain.com/api/calendly-webhook`}</CodeBlock>
             <p className="text-xs text-zinc-500 mt-2">
-              Note: Calendly identifies the client via the email domain, not a query parameter
+              Note: Calendly identifies the workspace via the email domain, not a query parameter
             </p>
           </div>
 
@@ -187,10 +187,10 @@ Actions:
         <p className="text-zinc-300 mb-4">
           Add UTM parameters to Calendly links to track where bookings come from.
         </p>
-        <CodeBlock>{`https://calendly.com/yourname/30min?utm_source=CLIENT_SLUG`}</CodeBlock>
+        <CodeBlock>{`https://calendly.com/yourname/30min?utm_source=WORKSPACE_SLUG`}</CodeBlock>
         <TipBox>
           When linking to Calendly from landing pages or emails, include <code>utm_source</code> 
-          with the client slug. This helps identify which client the booking belongs to.
+          with the workspace slug. This helps identify which workspace the booking belongs to.
         </TipBox>
       </section>
 
@@ -214,7 +214,7 @@ Actions:
               </tr>
               <tr className="border-b border-zinc-800/50">
                 <td className="py-3 text-zinc-400">Booking not tracked</td>
-                <td className="py-3 text-zinc-400">Client not identified</td>
+                <td className="py-3 text-zinc-400">Workspace not identified</td>
                 <td className="py-3 text-zinc-400">Check email domain matching or UTM params</td>
               </tr>
               <tr className="border-b border-zinc-800/50">
@@ -224,6 +224,29 @@ Actions:
               </tr>
             </tbody>
           </table>
+        </div>
+      </section>
+      {/* For Developers */}
+      <section>
+        <h2 className="text-xl font-semibold mb-4">For Developers</h2>
+        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
+          <h3 className="font-medium text-white mb-2">Key Files</h3>
+          <div className="space-y-2 text-sm text-zinc-400">
+            <div>
+              <code className="text-white">app/api/v1/calendly-webhook/route.ts</code>
+              <p className="text-xs text-zinc-500 mt-1">Webhook route &mdash; signature verification, workspace identification by email domain.</p>
+            </div>
+            <div>
+              <code className="text-white">app/_lib/services/webhook.service.ts</code>
+              <p className="text-xs text-zinc-500 mt-1">Shared webhook processing with deduplication.</p>
+            </div>
+          </div>
+          <h3 className="font-medium text-white mb-2 mt-4">Key Patterns</h3>
+          <ul className="text-sm text-zinc-400 space-y-1">
+            <li>- Webhook signature verified with timing-safe comparison</li>
+            <li>- Workspace identified by invitee email domain (not query param)</li>
+            <li>- Both <code>invitee.created</code> and <code>invitee.canceled</code> events handled</li>
+          </ul>
         </div>
       </section>
     </div>

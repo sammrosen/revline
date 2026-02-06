@@ -147,10 +147,11 @@ export const MAILERLITE_ADAPTER: AdapterDefinition = {
     add_to_group: {
       name: 'add_to_group',
       label: 'Add to Group',
-      description: 'Add subscriber to a MailerLite group',
+      description: 'Add subscriber to a MailerLite group. Optionally map lead properties to subscriber fields.',
       payloadSchema: CommonPayloadSchema,
       paramsSchema: z.object({
         group: z.string().describe('Group key from client config'),
+        fields: z.record(z.string()).optional().describe('Map MailerLite field names to lead property keys (e.g., { "barcode": "barcode" })'),
       }),
       paramRequirements: {
         group: 'meta.groups', // params.group must be a key in meta.groups
@@ -202,10 +203,22 @@ export const REVLINE_ADAPTER: AdapterDefinition = {
     create_lead: {
       name: 'create_lead',
       label: 'Create/Update Lead',
-      description: 'Create or update a lead record',
+      description: 'Create or update a lead record. Supports capturing custom properties from the trigger payload.',
       payloadSchema: CommonPayloadSchema,
       paramsSchema: z.object({
         source: z.string().optional().describe('Lead source identifier'),
+        properties: z.record(z.unknown()).optional().describe('Explicit property values to set (e.g., { barcode: "ABC123" })'),
+        captureProperties: z.boolean().optional().describe('Auto-extract properties from trigger payload matching workspace schema'),
+      }),
+    },
+    update_lead_properties: {
+      name: 'update_lead_properties',
+      label: 'Update Lead Properties',
+      description: 'Update custom properties on an existing lead. Merges with existing values.',
+      payloadSchema: z.object({ email: z.string().email() }),
+      paramsSchema: z.object({
+        properties: z.record(z.unknown()).optional().describe('Explicit property values to set'),
+        fromPayload: z.boolean().optional().describe('Auto-extract properties from trigger payload'),
       }),
     },
     update_lead_stage: {
@@ -416,13 +429,13 @@ export const RESEND_ADAPTER: AdapterDefinition = {
     send_email: {
       name: 'send_email',
       label: 'Send Email',
-      description: 'Send a transactional email via Resend',
+      description: 'Send a transactional email via Resend. Supports template variables: {{lead.email}}, {{lead.barcode}}, {{payload.name}}, etc.',
       payloadSchema: CommonPayloadSchema.extend({
         email: z.string().email().describe('Recipient email from trigger payload'),
       }),
       paramsSchema: z.object({
-        subject: z.string().describe('Email subject line'),
-        body: z.string().describe('Email body content (HTML supported)'),
+        subject: z.string().describe('Email subject line (supports {{lead.*}}, {{payload.*}} template vars)'),
+        body: z.string().describe('Email body HTML (supports {{lead.*}}, {{payload.*}} template vars)'),
         replyTo: z.string().email().optional().describe('Override reply-to address'),
       }),
     },

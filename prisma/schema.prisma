@@ -86,6 +86,10 @@ model Workspace {
   // Custom lead pipeline stages (JSON array of { key, label, color })
   leadStages        Json      @default("[{\"key\":\"CAPTURED\",\"label\":\"Captured\",\"color\":\"#6B7280\"},{\"key\":\"BOOKED\",\"label\":\"Booked\",\"color\":\"#3B82F6\"},{\"key\":\"PAID\",\"label\":\"Paid\",\"color\":\"#10B981\"},{\"key\":\"DEAD\",\"label\":\"Dead\",\"color\":\"#EF4444\"}]") @map("lead_stages")
 
+  // Custom lead property schema (JSON array of { key, label, type, required })
+  // Defines what custom properties leads in this workspace can have
+  leadPropertySchema Json?    @map("lead_property_schema")
+
   organization       Organization?          @relation(fields: [organizationId], references: [id])
   members            WorkspaceMember[]
   assignments        WorkspaceAssignment[]
@@ -169,6 +173,7 @@ model Lead {
   source      String? // e.g., "landing", "ig_dm"
   stage       String    @default("CAPTURED")
   errorState  String?   @map("error_state")
+  properties  Json?     // Custom lead properties (validated against workspace.leadPropertySchema)
   createdAt   DateTime  @default(now()) @map("created_at")
   lastEventAt DateTime  @default(now()) @map("last_event_at")
 

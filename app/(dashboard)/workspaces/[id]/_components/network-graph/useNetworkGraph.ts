@@ -46,6 +46,17 @@ const GAP_NODE_WIDTH = 120; // Width of async gap node (matches max-w-[120px])
 // Built-in adapters that don't require external integration
 const BUILTIN_ADAPTERS = ['revline', 'capture'];
 
+/** Ensure edge colors are visible on dark backgrounds */
+function getVisibleEdgeColor(hex: string): string {
+  // Parse hex to RGB and check relative luminance
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  // If too dark for the dark background, use zinc-400
+  return luminance < 0.3 ? '#a1a1aa' : hex;
+}
+
 // =============================================================================
 // HOOK
 // =============================================================================
@@ -308,6 +319,9 @@ function buildNetworkGraph(graph: DependencyGraph): {
       const operationId = `${form.id}-op-${op.originalIndex}`;
       const opY = preStackStartY + localIndex * OP_VERTICAL_SPACING;
 
+      const isFirst = localIndex === 0;
+      const isLast = localIndex === preOps.length - 1;
+
       const operationNodeData: OperationNodeData = {
         operationId,
         formId: form.id,
@@ -318,6 +332,10 @@ function buildNetworkGraph(graph: DependencyGraph): {
         sequenceIndex: op.originalIndex,
         phase: 'pre',
         parallel: op.parallel,
+        hasLeftConnection: isFirst, // First op gets horizontal in from form
+        hasRightConnection: isLast, // Last op gets horizontal out to gap/trigger
+        hasTopConnection: !isFirst, // Non-first ops get vertical in from above
+        hasBottomConnection: !isLast, // Non-last ops get vertical out to below
       };
 
       nodes.push({
@@ -329,7 +347,9 @@ function buildNetworkGraph(graph: DependencyGraph): {
 
       const style = getIntegrationStyle(op.adapter);
 
-      if (localIndex === 0) {
+      const edgeColor = getVisibleEdgeColor(style.color);
+
+      if (isFirst) {
         // First op: horizontal edge from form
         edges.push({
           id: `${lastHorizontalNodeId}-to-${operationId}`,
@@ -339,7 +359,7 @@ function buildNetworkGraph(graph: DependencyGraph): {
           targetHandle: 'left',
           type: 'smoothstep',
           animated: true,
-          style: { stroke: style.color, strokeWidth: 2 },
+          style: { stroke: edgeColor, strokeWidth: 2 },
         });
       } else {
         // Subsequent ops: vertical edge from op above
@@ -352,7 +372,7 @@ function buildNetworkGraph(graph: DependencyGraph): {
           targetHandle: 'top',
           type: 'smoothstep',
           animated: true,
-          style: { stroke: style.color, strokeWidth: 2 },
+          style: { stroke: edgeColor, strokeWidth: 2 },
         });
       }
     });
@@ -406,6 +426,9 @@ function buildNetworkGraph(graph: DependencyGraph): {
       const operationId = `${form.id}-op-${op.originalIndex}`;
       const opY = triggerStackStartY + localIndex * OP_VERTICAL_SPACING;
 
+      const isFirst = localIndex === 0;
+      const isLast = localIndex === triggerOps.length - 1;
+
       const operationNodeData: OperationNodeData = {
         operationId,
         formId: form.id,
@@ -416,6 +439,10 @@ function buildNetworkGraph(graph: DependencyGraph): {
         sequenceIndex: op.originalIndex,
         phase: 'trigger',
         parallel: op.parallel,
+        hasLeftConnection: isFirst, // First op gets horizontal in from gap/form
+        hasRightConnection: isLast, // Last op gets horizontal out to revline
+        hasTopConnection: !isFirst, // Non-first ops get vertical in from above
+        hasBottomConnection: !isLast, // Non-last ops get vertical out to below
       };
 
       nodes.push({
@@ -426,8 +453,9 @@ function buildNetworkGraph(graph: DependencyGraph): {
       });
 
       const style = getIntegrationStyle(op.adapter);
+      const edgeColor = getVisibleEdgeColor(style.color);
 
-      if (localIndex === 0) {
+      if (isFirst) {
         // First op: horizontal edge from gap (or form if no pre ops)
         edges.push({
           id: `${lastHorizontalNodeId}-to-${operationId}`,
@@ -437,7 +465,7 @@ function buildNetworkGraph(graph: DependencyGraph): {
           targetHandle: 'left',
           type: 'smoothstep',
           animated: true,
-          style: { stroke: style.color, strokeWidth: 2 },
+          style: { stroke: edgeColor, strokeWidth: 2 },
         });
       } else {
         // Subsequent ops: vertical edge from op above
@@ -450,7 +478,7 @@ function buildNetworkGraph(graph: DependencyGraph): {
           targetHandle: 'top',
           type: 'smoothstep',
           animated: true,
-          style: { stroke: style.color, strokeWidth: 2 },
+          style: { stroke: edgeColor, strokeWidth: 2 },
         });
       }
     });
