@@ -16,13 +16,13 @@ export type TabId =
   | 'resend'
   | 'testing';
 
-interface Tab {
+export interface DocTabItem {
   id: TabId;
   label: string;
   color?: string;
 }
 
-const TABS: Tab[] = [
+export const DOC_TABS: DocTabItem[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'platform', label: 'Platform', color: 'text-amber-400' },
   { id: 'organizations', label: 'Organizations', color: 'text-emerald-400' },
@@ -44,7 +44,7 @@ interface DocTabsProps {
 
 export function DocTabs({ activeTab, onTabChange }: DocTabsProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const activeColor = TABS.find((t) => t.id === activeTab)?.color;
+  const activeColor = DOC_TABS.find((t) => t.id === activeTab)?.color;
 
   // Scroll active tab into view when it changes
   useEffect(() => {
@@ -88,7 +88,7 @@ export function DocTabs({ activeTab, onTabChange }: DocTabsProps) {
           onChange={(e) => onTabChange(e.target.value as TabId)}
           className={`w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:border-zinc-500 ${activeColor || 'text-white'}`}
         >
-          {TABS.map((tab) => (
+          {DOC_TABS.map((tab) => (
             <option key={tab.id} value={tab.id} className="text-white">
               {tab.label}
             </option>
@@ -110,7 +110,7 @@ export function DocTabs({ activeTab, onTabChange }: DocTabsProps) {
           ref={scrollRef}
           className="flex gap-1 overflow-x-auto scrollbar-hide"
         >
-          {TABS.map((tab) => (
+          {DOC_TABS.map((tab) => (
             <button
               key={tab.id}
               data-active={activeTab === tab.id}

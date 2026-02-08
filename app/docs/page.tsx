@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { DocTabs, useDocTabs, type TabId } from './_components/DocTabs';
+import { useDocTabs, type TabId } from './_components/DocTabs';
+import { DocsLayout } from './_components/DocsLayout';
 import { TabNavigator } from './_components/shared';
 import {
   OverviewTab,
@@ -22,34 +23,17 @@ export default function DocsPage() {
   const { activeTab, setActiveTab } = useDocTabs('overview');
 
   return (
-    <div className="min-h-screen p-4 sm:p-8">
-      <div className="max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <Link
-              href="/workspaces"
-              className="text-zinc-400 hover:text-white text-sm mb-2 inline-block"
-            >
-              &larr; Back to Dashboard
-            </Link>
-            <h1 className="text-2xl sm:text-3xl font-bold">RevLine Docs</h1>
-            <p className="text-zinc-400 text-sm mt-1">
-              Reference guide for workspace setup, integrations, and platform architecture
-            </p>
-          </div>
-        </div>
+    <DocsLayout activeTab={activeTab} onTabChange={setActiveTab}>
+      <div className="p-4 sm:p-8 max-w-5xl mx-auto">
+        <p className="text-zinc-400 text-sm mb-6">
+          Reference guide for workspace setup, integrations, and platform architecture
+        </p>
 
-        {/* Tabs */}
-        <DocTabs activeTab={activeTab} onTabChange={setActiveTab} />
-
-        {/* Tab Content */}
         <div className="min-h-[60vh]">
           <TabContent activeTab={activeTab} />
           <TabNavigator activeTab={activeTab} onTabChange={setActiveTab} />
         </div>
 
-        {/* Footer */}
         <div className="mt-12 pt-6 border-t border-zinc-800">
           <div className="flex flex-wrap gap-4 text-sm">
             <Link
@@ -67,7 +51,7 @@ export default function DocsPage() {
           </div>
         </div>
       </div>
-    </div>
+    </DocsLayout>
   );
 }
 

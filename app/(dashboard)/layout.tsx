@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { ServiceWorkerRegistration } from './_components/ServiceWorkerRegistration'
-import { Sidebar } from './_components/sidebar'
+import { DashboardShell } from './_components/DashboardShell'
 import { getUserIdFromHeaders } from '@/app/_lib/auth'
 import { getUserOrgs, getCurrentOrg } from '@/app/_lib/organization-access'
 import { prisma } from '@/app/_lib/db'
@@ -49,17 +49,16 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100">
+    <>
       <ServiceWorkerRegistration />
-      <Sidebar 
-        organizations={organizations} 
+      <DashboardShell
+        organizations={organizations}
         currentOrg={currentOrg}
         user={user}
-      />
-      <main className="flex-1 overflow-auto pl-14 lg:pl-0">
+      >
         {children}
-      </main>
-    </div>
+      </DashboardShell>
+    </>
   )
 }
 
