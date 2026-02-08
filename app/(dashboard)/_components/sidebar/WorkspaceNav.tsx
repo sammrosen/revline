@@ -19,6 +19,7 @@ import { HealthCheckButton } from '@/app/(dashboard)/workspaces/[id]/health-chec
 import { TestSuiteButton } from '@/app/(dashboard)/workspaces/[id]/test-suite-modal';
 import { TestNotificationButton } from '@/app/(dashboard)/workspaces/[id]/test-notification-button';
 import { WorkspaceDangerZoneButton } from '@/app/(dashboard)/workspaces/[id]/workspace-danger-zone-button';
+import { useSidebar } from './SidebarContext';
 
 interface WorkspaceSummary {
   id: string;
@@ -58,6 +59,7 @@ function TabNavItem({
   activeTab,
   workspaceId,
   isOnWorkspacePage,
+  onNavigate,
 }: { 
   tabId: TabId;
   icon: typeof Workflow;
@@ -66,11 +68,13 @@ function TabNavItem({
   activeTab: TabId;
   workspaceId: string;
   isOnWorkspacePage: boolean;
+  onNavigate: () => void;
 }) {
   const router = useRouter();
   const isActive = isOnWorkspacePage && activeTab === tabId;
 
   const handleClick = () => {
+    onNavigate();
     if (isOnWorkspacePage) {
       // Already on workspace page, just update hash
       window.location.hash = tabId;
@@ -150,6 +154,7 @@ function ActionsNavItem({
 export function WorkspaceNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const { closeMobileSidebar } = useSidebar();
   const dropdownRef = useRef<HTMLDivElement>(null);
   
   const [activeTab, setActiveTab] = useState<TabId>('workflows');
@@ -275,7 +280,7 @@ export function WorkspaceNav() {
     return () => window.removeEventListener('hashchange', syncHash);
   }, [isOnWorkspacePage]);
 
-  // Handle workspace selection from dropdown
+  // Handle workspace selection from dropdown (only close dropdown, not sidebar)
   const handleSelectWorkspace = (workspace: WorkspaceListItem) => {
     setSelectedWorkspaceId(workspace.id);
     setIsDropdownOpen(false);
@@ -371,6 +376,7 @@ export function WorkspaceNav() {
                   activeTab={activeTab}
                   workspaceId={effectiveWorkspaceId}
                   isOnWorkspacePage={isOnWorkspacePage && urlWorkspaceId === effectiveWorkspaceId}
+                  onNavigate={closeMobileSidebar}
                 />
               ))}
               {/* Actions Dropdown */}

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LucideIcon } from 'lucide-react';
+import { useSidebar } from './SidebarContext';
 
 interface NavItemProps {
   href: string;
@@ -14,6 +15,7 @@ interface NavItemProps {
 
 export function NavItem({ href, icon: Icon, label, exact = false }: NavItemProps) {
   const pathname = usePathname();
+  const { closeMobileSidebar } = useSidebar();
   
   const isActive = exact 
     ? pathname === href 
@@ -22,6 +24,7 @@ export function NavItem({ href, icon: Icon, label, exact = false }: NavItemProps
   return (
     <Link
       href={href}
+      onClick={closeMobileSidebar}
       className={`
         flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
         ${isActive 

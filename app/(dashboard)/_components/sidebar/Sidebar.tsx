@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { 
   Layers, 
   FileText, 
@@ -9,9 +8,9 @@ import {
   Settings,
   BookOpen,
   Rocket,
-  Menu,
   X,
 } from 'lucide-react';
+import { SidebarProvider, useSidebar } from './SidebarContext';
 import { OrgSwitcher } from './OrgSwitcher';
 import { NavSection } from './NavSection';
 import { NavItem } from './NavItem';
@@ -36,8 +35,8 @@ interface SidebarProps {
   user: User | null;
 }
 
-export function Sidebar({ organizations, currentOrg, user }: SidebarProps) {
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+export function SidebarContent({ organizations, currentOrg, user }: SidebarProps) {
+  const { isMobileOpen, setIsMobileOpen } = useSidebar();
 
   const sidebarContent = (
     <div className="flex flex-col h-full">
@@ -83,14 +82,6 @@ export function Sidebar({ organizations, currentOrg, user }: SidebarProps) {
 
   return (
     <>
-      {/* Mobile Menu Button */}
-      <button
-        onClick={() => setIsMobileOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
-      >
-        <Menu className="w-5 h-5" />
-      </button>
-
       {/* Mobile Overlay */}
       {isMobileOpen && (
         <div 
@@ -121,5 +112,14 @@ export function Sidebar({ organizations, currentOrg, user }: SidebarProps) {
         {sidebarContent}
       </aside>
     </>
+  );
+}
+
+/** Standalone sidebar with its own provider (e.g. for tests). Dashboard layout uses DashboardShell + SidebarContent instead. */
+export function Sidebar(props: SidebarProps) {
+  return (
+    <SidebarProvider>
+      <SidebarContent {...props} />
+    </SidebarProvider>
   );
 }
