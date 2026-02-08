@@ -130,7 +130,6 @@ async function resolveCustomDomain(hostname: string): Promise<string | null> {
 const PROTECTED_PAGE_PREFIXES = [
   '/workspaces',
   '/settings',
-  '/docs',
   '/onboarding',
   '/templates',
 ];
