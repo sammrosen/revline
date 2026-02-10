@@ -21,8 +21,10 @@ Sentry.init({
   // Only enable in production
   enabled: process.env.NODE_ENV === 'production',
   
-  // Sample 10% of transactions for performance monitoring
-  tracesSampleRate: 0.1,
+  // Disable performance tracing — trace span buffering causes memory
+  // pressure that compounds with frequent cron runs, leading to OOM kills.
+  // Re-enable at 0.01–0.05 once memory is stable post-launch.
+  tracesSampleRate: 0,
   
   // Capture 100% of errors
   sampleRate: 1.0,
