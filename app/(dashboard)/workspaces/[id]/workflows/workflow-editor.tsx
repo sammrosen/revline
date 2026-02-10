@@ -641,6 +641,7 @@ export function WorkflowEditor({
                 configuredIntegrations={configuredIntegrations}
                 mailerliteGroups={mailerliteGroups}
                 leadStages={leadStages}
+                leadPropertySchema={leadPropertySchema}
                 workspaceId={workspaceId}
                 triggerAdapter={triggerAdapter}
                 triggerOperation={triggerOperation}
@@ -781,6 +782,7 @@ interface ActionEditorProps {
   configuredIntegrations: string[];
   mailerliteGroups: Record<string, { id: string; name: string }>;
   leadStages?: Array<{ key: string; label: string; color: string }>;
+  leadPropertySchema?: LeadPropertyDefinition[] | null;
   workspaceId: string;
   triggerAdapter: string;
   triggerOperation: string;
@@ -797,6 +799,7 @@ function ActionEditor({
   configuredIntegrations,
   mailerliteGroups,
   leadStages,
+  leadPropertySchema,
   workspaceId,
   triggerAdapter,
   triggerOperation,
@@ -905,23 +908,77 @@ function ActionEditor({
 
       {/* Action-specific params */}
       {action.adapter === 'mailerlite' && action.operation === 'add_to_group' && (
-        <div>
-          <label className="block text-xs font-medium text-zinc-500 mb-1">
-            Group
-          </label>
-          <select
-            value={(action.params.group as string) || ''}
-            onChange={(e) => onParamChange(index, 'group', e.target.value)}
-            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm focus:outline-none focus:border-zinc-600"
-          >
-            <option value="">Select group...</option>
-            {Object.entries(mailerliteGroups).map(([key, group]) => (
-              <option key={key} value={key}>
-                {group.name} ({key})
-              </option>
-            ))}
-          </select>
-        </div>
+        <>
+          <div>
+            <label className="block text-xs font-medium text-zinc-500 mb-1">
+              Group
+            </label>
+            <select
+              value={(action.params.group as string) || ''}
+              onChange={(e) => onParamChange(index, 'group', e.target.value)}
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm focus:outline-none focus:border-zinc-600"
+            >
+              <option value="">Select group...</option>
+              {Object.entries(mailerliteGroups).map(([key, group]) => (
+                <option key={key} value={key}>
+                  {group.name} ({key})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Sync Fields — push lead properties to MailerLite subscriber fields */}
+          {leadPropertySchema && leadPropertySchema.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-zinc-500 mb-1.5">
+                Sync Fields (optional)
+              </label>
+              <p className="text-xs text-zinc-600 mb-2">
+                Selected lead properties will be pushed to matching MailerLite subscriber fields on every run.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {leadPropertySchema.map((prop) => {
+                  const currentFields = (action.params.fields as Record<string, string>) || {};
+                  const isSelected = prop.key in currentFields;
+
+                  return (
+                    <button
+                      key={prop.key}
+                      type="button"
+                      onClick={() => {
+                        const newFields = { ...currentFields };
+                        if (isSelected) {
+                          delete newFields[prop.key];
+                        } else {
+                          newFields[prop.key] = prop.key;
+                        }
+                        // If empty, remove the fields param entirely
+                        if (Object.keys(newFields).length === 0) {
+                          onParamChange(index, 'fields', undefined);
+                        } else {
+                          onParamChange(index, 'fields', newFields);
+                        }
+                      }}
+                      className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                        isSelected
+                          ? 'bg-green-500/20 border-green-500/50 text-green-400'
+                          : 'bg-zinc-900 border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
+                      }`}
+                    >
+                      {isSelected && <span className="mr-1">&#10003;</span>}
+                      {prop.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {Object.keys((action.params.fields as Record<string, string>) || {}).length > 0 && (
+                <p className="text-xs text-zinc-600 mt-2">
+                  Ensure these fields exist in MailerLite with matching names.
+                </p>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {action.adapter === 'mailerlite' && action.operation === 'remove_from_group' && (

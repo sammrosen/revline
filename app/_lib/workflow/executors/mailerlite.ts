@@ -75,6 +75,11 @@ const addToGroup: ActionExecutor = {
       }
     }
 
+    // Auto-create any missing subscriber fields in MailerLite
+    if (subscriberFields && Object.keys(subscriberFields).length > 0) {
+      await adapter.ensureFieldsExist(Object.keys(subscriberFields));
+    }
+
     // Add subscriber to group with optional custom fields
     const result = await adapter.addToGroup(ctx.email, group.id, ctx.name, subscriberFields);
 
