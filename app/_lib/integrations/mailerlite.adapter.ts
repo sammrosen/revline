@@ -21,6 +21,8 @@ import {
   getMailerLiteGroups,
   getAllAutomations,
   getAutomationsByGroup,
+  getMailerLiteFields,
+  createMailerLiteField,
   MailerLiteGroup,
   Automation,
 } from '@/app/_lib/mailerlite';
@@ -190,6 +192,34 @@ export class MailerLiteAdapter extends BaseIntegrationAdapter<MailerLiteMeta> {
         error: error instanceof Error ? error.message : 'Unknown',
       });
       return this.error('Failed to fetch automations for group');
+    }
+  }
+
+  /**
+   * Ensure subscriber fields exist in MailerLite, creating any that are missing.
+   * Fields default to type "text" which covers most use cases (barcodes, names, phones, etc.).
+   */
+  async ensureFieldsExist(fieldNames: string[]): Promise<void> {
+    if (fieldNames.length === 0) return;
+
+    try {
+      const existingFields = await getMailerLiteFields(this.getApiKey());
+      const existingKeys = new Set(existingFields.map(f => f.key));
+
+      for (const name of fieldNames) {
+        // MailerLite auto-generates the key from the name (e.g., "Barcode" → "barcode")
+        // Check both the raw name and a snake_case version
+        if (!existingKeys.has(name) && !existingKeys.has(name.toLowerCase())) {
+          await createMailerLiteField(this.getApiKey(), name, 'text');
+        }
+      }
+    } catch (error) {
+      // Non-fatal: log and continue — subscriber upsert may still work if fields exist
+      console.error('MailerLite ensureFieldsExist error:', {
+        clientId: this.clientId,
+        fieldNames,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
     }
   }
 

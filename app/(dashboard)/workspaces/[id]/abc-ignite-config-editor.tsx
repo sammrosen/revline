@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { FieldCompatibilityCheck } from './_components/field-compatibility';
 
 /**
  * Event type from ABC Ignite API (sync response)
@@ -45,6 +46,9 @@ interface AbcIgniteMeta {
     name: string;
     title?: string;
   }>;
+  memberSync?: {
+    enabled: boolean;
+  };
 }
 
 interface AbcIgniteConfigEditorProps {
@@ -53,6 +57,8 @@ interface AbcIgniteConfigEditorProps {
   error?: string;
   /** Integration ID for sync API calls (only available in Edit mode) */
   integrationId?: string;
+  /** Workspace ID for field compatibility checking */
+  workspaceId?: string;
 }
 
 /**
@@ -81,6 +87,7 @@ function parseMeta(value: string): AbcIgniteMeta {
       defaultEmployeeId: parsed.defaultEmployeeId || '',
       eventTypes: parsed.eventTypes || {},
       employees: parsed.employees || {},
+      memberSync: parsed.memberSync || undefined,
     };
   } catch {
     return DEFAULT_CONFIG;
@@ -112,6 +119,7 @@ export function AbcIgniteConfigEditor({
   onChange,
   error: externalError,
   integrationId,
+  workspaceId,
 }: AbcIgniteConfigEditorProps) {
   const [isJsonMode, setIsJsonMode] = useState(false);
   const [jsonText, setJsonText] = useState(value);
@@ -158,6 +166,9 @@ export function AbcIgniteConfigEditor({
       if (meta.employees && Object.keys(meta.employees).length > 0) {
         output.employees = meta.employees;
       }
+      if (meta.memberSync) {
+        output.memberSync = meta.memberSync;
+      }
       const newJson = JSON.stringify(output, null, 2);
       onChange(newJson);
     }
@@ -180,6 +191,9 @@ export function AbcIgniteConfigEditor({
     if (meta.employees && Object.keys(meta.employees).length > 0) {
       output.employees = meta.employees;
     }
+    if (meta.memberSync) {
+      output.memberSync = meta.memberSync;
+    }
     setJsonText(JSON.stringify(output, null, 2));
     setIsJsonMode(true);
     setJsonError(null);
@@ -195,6 +209,7 @@ export function AbcIgniteConfigEditor({
         defaultEmployeeId: parsed.defaultEmployeeId || '',
         eventTypes: parsed.eventTypes || {},
         employees: parsed.employees || {},
+        memberSync: parsed.memberSync || undefined,
       });
       setIsJsonMode(false);
       setJsonError(null);
@@ -698,6 +713,57 @@ export function AbcIgniteConfigEditor({
             Find this in your ABC Ignite admin dashboard
           </p>
         </div>
+      </div>
+
+      {/* Member Sync */}
+      <div className="p-4 bg-zinc-950 rounded border border-zinc-800">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-zinc-300">Member Sync</h4>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Automatically detect new ABC members every hour
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMeta(prev => ({
+              ...prev,
+              memberSync: { enabled: !prev.memberSync?.enabled },
+            }))}
+            className={`w-10 h-5 rounded-full relative transition-colors ${
+              meta.memberSync?.enabled ? 'bg-orange-500' : 'bg-zinc-700'
+            }`}
+          >
+            <span 
+              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                meta.memberSync?.enabled ? 'left-5' : 'left-0.5'
+              }`}
+            />
+          </button>
+        </div>
+        {meta.memberSync?.enabled && (
+          <div className="mt-3 space-y-3">
+            <div className="p-3 bg-zinc-900/50 rounded border border-zinc-800/50">
+              <p className="text-xs text-zinc-400">
+                RevLine will check ABC Ignite hourly for new members and emit a{' '}
+                <span className="font-mono text-orange-400">new_member</span>{' '}
+                workflow trigger for each one. Create a workflow with the{' '}
+                <span className="font-medium text-zinc-300">&quot;New Member Detected&quot;</span>{' '}
+                trigger to auto-create leads with their info.
+              </p>
+              <p className="text-xs text-zinc-500 mt-2">
+                Payload fields: <span className="font-mono">email</span>, <span className="font-mono">first_name</span>, <span className="font-mono">last_name</span>, <span className="font-mono">phone</span>, <span className="font-mono">barcode</span>, <span className="font-mono">member_id</span>
+              </p>
+            </div>
+            {workspaceId && (
+              <FieldCompatibilityCheck
+                workspaceId={workspaceId}
+                adapter="abc_ignite"
+                operation="new_member"
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {/* Event Types */}

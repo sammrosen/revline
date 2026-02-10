@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { DEFAULT_LEAD_STAGES, LeadStageDefinition } from '@/app/_lib/types';
+import { DEFAULT_LEAD_STAGES, LeadStageDefinition, LeadPropertyDefinition } from '@/app/_lib/types';
+import { LeadPropertiesEditor } from './_components/lead-properties-editor';
 
 /**
  * Workspace Settings Component
@@ -36,6 +37,7 @@ interface WorkspaceSettingsProps {
   currentTimezone: string;
   domainConfig?: DomainConfig;
   leadStages?: LeadStageDefinition[];
+  leadPropertySchema?: LeadPropertyDefinition[] | null;
 }
 
 export function WorkspaceSettings({ 
@@ -43,6 +45,7 @@ export function WorkspaceSettings({
   currentTimezone,
   domainConfig,
   leadStages: initialLeadStages,
+  leadPropertySchema,
 }: WorkspaceSettingsProps) {
   // Timezone state
   const [timezone, setTimezone] = useState(currentTimezone);
@@ -548,6 +551,12 @@ export function WorkspaceSettings({
         )}
       </div>
 
+      {/* Lead Properties */}
+      <LeadPropertiesEditor
+        workspaceId={workspaceId}
+        leadPropertySchema={leadPropertySchema}
+      />
+
       {/* Info */}
       <div className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-lg">
         <h4 className="text-sm font-medium text-zinc-300 mb-2">About Settings</h4>
@@ -556,6 +565,7 @@ export function WorkspaceSettings({
           <li>• Custom domains require DNS configuration (CNAME and TXT records)</li>
           <li>• Domain verification proves you own the domain</li>
           <li>• Lead stages define your pipeline. CAPTURED is always the default for new leads.</li>
+          <li>• Lead properties define custom fields on leads. They appear as columns in the Leads tab.</li>
         </ul>
       </div>
     </div>

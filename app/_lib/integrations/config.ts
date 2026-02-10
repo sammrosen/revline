@@ -220,11 +220,13 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
       { key: 'clubNumber', description: 'ABC Ignite club/location number', required: true },
       { key: 'eventTypes.*', description: 'Synced event types with category (use Sync button after saving)' },
       { key: 'defaultEventTypeId', description: 'Default event type key for workflows' },
+      { key: 'memberSync.enabled', description: 'Enable hourly new member sync' },
     ],
     tips: [
       'Add your App ID and App Key, then use "Sync from ABC Ignite" to fetch event types',
       'Event types include their category (appointment vs event) from the sync',
       'Set a default event type for workflows that don\'t specify one',
+      'Enable Member Sync to auto-detect new ABC members hourly — pair with a "New Member Detected" workflow',
     ],
     warnings: [
       'Club number is required for all API calls',

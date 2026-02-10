@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Trash2, Loader2 } from 'lucide-react';
 import { DEFAULT_LEAD_STAGES, LeadStageDefinition, LeadPropertyDefinition } from '@/app/_lib/types';
 
 interface Lead {
@@ -14,6 +16,7 @@ interface Lead {
 }
 
 interface LeadsViewProps {
+  workspaceId: string;
   leads: Lead[];
   leadStages?: LeadStageDefinition[];
   leadPropertySchema?: LeadPropertyDefinition[] | null;
@@ -52,14 +55,34 @@ function formatPropertyValue(value: unknown): string {
   return String(value);
 }
 
-export function LeadsView({ leads, leadStages, leadPropertySchema }: LeadsViewProps) {
+export function LeadsView({ workspaceId, leads, leadStages, leadPropertySchema }: LeadsViewProps) {
+  const router = useRouter();
   const stages = leadStages ?? DEFAULT_LEAD_STAGES;
   const propertyDefs = leadPropertySchema ?? [];
   const [selectedStage, setSelectedStage] = useState<string>('ALL');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   
   // Capture current time once using useState lazy initialization
   // This avoids calling Date.now() during render
   const [now] = useState(() => Date.now());
+
+  const handleDelete = useCallback(async (leadId: string, email: string) => {
+    if (!confirm(`Delete lead "${email}"? This also removes their events and cannot be undone.`)) return;
+    setDeletingId(leadId);
+    try {
+      const res = await fetch(`/api/v1/workspaces/${workspaceId}/leads/${leadId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Failed to delete lead');
+        return;
+      }
+      router.refresh();
+    } catch {
+      alert('Failed to delete lead');
+    } finally {
+      setDeletingId(null);
+    }
+  }, [workspaceId, router]);
 
   const filteredLeads = selectedStage === 'ALL' 
     ? leads 
@@ -130,6 +153,7 @@ export function LeadsView({ leads, leadStages, leadPropertySchema }: LeadsViewPr
                   ))}
                   <th className="px-4 py-2 font-medium">Last Activity</th>
                   <th className="px-4 py-2 font-medium">Captured</th>
+                  <th className="px-4 py-2 font-medium w-10"></th>
                 </tr>
               </thead>
               <tbody>
@@ -167,6 +191,20 @@ export function LeadsView({ leads, leadStages, leadPropertySchema }: LeadsViewPr
                       </td>
                       <td className="px-4 py-2 text-zinc-500 whitespace-nowrap">
                         {formatDate(lead.createdAt)}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <button
+                          onClick={() => handleDelete(lead.id, lead.email)}
+                          disabled={deletingId === lead.id}
+                          className="p-1 text-zinc-600 hover:text-red-400 transition-colors disabled:opacity-50"
+                          title="Delete lead"
+                        >
+                          {deletingId === lead.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
                       </td>
                     </tr>
                   );

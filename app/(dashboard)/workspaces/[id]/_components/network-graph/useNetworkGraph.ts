@@ -357,7 +357,7 @@ function buildNetworkGraph(graph: DependencyGraph): {
           sourceHandle: lastHorizontalSourceHandle,
           target: operationId,
           targetHandle: 'left',
-          type: 'smoothstep',
+          type: 'default',
           animated: true,
           style: { stroke: edgeColor, strokeWidth: 2 },
         });
@@ -370,7 +370,7 @@ function buildNetworkGraph(graph: DependencyGraph): {
           sourceHandle: 'bottom',
           target: operationId,
           targetHandle: 'top',
-          type: 'smoothstep',
+          type: 'default',
           animated: true,
           style: { stroke: edgeColor, strokeWidth: 2 },
         });
@@ -408,7 +408,7 @@ function buildNetworkGraph(graph: DependencyGraph): {
         source: lastHorizontalNodeId,
         sourceHandle: lastHorizontalSourceHandle,
         target: gapId,
-        type: 'smoothstep',
+        type: 'default',
         animated: false,
         style: { stroke: '#71717a', strokeWidth: 2, strokeDasharray: '5,5' },
       });
@@ -463,7 +463,7 @@ function buildNetworkGraph(graph: DependencyGraph): {
           sourceHandle: lastHorizontalSourceHandle,
           target: operationId,
           targetHandle: 'left',
-          type: 'smoothstep',
+          type: 'default',
           animated: true,
           style: { stroke: edgeColor, strokeWidth: 2 },
         });
@@ -476,7 +476,7 @@ function buildNetworkGraph(graph: DependencyGraph): {
           sourceHandle: 'bottom',
           target: operationId,
           targetHandle: 'top',
-          type: 'smoothstep',
+          type: 'default',
           animated: true,
           style: { stroke: edgeColor, strokeWidth: 2 },
         });
@@ -625,40 +625,28 @@ function calculateIntegrationPositions(
   // Spacing between integration columns (node width + gap)
   const integrationColumnSpacing = INTEGRATION_NODE_WIDTH + COLUMN_GAP;
 
-  // Use forms height as reference, with minimum based on integration count
-  const maxItems = Math.max(triggerOnly.length, bidirectional.length, actionOnly.length, 1);
-  const integrationsHeight = maxItems * ROW_SPACING;
-  const totalHeight = Math.max(formsHeight, integrationsHeight);
+  // All integration nodes share one vertical space anchored to the forms area.
+  // Stack all categories into a single vertical list per column, centered
+  // within the forms height so nothing floats above/below the main graph.
 
-  // Position trigger-only (first integration column - this includes revline)
-  const triggerStackHeight = triggerOnly.length * ROW_SPACING;
-  const triggerStartY = (totalHeight - triggerStackHeight) / 2;
-  triggerOnly.forEach((key, index) => {
-    positions.set(key, {
-      x: xOffset,
-      y: triggerStartY + index * ROW_SPACING,
-    });
-  });
+  const allCategories = [
+    { keys: triggerOnly, col: 0 },
+    { keys: bidirectional, col: 1 },
+    { keys: actionOnly, col: 2 },
+  ];
 
-  // Position bidirectional (center integration column)
-  const bidirectionalStackHeight = bidirectional.length * ROW_SPACING;
-  const bidirectionalStartY = (totalHeight - bidirectionalStackHeight) / 2;
-  bidirectional.forEach((key, index) => {
-    positions.set(key, {
-      x: xOffset + integrationColumnSpacing,
-      y: bidirectionalStartY + index * ROW_SPACING,
+  for (const { keys, col } of allCategories) {
+    if (keys.length === 0) continue;
+    const stackHeight = keys.length * ROW_SPACING;
+    // Clamp vertical start: center within forms height, but never go negative
+    const startY = Math.max(0, (formsHeight - stackHeight) / 2);
+    keys.forEach((key, index) => {
+      positions.set(key, {
+        x: xOffset + integrationColumnSpacing * col,
+        y: startY + index * ROW_SPACING,
+      });
     });
-  });
-
-  // Position action-only (right integration column)
-  const actionStackHeight = actionOnly.length * ROW_SPACING;
-  const actionStartY = (totalHeight - actionStackHeight) / 2;
-  actionOnly.forEach((key, index) => {
-    positions.set(key, {
-      x: xOffset + integrationColumnSpacing * 2,
-      y: actionStartY + index * ROW_SPACING,
-    });
-  });
+  }
 
   return positions;
 }

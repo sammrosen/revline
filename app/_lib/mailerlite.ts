@@ -354,3 +354,84 @@ export async function getAutomationsByGroup(
     return [];
   }
 }
+
+// =============================================================================
+// SUBSCRIBER FIELDS
+// =============================================================================
+
+export interface MailerLiteField {
+  id: string;
+  name: string;
+  key: string;
+  type: string; // 'text' | 'number' | 'date'
+}
+
+/**
+ * Get all subscriber fields from a MailerLite account
+ */
+export async function getMailerLiteFields(apiKey: string): Promise<MailerLiteField[]> {
+  try {
+    const { response } = await resilientFetch(
+      `${MAILERLITE_API_URL}/fields?limit=100`,
+      {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'X-Version': API_VERSION,
+        },
+      },
+      MAILERLITE_FETCH_OPTIONS
+    );
+
+    if (!response.ok) {
+      console.error('MailerLite fields API error:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error('Failed to fetch MailerLite fields:', error);
+    return [];
+  }
+}
+
+/**
+ * Create a new subscriber field in MailerLite
+ * Returns the created field, or null on failure.
+ */
+export async function createMailerLiteField(
+  apiKey: string,
+  name: string,
+  type: 'text' | 'number' | 'date' = 'text'
+): Promise<MailerLiteField | null> {
+  try {
+    const { response } = await resilientFetch(
+      `${MAILERLITE_API_URL}/fields`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'X-Version': API_VERSION,
+        },
+        body: JSON.stringify({ name, type }),
+      },
+      MAILERLITE_FETCH_OPTIONS
+    );
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      console.error('MailerLite create field error:', response.status, data);
+      return null;
+    }
+
+    const data = await response.json();
+    return data.data || null;
+  } catch (error) {
+    console.error('Failed to create MailerLite field:', error);
+    return null;
+  }
+}

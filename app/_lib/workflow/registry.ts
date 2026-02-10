@@ -329,7 +329,24 @@ export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
     secrets: ['App ID', 'App Key'],
     metaKeys: ['clubNumber'],
   },
-  triggers: {}, // No triggers for now - will add if ABC Ignite supports webhooks
+  triggers: {
+    new_member: {
+      name: 'new_member',
+      label: 'New Member Detected',
+      description: 'Fires when a new member is detected via hourly sync (requires Member Sync enabled in ABC config)',
+      payloadSchema: z.object({
+        email: z.string().email(),
+        first_name: z.string().optional(),
+        last_name: z.string().optional(),
+        phone: z.string().optional(),
+        barcode: z.string().optional(),
+        member_id: z.string().optional(),
+        member_status: z.string().optional(),
+        home_club: z.string().optional(),
+        gender: z.string().optional(),
+      }),
+    },
+  },
   actions: {
     // =========================================================================
     // MEMBER LOOKUP
