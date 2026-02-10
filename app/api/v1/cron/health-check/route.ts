@@ -121,62 +121,114 @@ async function checkIntegrationHealth(): Promise<CheckResult> {
     const now = new Date();
     const fourHoursAgo = new Date(now.getTime() - FOUR_HOURS_MS);
 
+    // Collect all integrations that need failure checks
+    type IntegrationRef = {
+      workspaceName: string;
+      workspaceId: string;
+      integrationId: string;
+      integrationName: string;
+      previousStatus: HealthStatus;
+      eventSystem: EventSystem | null;
+    };
+    const refs: IntegrationRef[] = [];
+
     for (const workspace of workspaces) {
+      for (const integration of workspace.integrations) {
+        refs.push({
+          workspaceName: workspace.name,
+          workspaceId: workspace.id,
+          integrationId: integration.id,
+          integrationName: integration.integration,
+          previousStatus: integration.healthStatus,
+          eventSystem: getEventSystemForIntegration(integration.integration),
+        });
+      }
+    }
+
+    // Batch: get last 3 events per (workspace, system) in one query
+    // Only query for integrations that have a mapped event system
+    const systemRefs = refs.filter(r => r.eventSystem !== null);
+    const failureMap = new Map<string, boolean>(); // "workspaceId:system" → has3ConsecutiveFailures
+
+    if (systemRefs.length > 0) {
+      // Single query: get recent failure events for all integrations at once
+      const recentEvents = await prisma.event.findMany({
+        where: {
+          OR: systemRefs.map(r => ({
+            workspaceId: r.workspaceId,
+            system: r.eventSystem!,
+          })),
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { workspaceId: true, system: true, success: true, createdAt: true },
+        // Generous limit: 3 per integration, capped at reasonable total
+        take: systemRefs.length * 3,
+      });
+
+      // Group by workspace+system and check for 3 consecutive failures
+      const grouped = new Map<string, boolean[]>();
+      for (const evt of recentEvents) {
+        const key = `${evt.workspaceId}:${evt.system}`;
+        const arr = grouped.get(key) ?? [];
+        if (arr.length < 3) {
+          arr.push(evt.success);
+          grouped.set(key, arr);
+        }
+      }
+
+      for (const [key, successes] of grouped) {
+        failureMap.set(key, successes.length >= 3 && successes.every(s => !s));
+      }
+    }
+
+    // Now evaluate each integration using pre-fetched data
+    for (const ref of refs) {
       try {
-        for (const integration of workspace.integrations) {
-          const previousStatus = integration.healthStatus;
-          let newStatus: HealthStatus = HealthStatus.GREEN;
-          let issue: string | undefined;
+        let newStatus: HealthStatus = HealthStatus.GREEN;
+        let issue: string | undefined;
 
-          // Silence check — no extra query, uses the row's lastSeenAt
-          if (integration.lastSeenAt && integration.lastSeenAt < fourHoursAgo) {
-            newStatus = HealthStatus.YELLOW;
-            issue = `${workspace.name}: ${integration.integration} silent for 4+ hours`;
+        // Silence check — uses the integration row's lastSeenAt (already loaded)
+        const integration = workspaces
+          .find(w => w.id === ref.workspaceId)!
+          .integrations.find(i => i.id === ref.integrationId)!;
+
+        if (integration.lastSeenAt && integration.lastSeenAt < fourHoursAgo) {
+          newStatus = HealthStatus.YELLOW;
+          issue = `${ref.workspaceName}: ${ref.integrationName} silent for 4+ hours`;
+        }
+
+        // Consecutive failure check — from batch query results
+        if (ref.eventSystem) {
+          const key = `${ref.workspaceId}:${ref.eventSystem}`;
+          if (failureMap.get(key)) {
+            newStatus = HealthStatus.RED;
+            issue = `${ref.workspaceName}: ${ref.integrationName} has 3+ consecutive failures`;
           }
+        }
 
-          // Consecutive failure check — small targeted query per integration
-          const eventSystem = getEventSystemForIntegration(integration.integration);
-          if (eventSystem) {
-            const recentEvents = await prisma.event.findMany({
-              where: {
-                workspaceId: workspace.id,
-                system: eventSystem,
-              },
-              orderBy: { createdAt: 'desc' },
-              take: 3,
-              select: { success: true },
-            });
+        // Update DB if status changed
+        if (newStatus !== ref.previousStatus) {
+          await prisma.workspaceIntegration.update({
+            where: { id: ref.integrationId },
+            data: { healthStatus: newStatus },
+          });
 
-            if (recentEvents.length >= 3 && recentEvents.every(e => !e.success)) {
-              newStatus = HealthStatus.RED;
-              issue = `${workspace.name}: ${integration.integration} has 3+ consecutive failures`;
-            }
-          }
+          await emitEvent({
+            workspaceId: ref.workspaceId,
+            system: EventSystem.CRON,
+            eventType: 'health_status_changed',
+            success: true,
+            errorMessage: `${ref.integrationName}: ${ref.previousStatus} → ${newStatus}`,
+          });
+        }
 
-          // Update DB if status changed
-          if (newStatus !== previousStatus) {
-            await prisma.workspaceIntegration.update({
-              where: { id: integration.id },
-              data: { healthStatus: newStatus },
-            });
-
-            await emitEvent({
-              workspaceId: workspace.id,
-              system: EventSystem.CRON,
-              eventType: 'health_status_changed',
-              success: true,
-              errorMessage: `${integration.integration}: ${previousStatus} → ${newStatus}`,
-            });
-          }
-
-          if (issue) {
-            issues.push(issue);
-          }
+        if (issue) {
+          issues.push(issue);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown';
-        log('checkIntegrationHealth: workspace error', { workspaceId: workspace.id, error: msg });
-        issues.push(`${workspace.name}: check failed — ${msg}`);
+        log('checkIntegrationHealth: integration error', { integrationId: ref.integrationId, error: msg });
+        issues.push(`${ref.workspaceName}: ${ref.integrationName} check failed — ${msg}`);
       }
     }
 
@@ -356,7 +408,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const startTime = Date.now();
-  log('Health check starting');
+  const memBefore = process.memoryUsage();
+  log('Health check starting', {
+    memoryMB: {
+      rss: Math.round(memBefore.rss / 1024 / 1024),
+      heapUsed: Math.round(memBefore.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(memBefore.heapTotal / 1024 / 1024),
+    },
+  });
 
   // Run each check sequentially — each is isolated with its own try/catch
   const results: CheckResult[] = [];
@@ -381,12 +440,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const totalDuration = elapsed(startTime);
+  const memAfter = process.memoryUsage();
   log('Health check completed', {
     success: failedChecks.length === 0,
     checks: results.length,
     failedChecks: failedChecks.length,
     totalIssues: allIssues.length,
     durationMs: totalDuration,
+    memoryMB: {
+      rss: Math.round(memAfter.rss / 1024 / 1024),
+      heapUsed: Math.round(memAfter.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(memAfter.heapTotal / 1024 / 1024),
+      delta: Math.round((memAfter.heapUsed - memBefore.heapUsed) / 1024 / 1024),
+    },
   });
 
   return NextResponse.json({

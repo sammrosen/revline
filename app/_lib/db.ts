@@ -10,9 +10,11 @@ export const prisma =
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
-}
+// Always cache globally — prevents multiple PrismaClient instances.
+// Next.js standalone output can re-evaluate route modules in some
+// chunking scenarios, creating duplicate clients with separate
+// connection pools (memory leak + connection exhaustion).
+globalForPrisma.prisma = prisma;
 
 
 
