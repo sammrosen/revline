@@ -10,7 +10,7 @@
 import { memo, useState } from 'react';
 import {
   EdgeProps,
-  getSmoothStepPath,
+  getBezierPath,
   EdgeLabelRenderer,
   BaseEdge,
 } from 'reactflow';
@@ -35,7 +35,7 @@ function TriggerEdgeComponent({
 }: EdgeProps<TriggerEdgeData>) {
   const [isHovered, setIsHovered] = useState(false);
 
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
+  const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,

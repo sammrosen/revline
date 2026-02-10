@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { FieldCompatibilityCheck } from './_components/field-compatibility';
 
 /**
  * Event type from ABC Ignite API (sync response)
@@ -56,6 +57,8 @@ interface AbcIgniteConfigEditorProps {
   error?: string;
   /** Integration ID for sync API calls (only available in Edit mode) */
   integrationId?: string;
+  /** Workspace ID for field compatibility checking */
+  workspaceId?: string;
 }
 
 /**
@@ -116,6 +119,7 @@ export function AbcIgniteConfigEditor({
   onChange,
   error: externalError,
   integrationId,
+  workspaceId,
 }: AbcIgniteConfigEditorProps) {
   const [isJsonMode, setIsJsonMode] = useState(false);
   const [jsonText, setJsonText] = useState(value);
@@ -738,17 +742,26 @@ export function AbcIgniteConfigEditor({
           </button>
         </div>
         {meta.memberSync?.enabled && (
-          <div className="mt-3 p-3 bg-zinc-900/50 rounded border border-zinc-800/50">
-            <p className="text-xs text-zinc-400">
-              RevLine will check ABC Ignite hourly for new members and emit a{' '}
-              <span className="font-mono text-orange-400">new_member</span>{' '}
-              workflow trigger for each one. Create a workflow with the{' '}
-              <span className="font-medium text-zinc-300">&quot;New Member Detected&quot;</span>{' '}
-              trigger to auto-create leads with their info.
-            </p>
-            <p className="text-xs text-zinc-500 mt-2">
-              Payload fields: <span className="font-mono">email</span>, <span className="font-mono">first_name</span>, <span className="font-mono">last_name</span>, <span className="font-mono">phone</span>, <span className="font-mono">barcode</span>, <span className="font-mono">member_id</span>
-            </p>
+          <div className="mt-3 space-y-3">
+            <div className="p-3 bg-zinc-900/50 rounded border border-zinc-800/50">
+              <p className="text-xs text-zinc-400">
+                RevLine will check ABC Ignite hourly for new members and emit a{' '}
+                <span className="font-mono text-orange-400">new_member</span>{' '}
+                workflow trigger for each one. Create a workflow with the{' '}
+                <span className="font-medium text-zinc-300">&quot;New Member Detected&quot;</span>{' '}
+                trigger to auto-create leads with their info.
+              </p>
+              <p className="text-xs text-zinc-500 mt-2">
+                Payload fields: <span className="font-mono">email</span>, <span className="font-mono">first_name</span>, <span className="font-mono">last_name</span>, <span className="font-mono">phone</span>, <span className="font-mono">barcode</span>, <span className="font-mono">member_id</span>
+              </p>
+            </div>
+            {workspaceId && (
+              <FieldCompatibilityCheck
+                workspaceId={workspaceId}
+                adapter="abc_ignite"
+                operation="new_member"
+              />
+            )}
           </div>
         )}
       </div>

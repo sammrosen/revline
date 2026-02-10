@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Trash2 } from 'lucide-react';
+import type { LeadPropertyDefinition } from '@/app/_lib/types';
+import { FieldCompatibilityCheck } from '../_components/field-compatibility';
 
 interface WorkflowAction {
   adapter: string;
@@ -39,6 +41,7 @@ export interface WorkflowEditorProps {
   mailerliteGroups?: Record<string, { id: string; name: string }>;
   stripeProducts?: Record<string, string>; // key -> product name
   leadStages?: Array<{ key: string; label: string; color: string }>;
+  leadPropertySchema?: LeadPropertyDefinition[] | null;
 }
 
 export interface WorkflowEditorModalProps extends WorkflowEditorProps {
@@ -54,6 +57,7 @@ export function WorkflowEditor({
   mailerliteGroups = {},
   stripeProducts = {},
   leadStages,
+  leadPropertySchema,
   onClose,
   onSave,
 }: WorkflowEditorModalProps) {
@@ -637,6 +641,9 @@ export function WorkflowEditor({
                 configuredIntegrations={configuredIntegrations}
                 mailerliteGroups={mailerliteGroups}
                 leadStages={leadStages}
+                workspaceId={workspaceId}
+                triggerAdapter={triggerAdapter}
+                triggerOperation={triggerOperation}
                 onChange={handleActionChange}
                 onParamChange={handleParamChange}
                 onRemove={() => handleRemoveAction(index)}
@@ -774,6 +781,9 @@ interface ActionEditorProps {
   configuredIntegrations: string[];
   mailerliteGroups: Record<string, { id: string; name: string }>;
   leadStages?: Array<{ key: string; label: string; color: string }>;
+  workspaceId: string;
+  triggerAdapter: string;
+  triggerOperation: string;
   onChange: (index: number, field: keyof WorkflowAction, value: unknown) => void;
   onParamChange: (index: number, param: string, value: unknown) => void;
   onRemove: () => void;
@@ -787,6 +797,9 @@ function ActionEditor({
   configuredIntegrations,
   mailerliteGroups,
   leadStages,
+  workspaceId,
+  triggerAdapter,
+  triggerOperation,
   onChange,
   onParamChange,
   onRemove,
@@ -983,6 +996,23 @@ function ActionEditor({
           />
         </div>
       )}
+
+      {/* Field Compatibility Check — show for lead-related actions when a trigger is selected */}
+      {action.adapter === 'revline' &&
+        (action.operation === 'create_lead' || action.operation === 'update_lead_properties') &&
+        triggerAdapter &&
+        triggerOperation && (
+          <div>
+            <label className="block text-xs font-medium text-zinc-500 mb-1.5">
+              Payload Field Mapping
+            </label>
+            <FieldCompatibilityCheck
+              workspaceId={workspaceId}
+              adapter={triggerAdapter}
+              operation={triggerOperation}
+            />
+          </div>
+        )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { Plus, Workflow, AlertTriangle, RefreshCw, List, GitBranch } from 'lucid
 import { WorkflowEditor } from './workflow-editor';
 import { WorkflowCard } from '../_components/workflow-card';
 import { IntegrationNetworkGraph } from '../_components/network-graph';
+import type { LeadPropertyDefinition } from '@/app/_lib/types';
 
 interface WorkflowAction {
   adapter: string;
@@ -40,6 +41,7 @@ export interface WorkflowListProps {
   mailerliteGroups?: Record<string, { id: string; name: string }>;
   stripeProducts?: Record<string, string>;
   leadStages?: Array<{ key: string; label: string; color: string }>;
+  leadPropertySchema?: LeadPropertyDefinition[] | null;
   /** Hide the header when embedded in another component that provides its own controls */
   hideHeader?: boolean;
 }
@@ -51,6 +53,7 @@ export function WorkflowList({
   mailerliteGroups = {},
   stripeProducts = {},
   leadStages,
+  leadPropertySchema,
   hideHeader = false,
 }: WorkflowListProps) {
   const router = useRouter();
@@ -197,6 +200,7 @@ export function WorkflowList({
             mailerliteGroups={mailerliteGroups}
             stripeProducts={stripeProducts}
             leadStages={leadStages}
+            leadPropertySchema={leadPropertySchema}
             onClose={handleCloseEditor}
             onSave={handleSaveWorkflow}
           />
@@ -233,6 +237,7 @@ export function WorkflowList({
           mailerliteGroups={mailerliteGroups}
           stripeProducts={stripeProducts}
           leadStages={leadStages}
+          leadPropertySchema={leadPropertySchema}
           onClose={handleCloseEditor}
           onSave={handleSaveWorkflow}
         />

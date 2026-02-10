@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Loader2, Play, ChevronDown, AlertCircle, CheckCircle, Search, X, ChevronUp, Plus } from 'lucide-react';
+import { Loader2, Play, ChevronDown, AlertCircle, CheckCircle, Search, X, ChevronUp, Plus, Zap, ChevronRight } from 'lucide-react';
 
 interface KnownEndpoint {
   method: string;
@@ -133,6 +133,9 @@ function TestPanel({ workspaceId, integrations, compact = false, onClose }: Test
   const currentEndpointPath = selectedEndpoint === 'custom' 
     ? customEndpoint 
     : knownEndpoints.find(e => `${e.method}:${e.path}` === selectedEndpoint)?.path || '';
+
+  // Panel sub-tab
+  const [panelMode, setPanelMode] = useState<'endpoints' | 'scenarios'>('endpoints');
 
   // Check if current endpoint has a form schema
   const endpointKey = `${method}:${currentEndpointPath}`;
@@ -378,273 +381,551 @@ function TestPanel({ workspaceId, integrations, compact = false, onClose }: Test
         </div>
       </div>
 
-      {/* Endpoint Selection */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 space-y-3">
-        <div>
-          <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-            Endpoint
-          </label>
-          <div className="flex gap-2">
-            {/* Method selector */}
-            <div className="relative">
-              <select
-                value={method}
-                onChange={(e) => {
-                  setMethod(e.target.value);
-                  setSelectedEndpoint('custom');
-                  setFormData({});
-                }}
-                className="bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-2 text-sm text-white appearance-none focus:outline-none focus:border-zinc-600 pr-7"
-              >
-                <option value="GET">GET</option>
-                <option value="POST">POST</option>
-                <option value="PUT">PUT</option>
-                <option value="DELETE">DELETE</option>
-              </select>
-              <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
-            </div>
-
-            {/* Endpoint selector */}
-            <div className="relative flex-1">
-              <select
-                value={selectedEndpoint}
-                onChange={(e) => handleEndpointSelect(e.target.value)}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white appearance-none focus:outline-none focus:border-zinc-600"
-              >
-                <option value="custom">Custom...</option>
-                {knownEndpoints
-                  .filter(ep => ep.method === method)
-                  .map(ep => (
-                    <option key={`${ep.method}:${ep.path}`} value={`${ep.method}:${ep.path}`}>
-                      {compact ? ep.path.slice(0, 25) + (ep.path.length > 25 ? '...' : '') : `${ep.path} - ${ep.description}`}
-                    </option>
-                  ))}
-              </select>
-              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
-            </div>
-          </div>
-        </div>
-
-        {/* Custom endpoint input */}
-        {selectedEndpoint === 'custom' && (
-          <div>
-            <input
-              type="text"
-              value={customEndpoint}
-              onChange={(e) => setCustomEndpoint(e.target.value)}
-              placeholder="/endpoint/path"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600 font-mono"
-            />
-          </div>
-        )}
-
-        {/* Path Parameters */}
-        {currentPathParams.length > 0 && (
-          <div className="space-y-1.5">
-            {currentPathParams.map(param => (
-              <div key={param} className="flex items-center gap-2">
-                <label className="text-xs text-zinc-400 w-24 font-mono truncate">{param}:</label>
-                <input
-                  type="text"
-                  value={pathParams[param] || ''}
-                  onChange={(e) => setPathParams(prev => ({ ...prev, [param]: e.target.value }))}
-                  placeholder={param}
-                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
-                />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Form Fields for GET (query params) */}
-        {method === 'GET' && formSchema && (
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-zinc-400">
-              Query Parameters (optional)
-            </label>
-            {formSchema.fields.map(field => (
-              <div key={field.name} className="flex items-center gap-2">
-                <label className="text-xs text-zinc-400 w-24 truncate" title={field.label}>
-                  {field.label}:
-                </label>
-                <input
-                  type={field.type}
-                  value={formData[field.name] || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, [field.name]: e.target.value }))}
-                  placeholder={field.placeholder}
-                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
-                />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Form Fields or JSON Body for POST/PUT/PATCH */}
-        {['POST', 'PUT', 'PATCH'].includes(method) && (
-          formSchema ? (
-            // Render form fields
-            <div className="space-y-2">
-              <label className="block text-xs font-medium text-zinc-400">
-                Request Body
-              </label>
-              {formSchema.fields.map(field => (
-                <div key={field.name} className="flex items-center gap-2">
-                  <label className="text-xs text-zinc-400 w-24 truncate" title={field.label}>
-                    {field.label}:
-                  </label>
-                  <input
-                    type={field.type}
-                    value={formData[field.name] || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, [field.name]: e.target.value }))}
-                    placeholder={field.placeholder}
-                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
-                  />
-                </div>
-              ))}
-            </div>
-          ) : (
-            // Render JSON textarea
-            <div>
-              <textarea
-                value={requestBody}
-                onChange={(e) => validateBody(e.target.value)}
-                placeholder='{"key": "value"}'
-                rows={compact ? 3 : 5}
-                className={`w-full bg-zinc-800 border rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none font-mono ${
-                  bodyError ? 'border-red-500' : 'border-zinc-700 focus:border-zinc-600'
-                }`}
-              />
-              {bodyError && (
-                <p className="text-xs text-red-400 mt-1">{bodyError}</p>
-              )}
-            </div>
-          )
-        )}
-
-        {/* Execute Button */}
+      {/* Sub-tabs: Endpoints | Scenarios */}
+      <div className="flex border-b border-zinc-800">
         <button
-          onClick={executeRequest}
-          disabled={!canExecute}
-          className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
+          type="button"
+          onClick={() => setPanelMode('endpoints')}
+          className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+            panelMode === 'endpoints'
+              ? 'border-blue-500 text-white'
+              : 'border-transparent text-zinc-500 hover:text-zinc-300'
+          }`}
         >
-          {isExecuting ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Executing...
-            </>
-          ) : (
-            <>
-              <Play className="w-4 h-4" />
-              Send
-            </>
-          )}
+          <Play className="w-3 h-3" />
+          Endpoints
+        </button>
+        <button
+          type="button"
+          onClick={() => setPanelMode('scenarios')}
+          className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+            panelMode === 'scenarios'
+              ? 'border-amber-500 text-white'
+              : 'border-transparent text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          <Zap className="w-3 h-3" />
+          Scenarios
         </button>
       </div>
 
-      {/* Execution Error */}
-      {executionError && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-red-400">
-          <div className="flex items-center gap-2 text-sm">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span className="truncate">{executionError}</span>
-          </div>
-        </div>
-      )}
+      {/* === ENDPOINTS TAB === */}
+      {panelMode === 'endpoints' && (
+        <>
+          {/* Endpoint Selection */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                Endpoint
+              </label>
+              <div className="flex gap-2">
+                {/* Method selector */}
+                <div className="relative">
+                  <select
+                    value={method}
+                    onChange={(e) => {
+                      setMethod(e.target.value);
+                      setSelectedEndpoint('custom');
+                      setFormData({});
+                    }}
+                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-2 text-sm text-white appearance-none focus:outline-none focus:border-zinc-600 pr-7"
+                  >
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                  </select>
+                  <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
+                </div>
 
-      {/* Result */}
-      {result && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
-          {/* Result Header */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
-            <div className="flex items-center gap-2">
-              {result.success ? (
-                <CheckCircle className="w-4 h-4 text-green-400" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-red-400" />
-              )}
-              <span className={`font-mono text-sm ${
-                result.status >= 200 && result.status < 300 ? 'text-green-400' :
-                result.status >= 400 && result.status < 500 ? 'text-yellow-400' :
-                result.status >= 500 ? 'text-red-400' : 'text-zinc-400'
-              }`}>
-                {result.status || 'Error'}
-              </span>
+                {/* Endpoint selector */}
+                <div className="relative flex-1">
+                  <select
+                    value={selectedEndpoint}
+                    onChange={(e) => handleEndpointSelect(e.target.value)}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white appearance-none focus:outline-none focus:border-zinc-600"
+                  >
+                    <option value="custom">Custom...</option>
+                    {knownEndpoints
+                      .filter(ep => ep.method === method)
+                      .map(ep => (
+                        <option key={`${ep.method}:${ep.path}`} value={`${ep.method}:${ep.path}`}>
+                          {compact ? ep.path.slice(0, 25) + (ep.path.length > 25 ? '...' : '') : `${ep.path} - ${ep.description}`}
+                        </option>
+                      ))}
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
+                </div>
+              </div>
             </div>
-            <span className="text-zinc-500 text-xs">
-              {result.duration_ms}ms
-            </span>
+
+            {/* Custom endpoint input */}
+            {selectedEndpoint === 'custom' && (
+              <div>
+                <input
+                  type="text"
+                  value={customEndpoint}
+                  onChange={(e) => setCustomEndpoint(e.target.value)}
+                  placeholder="/endpoint/path"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600 font-mono"
+                />
+              </div>
+            )}
+
+            {/* Path Parameters */}
+            {currentPathParams.length > 0 && (
+              <div className="space-y-1.5">
+                {currentPathParams.map(param => (
+                  <div key={param} className="flex items-center gap-2">
+                    <label className="text-xs text-zinc-400 w-24 font-mono truncate">{param}:</label>
+                    <input
+                      type="text"
+                      value={pathParams[param] || ''}
+                      onChange={(e) => setPathParams(prev => ({ ...prev, [param]: e.target.value }))}
+                      placeholder={param}
+                      className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Form Fields for GET (query params) */}
+            {method === 'GET' && formSchema && (
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-zinc-400">
+                  Query Parameters (optional)
+                </label>
+                {formSchema.fields.map(field => (
+                  <div key={field.name} className="flex items-center gap-2">
+                    <label className="text-xs text-zinc-400 w-24 truncate" title={field.label}>
+                      {field.label}:
+                    </label>
+                    <input
+                      type={field.type}
+                      value={formData[field.name] || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, [field.name]: e.target.value }))}
+                      placeholder={field.placeholder}
+                      className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Form Fields or JSON Body for POST/PUT/PATCH */}
+            {['POST', 'PUT', 'PATCH'].includes(method) && (
+              formSchema ? (
+                // Render form fields
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-zinc-400">
+                    Request Body
+                  </label>
+                  {formSchema.fields.map(field => (
+                    <div key={field.name} className="flex items-center gap-2">
+                      <label className="text-xs text-zinc-400 w-24 truncate" title={field.label}>
+                        {field.label}:
+                      </label>
+                      <input
+                        type={field.type}
+                        value={formData[field.name] || ''}
+                        onChange={(e) => setFormData(prev => ({ ...prev, [field.name]: e.target.value }))}
+                        placeholder={field.placeholder}
+                        className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                // Render JSON textarea
+                <div>
+                  <textarea
+                    value={requestBody}
+                    onChange={(e) => validateBody(e.target.value)}
+                    placeholder='{"key": "value"}'
+                    rows={compact ? 3 : 5}
+                    className={`w-full bg-zinc-800 border rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none font-mono ${
+                      bodyError ? 'border-red-500' : 'border-zinc-700 focus:border-zinc-600'
+                    }`}
+                  />
+                  {bodyError && (
+                    <p className="text-xs text-red-400 mt-1">{bodyError}</p>
+                  )}
+                </div>
+              )
+            )}
+
+            {/* Execute Button */}
+            <button
+              onClick={executeRequest}
+              disabled={!canExecute}
+              className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
+            >
+              {isExecuting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Executing...
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4" />
+                  Send
+                </>
+              )}
+            </button>
           </div>
 
-          {/* Result Error */}
-          {result.error && (
-            <div className="px-3 py-2 bg-red-500/10 border-b border-zinc-800">
-              <p className="text-red-400 text-xs">{result.error}</p>
+          {/* Execution Error */}
+          {executionError && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-red-400">
+              <div className="flex items-center gap-2 text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span className="truncate">{executionError}</span>
+              </div>
             </div>
           )}
 
-          {/* Search Bar */}
-          <div className="px-3 py-2 border-b border-zinc-800 flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search..."
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-8 pr-7 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && matchCount > 0) {
-                    if (e.shiftKey) {
-                      goToPrevMatch();
-                    } else {
-                      goToNextMatch();
-                    }
-                  }
-                }}
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-            {searchTerm && matchCount > 0 && (
-              <div className="flex items-center gap-0.5">
-                <button
-                  onClick={goToPrevMatch}
-                  className="p-1 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
-                >
-                  <ChevronUp className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={goToNextMatch}
-                  className="p-1 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
-                >
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </button>
+          {/* Result */}
+          {result && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+              {/* Result Header */}
+              <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
+                <div className="flex items-center gap-2">
+                  {result.success ? (
+                    <CheckCircle className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-red-400" />
+                  )}
+                  <span className={`font-mono text-sm ${
+                    result.status >= 200 && result.status < 300 ? 'text-green-400' :
+                    result.status >= 400 && result.status < 500 ? 'text-yellow-400' :
+                    result.status >= 500 ? 'text-red-400' : 'text-zinc-400'
+                  }`}>
+                    {result.status || 'Error'}
+                  </span>
+                </div>
+                <span className="text-zinc-500 text-xs">
+                  {result.duration_ms}ms
+                </span>
               </div>
+
+              {/* Result Error */}
+              {result.error && (
+                <div className="px-3 py-2 bg-red-500/10 border-b border-zinc-800">
+                  <p className="text-red-400 text-xs">{result.error}</p>
+                </div>
+              )}
+
+              {/* Search Bar */}
+              <div className="px-3 py-2 border-b border-zinc-800 flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search..."
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-8 pr-7 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && matchCount > 0) {
+                        if (e.shiftKey) {
+                          goToPrevMatch();
+                        } else {
+                          goToNextMatch();
+                        }
+                      }
+                    }}
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {searchTerm && matchCount > 0 && (
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={goToPrevMatch}
+                      className="p-1 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={goToNextMatch}
+                      className="p-1 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+                {searchTerm && (
+                  <span className={`text-xs whitespace-nowrap ${matchCount > 0 ? 'text-yellow-400' : 'text-zinc-500'}`}>
+                    {matchCount > 0 ? `${currentMatchIndex + 1}/${matchCount}` : '0'}
+                  </span>
+                )}
+              </div>
+
+              {/* Result Body */}
+              <div className="p-3">
+                <pre 
+                  ref={preRef}
+                  className={`text-xs bg-zinc-950 border border-zinc-800 p-3 rounded-lg overflow-x-auto font-mono text-zinc-300 leading-relaxed ${
+                    compact ? 'max-h-64' : 'max-h-96'
+                  }`}
+                >
+                  {renderHighlightedJson(formattedJson, searchTerm, currentMatchIndex)}
+                </pre>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* === SCENARIOS TAB === */}
+      {panelMode === 'scenarios' && (
+        <InlineScenarioRunner workspaceId={workspaceId} integration={selectedIntegration} />
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// TEST SCENARIOS (inline in TestPanel when integration supports them)
+// =============================================================================
+
+interface ScenarioDefinition {
+  id: string;
+  name: string;
+  description: string;
+  integration: string;
+  fields: Array<{
+    name: string;
+    label: string;
+    placeholder?: string;
+    required: boolean;
+  }>;
+}
+
+interface ScenarioStep {
+  step: string;
+  status: 'success' | 'failed' | 'skipped';
+  data?: unknown;
+  error?: string;
+  duration_ms?: number;
+}
+
+interface ScenarioResult {
+  scenario: string;
+  success: boolean;
+  steps: ScenarioStep[];
+  duration_ms: number;
+}
+
+/**
+ * Inline scenario runner shown inside a TestPanel when the selected
+ * integration has available scenarios.
+ */
+function InlineScenarioRunner({ workspaceId, integration }: { workspaceId: string; integration: string }) {
+  const [scenarios, setScenarios] = useState<ScenarioDefinition[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedScenario, setSelectedScenario] = useState<string>('');
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<ScenarioResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/v1/workspaces/${workspaceId}/test-scenario`)
+      .then(r => r.json())
+      .then(data => {
+        const all: ScenarioDefinition[] = data.scenarios ?? [];
+        const filtered = all.filter(s => s.integration === integration);
+        setScenarios(filtered);
+        if (filtered.length > 0) setSelectedScenario(filtered[0].id);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [workspaceId, integration]);
+
+  const current = scenarios.find(s => s.id === selectedScenario);
+
+  const canRun = current && !running && current.fields.every(
+    f => !f.required || fieldValues[f.name]?.trim()
+  );
+
+  const runScenario = async () => {
+    if (!canRun || !current) return;
+    setRunning(true);
+    setResult(null);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/v1/workspaces/${workspaceId}/test-scenario`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario: current.id, fields: fieldValues }),
+      });
+      const data = await res.json();
+      if (!res.ok && !data.steps) {
+        throw new Error(data.error || 'Scenario failed');
+      }
+      setResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  if (loading || scenarios.length === 0) return null;
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 space-y-3">
+      <div className="flex items-center gap-2">
+        <Zap className="w-3.5 h-3.5 text-amber-400" />
+        <span className="text-xs font-semibold text-white">Scenarios</span>
+        <span className="text-[10px] text-zinc-500">End-to-end pipeline tests</span>
+      </div>
+
+      {/* Scenario picker (if multiple) */}
+      {scenarios.length > 1 && (
+        <div className="relative">
+          <select
+            value={selectedScenario}
+            onChange={(e) => {
+              setSelectedScenario(e.target.value);
+              setFieldValues({});
+              setResult(null);
+            }}
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white appearance-none focus:outline-none focus:border-zinc-600"
+          >
+            {scenarios.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
+        </div>
+      )}
+
+      {current && (
+        <p className="text-xs text-zinc-500">{current.description}</p>
+      )}
+
+      {/* Fields */}
+      {current?.fields.map(field => (
+        <div key={field.name}>
+          <label className="block text-xs text-zinc-400 mb-1">
+            {field.label} {field.required && <span className="text-red-400">*</span>}
+          </label>
+          <input
+            type="text"
+            value={fieldValues[field.name] || ''}
+            onChange={(e) => setFieldValues(prev => ({ ...prev, [field.name]: e.target.value }))}
+            placeholder={field.placeholder}
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600 font-mono"
+            onKeyDown={(e) => e.key === 'Enter' && canRun && runScenario()}
+          />
+        </div>
+      ))}
+
+      {/* Run button */}
+      <button
+        onClick={runScenario}
+        disabled={!canRun}
+        className="flex items-center justify-center gap-2 w-full bg-amber-500 hover:bg-amber-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-black font-medium py-2 px-3 rounded-lg transition-colors text-sm"
+      >
+        {running ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Running...
+          </>
+        ) : (
+          <>
+            <Zap className="w-4 h-4" />
+            {current ? current.name : 'Run Scenario'}
+          </>
+        )}
+      </button>
+
+      {/* Error */}
+      {error && (
+        <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+          <span className="text-xs text-red-400">{error}</span>
+        </div>
+      )}
+
+      {/* Results */}
+      {result && (
+        <div className="space-y-2">
+          <div className={`flex items-center gap-2 p-2.5 rounded-lg border ${
+            result.success
+              ? 'bg-green-500/5 border-green-500/20'
+              : 'bg-red-500/5 border-red-500/20'
+          }`}>
+            {result.success ? (
+              <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+            ) : (
+              <AlertCircle className="w-3.5 h-3.5 text-red-400" />
             )}
-            {searchTerm && (
-              <span className={`text-xs whitespace-nowrap ${matchCount > 0 ? 'text-yellow-400' : 'text-zinc-500'}`}>
-                {matchCount > 0 ? `${currentMatchIndex + 1}/${matchCount}` : '0'}
-              </span>
-            )}
+            <span className={`text-xs font-medium ${result.success ? 'text-green-400' : 'text-red-400'}`}>
+              {result.success ? 'All steps passed' : 'Scenario failed'}
+            </span>
+            <span className="text-[10px] text-zinc-500 ml-auto">{result.duration_ms}ms</span>
           </div>
 
-          {/* Result Body */}
-          <div className="p-3">
-            <pre 
-              ref={preRef}
-              className={`text-xs bg-zinc-950 border border-zinc-800 p-3 rounded-lg overflow-x-auto font-mono text-zinc-300 leading-relaxed ${
-                compact ? 'max-h-64' : 'max-h-96'
-              }`}
-            >
-              {renderHighlightedJson(formattedJson, searchTerm, currentMatchIndex)}
+          {result.steps.map((step, idx) => (
+            <StepResult key={idx} step={step} index={idx} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StepResult({ step, index }: { step: ScenarioStep; index: number }) {
+  const [expanded, setExpanded] = useState(step.status === 'failed');
+
+  return (
+    <div className={`border rounded-lg overflow-hidden ${
+      step.status === 'success' ? 'border-green-500/20' :
+      step.status === 'failed' ? 'border-red-500/20' :
+      'border-zinc-700'
+    }`}>
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-800/50 transition-colors"
+      >
+        {step.status === 'success' ? (
+          <CheckCircle className="w-3.5 h-3.5 text-green-400 shrink-0" />
+        ) : step.status === 'failed' ? (
+          <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+        ) : (
+          <div className="w-3.5 h-3.5 rounded-full border border-zinc-600 shrink-0" />
+        )}
+        <span className="text-xs text-zinc-500 font-mono w-4 shrink-0">{index + 1}</span>
+        <span className="text-xs text-zinc-300 flex-1">{step.step}</span>
+        {step.duration_ms != null && (
+          <span className="text-[10px] text-zinc-600">{step.duration_ms}ms</span>
+        )}
+        <ChevronRight className={`w-3 h-3 text-zinc-600 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+      </button>
+
+      {expanded && (
+        <div className="border-t border-zinc-800 p-3 space-y-2">
+          {step.error && (
+            <p className="text-xs text-red-400">{step.error}</p>
+          )}
+          {step.data != null && (
+            <pre className="text-[11px] bg-zinc-950 border border-zinc-800 p-2 rounded font-mono text-zinc-400 overflow-x-auto max-h-48">
+              {JSON.stringify(step.data, null, 2)}
             </pre>
-          </div>
+          )}
         </div>
       )}
     </div>

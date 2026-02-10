@@ -22,7 +22,7 @@ export type { AddSubscriberResult } from './mailerlite.adapter';
 export { StripeAdapter } from './stripe.adapter';
 export type { CheckoutData, VerifiedWebhookEvent } from './stripe.adapter';
 
-export { AbcIgniteAdapter } from './abc-ignite.adapter';
+export { AbcIgniteAdapter, normalizeMemberPayload } from './abc-ignite.adapter';
 export type { 
   AbcIgniteEvent, 
   AbcIgniteEventType,
