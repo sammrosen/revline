@@ -404,6 +404,47 @@ export interface DateRange {
 export type EventCategory = 'appointment' | 'event';
 
 // =============================================================================
+// PAYLOAD NORMALIZATION
+// =============================================================================
+
+/**
+ * Normalize an ABC Ignite member into a flat payload with consistent keys.
+ * Used by the member sync cron to build workflow trigger payloads.
+ * 
+ * Keys are snake_case and designed to match common leadPropertySchema keys:
+ * - personal.firstName  → first_name
+ * - personal.lastName   → last_name
+ * - personal.email      → email
+ * - personal.primaryPhone → phone
+ * - personal.barcode    → barcode
+ * - personal.memberStatus → member_status
+ * - personal.homeClub   → home_club
+ * - personal.gender     → gender
+ * - memberId            → member_id
+ */
+export function normalizeMemberPayload(member: AbcIgniteMember): Record<string, string> {
+  const p = member.personal;
+  const payload: Record<string, string> = {};
+
+  // Email is the critical field — always include if available
+  if (p?.email) payload.email = p.email;
+
+  // Personal info
+  if (p?.firstName) payload.first_name = p.firstName;
+  if (p?.lastName) payload.last_name = p.lastName;
+  if (p?.primaryPhone) payload.phone = p.primaryPhone;
+  if (p?.barcode) payload.barcode = p.barcode;
+  if (p?.memberStatus) payload.member_status = p.memberStatus;
+  if (p?.homeClub) payload.home_club = p.homeClub;
+  if (p?.gender) payload.gender = p.gender;
+
+  // Top-level member ID
+  if (member.memberId) payload.member_id = member.memberId;
+
+  return payload;
+}
+
+// =============================================================================
 // ADAPTER CLASS
 // =============================================================================
 
@@ -795,6 +836,14 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
     memberStatus?: string;
     joinStatus?: 'member' | 'prospect' | 'all';
     memberId?: string;
+    /** Date range filter: "YYYY-MM-DD HH:mm:ss.000000,YYYY-MM-DD HH:mm:ss.000000" */
+    createdTimestampRange?: string;
+    /** Date range filter: "YYYY-MM-DD HH:mm:ss.000000,YYYY-MM-DD HH:mm:ss.000000" */
+    memberSinceDateRange?: string;
+    /** Page number (1-based, defaults to 1) */
+    page?: number;
+    /** Page size */
+    size?: number;
   }): Promise<IntegrationResult<AbcIgniteMember[]>> {
     const params = new URLSearchParams();
     
@@ -813,6 +862,18 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
     if (options?.memberId) {
       params.append('memberId', options.memberId);
     }
+    if (options?.createdTimestampRange) {
+      params.append('createdTimestampRange', options.createdTimestampRange);
+    }
+    if (options?.memberSinceDateRange) {
+      params.append('memberSinceDateRange', options.memberSinceDateRange);
+    }
+    if (options?.page !== undefined) {
+      params.append('page', String(options.page));
+    }
+    if (options?.size !== undefined) {
+      params.append('size', String(options.size));
+    }
 
     const queryString = params.toString();
     const endpoint = `/members${queryString ? `?${queryString}` : ''}`;
@@ -827,6 +888,64 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
     }
 
     return this.success(result.data?.members || []);
+  }
+
+  /**
+   * Get new members created within the last N minutes.
+   * Handles pagination automatically — fetches all pages.
+   * 
+   * @param sinceMinutes - How many minutes back to query (e.g., 75 for hourly with overlap)
+   * @returns All members created in the time window
+   */
+  async getNewMembers(sinceMinutes: number): Promise<IntegrationResult<AbcIgniteMember[]>> {
+    const now = new Date();
+    const since = new Date(now.getTime() - sinceMinutes * 60 * 1000);
+
+    // Format: YYYY-MM-DD HH:mm:ss.000000
+    const fmt = (d: Date): string => {
+      const pad = (n: number, len = 2) => String(n).padStart(len, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.000000`;
+    };
+
+    const createdTimestampRange = `${fmt(since)},${fmt(now)}`;
+    const allMembers: AbcIgniteMember[] = [];
+    const PAGE_SIZE = 50;
+    let page = 1;
+
+    // Paginate until we get fewer results than page size
+    while (true) {
+      const result = await this.getMembers({
+        createdTimestampRange,
+        page,
+        size: PAGE_SIZE,
+      });
+
+      if (!result.success) {
+        // If first page fails, return the error
+        if (page === 1) {
+          return result;
+        }
+        // If a subsequent page fails, return what we have so far
+        break;
+      }
+
+      const members = result.data || [];
+      allMembers.push(...members);
+
+      // If we got fewer than PAGE_SIZE, we've reached the last page
+      if (members.length < PAGE_SIZE) {
+        break;
+      }
+
+      page++;
+
+      // Safety cap: don't paginate forever
+      if (page > 100) {
+        break;
+      }
+    }
+
+    return this.success(allMembers);
   }
 
   /**

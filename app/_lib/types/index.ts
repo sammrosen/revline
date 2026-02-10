@@ -301,6 +301,11 @@ export interface AbcIgniteMeta {
     /** Job title (e.g., "Personal Trainer") */
     title?: string;
   }>;
+  /** Hourly member sync configuration */
+  memberSync?: {
+    /** Enable hourly polling for new ABC members */
+    enabled: boolean;
+  };
 }
 
 // =============================================================================
