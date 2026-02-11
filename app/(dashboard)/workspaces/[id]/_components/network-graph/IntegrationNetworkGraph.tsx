@@ -14,7 +14,7 @@
  * - Extensible: Custom node/edge types registered separately
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import ReactFlow, {
   Background,
   MiniMap,
@@ -35,7 +35,47 @@ import { AsyncGapNode } from './AsyncGapNode';
 import { WorkflowEdge, EdgeMarkerDefs } from './WorkflowEdge';
 import { TriggerEdge, TriggerEdgeMarkerDefs } from './TriggerEdge';
 import { GraphSelectionPanel } from './GraphSelectionPanel';
-import { RefreshCw, AlertTriangle } from 'lucide-react';
+import { RefreshCw, AlertTriangle, Save, RotateCcw } from 'lucide-react';
+
+// =============================================================================
+// LAYOUT PERSISTENCE (localStorage)
+// =============================================================================
+
+type PositionMap = Record<string, { x: number; y: number }>;
+
+function getStorageKey(workspaceId: string) {
+  return `graph-layout-${workspaceId}`;
+}
+
+function saveNodePositions(workspaceId: string, nodes: Node[]): void {
+  const positions: PositionMap = {};
+  for (const node of nodes) {
+    positions[node.id] = { x: node.position.x, y: node.position.y };
+  }
+  try {
+    localStorage.setItem(getStorageKey(workspaceId), JSON.stringify(positions));
+  } catch {
+    // localStorage may be full or unavailable — silently ignore
+  }
+}
+
+function loadNodePositions(workspaceId: string): PositionMap | null {
+  try {
+    const raw = localStorage.getItem(getStorageKey(workspaceId));
+    if (!raw) return null;
+    return JSON.parse(raw) as PositionMap;
+  } catch {
+    return null;
+  }
+}
+
+function clearNodePositions(workspaceId: string): void {
+  try {
+    localStorage.removeItem(getStorageKey(workspaceId));
+  } catch {
+    // ignore
+  }
+}
 
 // Register custom node types
 const nodeTypes: NodeTypes = {
@@ -75,12 +115,20 @@ export function IntegrationNetworkGraph({ workspaceId }: IntegrationNetworkGraph
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
-  // Sync nodes/edges from hook when data changes
+  // Sync nodes/edges from hook when data changes, merging saved positions
   useEffect(() => {
     if (initialNodes.length > 0) {
-      setNodes(initialNodes);
+      const saved = loadNodePositions(workspaceId);
+      if (saved) {
+        const merged = initialNodes.map(n =>
+          saved[n.id] ? { ...n, position: saved[n.id] } : n
+        );
+        setNodes(merged);
+      } else {
+        setNodes(initialNodes);
+      }
     }
-  }, [initialNodes, setNodes]);
+  }, [initialNodes, setNodes, workspaceId]);
 
   useEffect(() => {
     if (initialEdges.length > 0) {
@@ -116,6 +164,20 @@ export function IntegrationNetworkGraph({ workspaceId }: IntegrationNetworkGraph
   const onPaneClick = useCallback(() => {
     clearSelection();
   }, [clearSelection]);
+
+  // Layout save state
+  const [layoutSaved, setLayoutSaved] = useState(false);
+
+  const handleSaveLayout = useCallback(() => {
+    saveNodePositions(workspaceId, nodes);
+    setLayoutSaved(true);
+    setTimeout(() => setLayoutSaved(false), 1500);
+  }, [workspaceId, nodes]);
+
+  const handleResetLayout = useCallback(() => {
+    clearNodePositions(workspaceId);
+    setNodes(initialNodes);
+  }, [workspaceId, initialNodes, setNodes]);
 
   // Loading state
   if (loading) {
@@ -187,13 +249,33 @@ export function IntegrationNetworkGraph({ workspaceId }: IntegrationNetworkGraph
             </span>
           )}
         </div>
-        <button
-          onClick={refresh}
-          className="flex items-center gap-2 px-3 py-1 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors text-sm"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleSaveLayout}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded transition-colors text-sm ${
+              layoutSaved
+                ? 'text-green-400 bg-green-500/10'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+          >
+            <Save className="w-3.5 h-3.5" />
+            {layoutSaved ? 'Saved!' : 'Save Layout'}
+          </button>
+          <button
+            onClick={handleResetLayout}
+            className="flex items-center gap-1.5 px-3 py-1 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors text-sm"
+            title="Reset to auto-layout"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={refresh}
+            className="flex items-center gap-2 px-3 py-1 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors text-sm"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Warnings */}

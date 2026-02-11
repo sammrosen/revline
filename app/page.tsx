@@ -327,13 +327,21 @@ export default function Home() {
       {/* ============== TOP NAV ============== */}
       <nav className="relative z-10 flex items-center justify-between px-6 py-4 max-w-6xl mx-auto">
         <span className="text-sm font-semibold text-zinc-400 tracking-wide">RevLine</span>
-        <Link
-          href="/login"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-sm text-zinc-300 hover:text-white transition-colors duration-200"
-        >
-          <LockIcon className="w-3.5 h-3.5" />
-          Login
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/docs"
+            className="px-3 py-1.5 text-sm text-zinc-500 hover:text-zinc-200 transition-colors duration-200"
+          >
+            Docs
+          </Link>
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-2 px-5 py-2 bg-white/[0.08] hover:bg-white/[0.14] backdrop-blur-sm border border-white/[0.1] rounded-full text-sm text-zinc-200 hover:text-white transition-all duration-200"
+          >
+            Login
+            <ArrowRightIcon className="w-3.5 h-3.5" />
+          </Link>
+        </div>
       </nav>
 
       {/* ============== HERO SECTION ============== */}
