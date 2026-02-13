@@ -20,7 +20,7 @@ import {
 export async function POST(request: NextRequest) {
   // Rate limit
   const clientIP = getClientIP(request.headers);
-  const rateLimit = rateLimitByIP(clientIP, RATE_LIMITS.SUBSCRIBE);
+  const rateLimit = rateLimitByIP(clientIP, RATE_LIMITS.BOOKING_READ);
   
   if (!rateLimit.allowed) {
     return ApiResponse.rateLimited(rateLimit.retryAfter);
