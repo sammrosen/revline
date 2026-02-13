@@ -364,6 +364,118 @@ const updateLeadPropertiesAction: ActionExecutor = {
   },
 };
 
+/**
+ * Generate an encrypted pre-fill booking link and store it as a lead property
+ * 
+ * Reads the lead's barcode, email, phone from properties / context.
+ * Builds a URL with an encrypted token that the booking page decrypts.
+ * Writes `booking_link` to the lead's properties.
+ * 
+ * Params:
+ * - expiryDays: Token lifetime in days (default 90)
+ */
+const generateBookingLink: ActionExecutor = {
+  async execute(
+    ctx: WorkflowContext,
+    params: Record<string, unknown>
+  ): Promise<ActionResult> {
+    const expiryDays = (params.expiryDays as number) || 90;
+
+    // Need a lead to write the link to
+    let leadId = ctx.leadId;
+    if (!leadId) {
+      if (!ctx.email) {
+        return { success: false, error: 'No email or leadId in workflow context' };
+      }
+      try {
+        leadId = await upsertLead({
+          workspaceId: ctx.workspaceId,
+          email: ctx.email,
+          source: ctx.trigger.adapter,
+        });
+      } catch (error) {
+        return {
+          success: false,
+          error: `Failed to find/create lead: ${error instanceof Error ? error.message : 'Unknown'}`,
+        };
+      }
+    }
+
+    try {
+      // Load lead properties for barcode/phone
+      const lead = await prisma.lead.findUnique({
+        where: { id: leadId },
+        select: { email: true, properties: true },
+      });
+
+      if (!lead) {
+        return { success: false, error: 'Lead not found' };
+      }
+
+      const props = (lead.properties as Record<string, unknown>) ?? {};
+      const barcode = (props.barcode as string) || '';
+      const email = lead.email;
+      const phone = (props.phone as string) || '';
+
+      if (!email) {
+        return { success: false, error: 'Lead has no email — cannot generate booking link' };
+      }
+
+      // Load workspace slug for the public URL
+      const workspace = await prisma.workspace.findUnique({
+        where: { id: ctx.workspaceId },
+        select: { slug: true, customDomain: true },
+      });
+
+      if (!workspace?.slug) {
+        return { success: false, error: 'Workspace has no slug configured' };
+      }
+
+      // Import at execution time to avoid circular deps at module load
+      const { createPrefillToken } = await import('@/app/_lib/booking/prefill-token');
+
+      const token = createPrefillToken(
+        { barcode, email, phone, workspaceId: ctx.workspaceId },
+        expiryDays
+      );
+
+      // Build the full booking URL
+      const domain = workspace.customDomain || process.env.NEXT_PUBLIC_APP_URL || 'https://revline.app';
+      const bookingLink = `${domain}/public/${workspace.slug}/book?t=${token}`;
+
+      // Write booking_link to lead properties (merge with existing)
+      const existingProps = (lead.properties as Record<string, unknown>) ?? {};
+      const updatedProps = { ...existingProps, booking_link: bookingLink };
+
+      await prisma.lead.update({
+        where: { id: leadId },
+        data: {
+          properties: updatedProps as Prisma.InputJsonValue,
+          lastEventAt: new Date(),
+        },
+      });
+
+      await emitEvent({
+        workspaceId: ctx.workspaceId,
+        leadId,
+        system: EventSystem.BACKEND,
+        eventType: 'booking_link_generated',
+        success: true,
+      });
+
+      return {
+        success: true,
+        data: { leadId, bookingLink, expiryDays },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to generate booking link',
+      };
+    }
+  },
+};
+
 // =============================================================================
 // EXPORT
 // =============================================================================
@@ -373,6 +485,7 @@ export const revlineExecutors: Record<string, ActionExecutor> = {
   update_lead_stage: updateLeadStageAction,
   update_lead_properties: updateLeadPropertiesAction,
   emit_event: emitEventAction,
+  generate_booking_link: generateBookingLink,
 };
 
 

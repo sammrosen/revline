@@ -69,6 +69,8 @@ interface MagicLinkBookingClientProps {
   workspaceName: string;
   capabilities: BookingProviderCapabilities;
   initialBarcode?: string | null;
+  initialEmail?: string | null;
+  initialPhone?: string | null;
   /** Branding configuration from workspace */
   branding: ResolvedBranding;
   /** Copy configuration for booking template */
@@ -166,6 +168,8 @@ export function MagicLinkBookingClient({
   workspaceName,
   capabilities,
   initialBarcode,
+  initialEmail,
+  initialPhone,
   branding,
   copy,
   features,
@@ -177,6 +181,8 @@ export function MagicLinkBookingClient({
   const [state, setState] = useState<MagicLinkBookingState>(() => ({
     ...initialState,
     barcode: initialBarcode || '',
+    email: initialEmail || '',
+    phone: initialPhone || '',
     // In preview mode, initialize with mock data
     ...(previewMode ? {
       employees: MOCK_EMPLOYEES,
@@ -362,6 +368,8 @@ export function MagicLinkBookingClient({
     setState({
       ...initialState,
       barcode: initialBarcode || '',
+      email: initialEmail || '',
+      phone: initialPhone || '',
       // In preview mode, keep mock data
       ...(previewMode ? {
         employees: MOCK_EMPLOYEES,
@@ -377,7 +385,7 @@ export function MagicLinkBookingClient({
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialBarcode, capabilities.supportsEmployeeSelection, previewMode, mockSlots]);
+  }, [initialBarcode, initialEmail, initialPhone, capabilities.supportsEmployeeSelection, previewMode, mockSlots]);
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: brand.background }}>

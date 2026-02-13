@@ -240,6 +240,15 @@ export const REVLINE_ADAPTER: AdapterDefinition = {
         success: z.boolean().default(true).describe('Whether the event is a success'),
       }),
     },
+    generate_booking_link: {
+      name: 'generate_booking_link',
+      label: 'Generate Booking Link',
+      description: 'Generate an encrypted pre-fill booking link and store it as a lead property',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        expiryDays: z.number().optional().describe('Token expiry in days (default 90)'),
+      }),
+    },
   },
 };
 

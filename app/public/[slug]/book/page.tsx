@@ -15,6 +15,7 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/app/_lib/db';
 import { WorkspaceStatus } from '@prisma/client';
 import { getBookingCapabilities, hasBookingProvider } from '@/app/_lib/booking';
+import { decryptPrefillToken } from '@/app/_lib/booking/prefill-token';
 import { WorkspaceConfigService } from '@/app/_lib/config';
 import { MagicLinkBookingClient } from './client';
 
@@ -25,6 +26,7 @@ interface BookingPageProps {
   searchParams: Promise<{
     barcode?: string;
     error?: string;
+    t?: string; // Encrypted pre-fill token
   }>;
 }
 
@@ -37,7 +39,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 export default async function PublicBookingPage({ params, searchParams }: BookingPageProps) {
   const { slug } = await params;
-  const { barcode, error: errorCode } = await searchParams;
+  const { barcode, error: errorCode, t: prefillToken } = await searchParams;
   
   // Find workspace by slug
   const workspace = await prisma.workspace.findUnique({
@@ -98,6 +100,21 @@ export default async function PublicBookingPage({ params, searchParams }: Bookin
   // Load workspace branding and copy configuration
   const config = await WorkspaceConfigService.resolveForBooking(workspace.id);
 
+  // Decrypt pre-fill token if present (silently ignore if invalid/expired)
+  let initialBarcode = barcode || null;
+  let initialEmail: string | null = null;
+  let initialPhone: string | null = null;
+
+  if (prefillToken) {
+    const prefill = decryptPrefillToken(prefillToken);
+    // Validate workspace matches to prevent cross-workspace token reuse
+    if (prefill && prefill.workspaceId === workspace.id) {
+      initialBarcode = prefill.barcode || initialBarcode;
+      initialEmail = prefill.email || null;
+      initialPhone = prefill.phone || null;
+    }
+  }
+
   // Show error message if redirected from confirm with error
   const errorMessage = errorCode ? ERROR_MESSAGES[errorCode] : null;
 
@@ -119,7 +136,9 @@ export default async function PublicBookingPage({ params, searchParams }: Bookin
         workspaceSlug={workspace.slug}
         workspaceName={workspace.name}
         capabilities={capabilities}
-        initialBarcode={barcode || null}
+        initialBarcode={initialBarcode}
+        initialEmail={initialEmail}
+        initialPhone={initialPhone}
         branding={config.branding}
         copy={config.copy}
         features={config.features}

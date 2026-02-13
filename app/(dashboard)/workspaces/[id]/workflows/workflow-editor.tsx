@@ -1054,6 +1054,25 @@ function ActionEditor({
         </div>
       )}
 
+      {action.adapter === 'revline' && action.operation === 'generate_booking_link' && (
+        <div>
+          <label className="block text-xs font-medium text-zinc-500 mb-1">
+            Token Expiry (days)
+          </label>
+          <input
+            type="number"
+            min={1}
+            max={365}
+            value={(action.params.expiryDays as number) || 90}
+            onChange={(e) => onParamChange(index, 'expiryDays', parseInt(e.target.value) || 90)}
+            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
+          />
+          <p className="text-xs text-zinc-600 mt-1">
+            Encrypted link will expire after this many days. Default: 90.
+          </p>
+        </div>
+      )}
+
       {/* Field Compatibility Check — show for lead-related actions when a trigger is selected */}
       {action.adapter === 'revline' &&
         (action.operation === 'create_lead' || action.operation === 'update_lead_properties') &&
