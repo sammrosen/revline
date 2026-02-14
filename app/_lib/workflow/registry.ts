@@ -432,6 +432,10 @@ export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
 /**
  * Resend Adapter
  * Handles transactional email sending via Resend
+ * 
+ * Two modes:
+ * 1. Template mode: Use Resend's native template system with variable mapping from lead properties
+ * 2. Inline mode: Raw HTML subject/body with {{lead.*}} variable resolution (backward compatible)
  */
 export const RESEND_ADAPTER: AdapterDefinition = {
   id: 'resend',
@@ -446,15 +450,24 @@ export const RESEND_ADAPTER: AdapterDefinition = {
     send_email: {
       name: 'send_email',
       label: 'Send Email',
-      description: 'Send a transactional email via Resend. Supports template variables: {{lead.email}}, {{lead.barcode}}, {{payload.name}}, etc.',
+      description: 'Send a transactional email via Resend. Use a Resend template with lead variable mapping, or send inline HTML with {{lead.*}} template vars.',
       payloadSchema: CommonPayloadSchema.extend({
         email: z.string().email().describe('Recipient email from trigger payload'),
       }),
       paramsSchema: z.object({
-        subject: z.string().describe('Email subject line (supports {{lead.*}}, {{payload.*}} template vars)'),
-        body: z.string().describe('Email body HTML (supports {{lead.*}}, {{payload.*}} template vars)'),
+        // Template mode (preferred)
+        template: z.string().optional().describe('Template key from Resend config'),
+        fields: z.record(z.string(), z.string()).optional()
+          .describe('Map Resend variable names to lead property keys (e.g., { "BARCODE": "barcode" })'),
+        // Inline mode (backward compatible)
+        subject: z.string().optional().describe('Email subject line (inline mode, supports {{lead.*}}, {{payload.*}} template vars)'),
+        body: z.string().optional().describe('Email body HTML (inline mode, supports {{lead.*}}, {{payload.*}} template vars)'),
+        // Shared
         replyTo: z.string().email().optional().describe('Override reply-to address'),
       }),
+      paramRequirements: {
+        template: 'meta.templates', // params.template must be a key in meta.templates
+      },
     },
   },
 };

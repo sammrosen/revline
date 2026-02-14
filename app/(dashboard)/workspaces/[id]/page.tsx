@@ -3,7 +3,7 @@ import { prisma } from '@/app/_lib/db';
 import { WorkspaceTabs } from './workspace-tabs';
 import { SetDashboardHeader } from '../../_components/SetDashboardHeader';
 import { IntegrationType } from '@prisma/client';
-import { MailerLiteMeta, isMailerLiteMeta, StripeMeta, LeadPropertyDefinition } from '@/app/_lib/types';
+import { MailerLiteMeta, isMailerLiteMeta, ResendMeta, isResendMeta, StripeMeta, LeadPropertyDefinition } from '@/app/_lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,6 +77,15 @@ export default async function WorkspaceDetailPage({
     ? mailerliteMeta.groups
     : {};
 
+  // Get Resend templates if configured
+  const resendIntegration = workspace.integrations.find(
+    (i) => i.integration === IntegrationType.RESEND
+  );
+  const resendMeta = resendIntegration?.meta as ResendMeta | null;
+  const resendTemplates = isResendMeta(resendMeta) && resendMeta.templates
+    ? resendMeta.templates
+    : {};
+
   // Get Stripe products if configured
   // Support both 'productMap' (official) and 'products' (legacy) field names
   const stripeIntegration = workspace.integrations.find(
@@ -127,6 +136,7 @@ export default async function WorkspaceDetailPage({
           }))}
           configuredIntegrations={workspace.integrations.map((i) => i.integration)}
           mailerliteGroups={mailerliteGroups}
+          resendTemplates={resendTemplates}
           stripeProducts={stripeProducts}
           timezone={workspace.timezone}
           domainConfig={{

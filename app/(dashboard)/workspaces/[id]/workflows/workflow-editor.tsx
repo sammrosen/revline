@@ -39,6 +39,7 @@ export interface WorkflowEditorProps {
   };
   configuredIntegrations: string[];
   mailerliteGroups?: Record<string, { id: string; name: string }>;
+  resendTemplates?: Record<string, { id: string; name: string; variables?: string[] }>;
   stripeProducts?: Record<string, string>; // key -> product name
   leadStages?: Array<{ key: string; label: string; color: string }>;
   leadPropertySchema?: LeadPropertyDefinition[] | null;
@@ -55,6 +56,7 @@ export function WorkflowEditor({
   initialData,
   configuredIntegrations,
   mailerliteGroups = {},
+  resendTemplates = {},
   stripeProducts = {},
   leadStages,
   leadPropertySchema,
@@ -640,6 +642,7 @@ export function WorkflowEditor({
                 allActionOptions={actionOptions}
                 configuredIntegrations={configuredIntegrations}
                 mailerliteGroups={mailerliteGroups}
+                resendTemplates={resendTemplates}
                 leadStages={leadStages}
                 leadPropertySchema={leadPropertySchema}
                 workspaceId={workspaceId}
@@ -781,6 +784,7 @@ interface ActionEditorProps {
   allActionOptions: ActionOption[]; // All options including unconfigured
   configuredIntegrations: string[];
   mailerliteGroups: Record<string, { id: string; name: string }>;
+  resendTemplates: Record<string, { id: string; name: string; variables?: string[] }>;
   leadStages?: Array<{ key: string; label: string; color: string }>;
   leadPropertySchema?: LeadPropertyDefinition[] | null;
   workspaceId: string;
@@ -798,6 +802,7 @@ function ActionEditor({
   allActionOptions,
   configuredIntegrations,
   mailerliteGroups,
+  resendTemplates,
   leadStages,
   leadPropertySchema,
   workspaceId,
@@ -999,6 +1004,184 @@ function ActionEditor({
             ))}
           </select>
         </div>
+      )}
+
+      {/* Resend send_email: Template dropdown + variable mapping (mirrors MailerLite pattern) */}
+      {action.adapter === 'resend' && action.operation === 'send_email' && (
+        <>
+          {/* Template vs Inline mode */}
+          {Object.keys(resendTemplates).length > 0 ? (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">
+                  Template
+                </label>
+                <select
+                  value={(action.params.template as string) || ''}
+                  onChange={(e) => {
+                    const newTemplate = e.target.value || undefined;
+                    // Must update all params in a single call to avoid stale state
+                    // (multiple onParamChange calls would overwrite each other)
+                    const updatedParams: Record<string, unknown> = { ...action.params, template: newTemplate };
+                    if (newTemplate) {
+                      // Clear inline params when switching to template mode
+                      delete updatedParams.body;
+                    }
+                    onChange(index, 'params', updatedParams);
+                  }}
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm focus:outline-none focus:border-zinc-600"
+                >
+                  <option value="">Select template...</option>
+                  {Object.entries(resendTemplates).map(([key, template]) => (
+                    <option key={key} value={key}>
+                      {template.name} ({key})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Variable mapping — map lead properties to Resend template variables */}
+              {action.params.template && (() => {
+                const selectedTemplate = resendTemplates[action.params.template as string];
+                const templateVars = selectedTemplate?.variables || [];
+
+                if (templateVars.length === 0) return null;
+
+                return (
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1.5">
+                      Variable Mapping
+                    </label>
+                    <p className="text-xs text-zinc-600 mb-2">
+                      Map template variables to lead properties. Selected properties will populate the email.
+                    </p>
+                    {leadPropertySchema && leadPropertySchema.length > 0 ? (
+                      <div className="space-y-2">
+                        {templateVars.map((varName) => {
+                          const currentFields = (action.params.fields as Record<string, string>) || {};
+                          const currentValue = currentFields[varName] || '';
+
+                          return (
+                            <div key={varName} className="flex items-center gap-2">
+                              <span className="text-xs font-mono text-indigo-400 min-w-[100px] truncate" title={varName}>
+                                {`{{{${varName}}}}`}
+                              </span>
+                              <span className="text-zinc-600 text-xs">&larr;</span>
+                              <select
+                                value={currentValue}
+                                onChange={(e) => {
+                                  const newFields = { ...currentFields };
+                                  if (e.target.value) {
+                                    newFields[varName] = e.target.value;
+                                  } else {
+                                    delete newFields[varName];
+                                  }
+                                  if (Object.keys(newFields).length === 0) {
+                                    onParamChange(index, 'fields', undefined);
+                                  } else {
+                                    onParamChange(index, 'fields', newFields);
+                                  }
+                                }}
+                                className="flex-1 px-2 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-white text-xs focus:outline-none focus:border-zinc-600"
+                              >
+                                <option value="">Not mapped</option>
+                                {/* Built-in lead fields */}
+                                <optgroup label="Lead Fields">
+                                  <option value="email">email</option>
+                                  <option value="source">source</option>
+                                  <option value="stage">stage</option>
+                                </optgroup>
+                                {/* Custom lead properties */}
+                                <optgroup label="Lead Properties">
+                                  {leadPropertySchema.map((prop) => (
+                                    <option key={prop.key} value={prop.key}>
+                                      {prop.label} ({prop.key})
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              </select>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-zinc-600">
+                        No lead properties defined. Add a property schema to map variables.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Subject line — required, templates don't include subject */}
+              {action.params.template && (
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">
+                    Subject <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={(action.params.subject as string) || ''}
+                    onChange={(e) => onParamChange(index, 'subject', e.target.value)}
+                    placeholder='e.g., Welcome to the gym, {{payload.name}}!'
+                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm focus:outline-none focus:border-zinc-600"
+                  />
+                  <p className="text-xs text-zinc-600 mt-1">
+                    {'Resend templates do not include a subject line. Supports {{lead.*}} and {{payload.*}} variables.'}
+                  </p>
+                </div>
+              )}
+            </>
+          ) : (
+            /* Inline mode — no templates configured, use subject + body */
+            <>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">
+                  Subject <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={(action.params.subject as string) || ''}
+                  onChange={(e) => onParamChange(index, 'subject', e.target.value)}
+                  placeholder='e.g., Welcome {{payload.name}}!'
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm focus:outline-none focus:border-zinc-600"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">
+                  Body (HTML) <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  value={(action.params.body as string) || ''}
+                  onChange={(e) => onParamChange(index, 'body', e.target.value)}
+                  placeholder={'<h1>Hello {{payload.name}}</h1>\n<p>Your barcode is {{lead.barcode}}</p>'}
+                  rows={4}
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm font-mono focus:outline-none focus:border-zinc-600"
+                />
+                <p className="text-xs text-zinc-600 mt-1">
+                  {'Supports template variables: {{lead.email}}, {{lead.barcode}}, {{payload.name}}, etc.'}
+                </p>
+              </div>
+              <p className="text-xs text-zinc-500 bg-zinc-900/50 border border-zinc-800 rounded p-2">
+                Configure templates in the Resend integration settings for a better email authoring experience.
+              </p>
+            </>
+          )}
+
+          {/* Reply-To override (both modes) */}
+          <div>
+            <label className="block text-xs font-medium text-zinc-500 mb-1">
+              Reply-To Override (optional)
+            </label>
+            <input
+              type="email"
+              value={(action.params.replyTo as string) || ''}
+              onChange={(e) => onParamChange(index, 'replyTo', e.target.value || undefined)}
+              placeholder="Leave empty to use integration default"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm focus:outline-none focus:border-zinc-600"
+            />
+          </div>
+        </>
       )}
 
       {action.adapter === 'revline' && action.operation === 'update_lead_stage' && (

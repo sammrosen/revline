@@ -39,6 +39,7 @@ export interface WorkflowListProps {
   workflows: Workflow[];
   configuredIntegrations: string[];
   mailerliteGroups?: Record<string, { id: string; name: string }>;
+  resendTemplates?: Record<string, { id: string; name: string; variables?: string[] }>;
   stripeProducts?: Record<string, string>;
   leadStages?: Array<{ key: string; label: string; color: string }>;
   leadPropertySchema?: LeadPropertyDefinition[] | null;
@@ -51,6 +52,7 @@ export function WorkflowList({
   workflows,
   configuredIntegrations,
   mailerliteGroups = {},
+  resendTemplates = {},
   stripeProducts = {},
   leadStages,
   leadPropertySchema,
@@ -198,6 +200,7 @@ export function WorkflowList({
             initialData={workflowData || undefined}
             configuredIntegrations={configuredIntegrations}
             mailerliteGroups={mailerliteGroups}
+            resendTemplates={resendTemplates}
             stripeProducts={stripeProducts}
             leadStages={leadStages}
             leadPropertySchema={leadPropertySchema}
@@ -235,6 +238,7 @@ export function WorkflowList({
           initialData={workflowData || undefined}
           configuredIntegrations={configuredIntegrations}
           mailerliteGroups={mailerliteGroups}
+          resendTemplates={resendTemplates}
           stripeProducts={stripeProducts}
           leadStages={leadStages}
           leadPropertySchema={leadPropertySchema}

@@ -562,14 +562,31 @@ export interface RevlineMeta {
 }
 
 /**
+ * A named Resend template with ID and variable definitions
+ */
+export interface ResendTemplate {
+  /** Resend template ID (UUID) */
+  id: string;
+  /** Display name for the template */
+  name: string;
+  /** Variable keys defined in the template (e.g., ["BARCODE", "FIRST_NAME"]) */
+  variables?: string[];
+}
+
+/**
  * Resend integration metadata
  * Configuration for transactional email sending
+ * Templates are referenced by key in workflow actions (e.g., send_email with template: "welcome")
  * 
  * @example
  * {
  *   "fromEmail": "bookings@yourdomain.com",
  *   "fromName": "Sports West",
- *   "replyTo": "support@yourdomain.com"
+ *   "replyTo": "support@yourdomain.com",
+ *   "templates": {
+ *     "welcome": { "id": "f3b9756c-...", "name": "Welcome Email", "variables": ["FIRST_NAME", "BARCODE"] },
+ *     "payment-confirm": { "id": "a1b2c3d4-...", "name": "Payment Confirmation", "variables": ["FIRST_NAME", "AMOUNT"] }
+ *   }
  * }
  */
 export interface ResendMeta {
@@ -579,6 +596,8 @@ export interface ResendMeta {
   fromName?: string;
   /** Default reply-to address */
   replyTo?: string;
+  /** Named templates with Resend template IDs and variable definitions */
+  templates?: Record<string, ResendTemplate>;
 }
 
 /**
@@ -600,6 +619,14 @@ export type IntegrationMeta =
 export function isMailerLiteMeta(meta: IntegrationMeta | null): meta is MailerLiteMeta {
   if (!meta) return false;
   return 'groups' in meta;
+}
+
+/**
+ * Type guard for Resend meta
+ */
+export function isResendMeta(meta: IntegrationMeta | null): meta is ResendMeta {
+  if (!meta) return false;
+  return 'fromEmail' in meta;
 }
 
 /**

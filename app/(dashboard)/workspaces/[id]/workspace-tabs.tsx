@@ -81,6 +81,7 @@ interface WorkspaceTabsProps {
   workflows: Workflow[];
   configuredIntegrations: string[];
   mailerliteGroups?: Record<string, { id: string; name: string }>;
+  resendTemplates?: Record<string, { id: string; name: string; variables?: string[] }>;
   stripeProducts?: Record<string, string>;
   timezone?: string; // Workspace timezone for settings
   domainConfig?: {
@@ -134,7 +135,7 @@ interface IntegrationDependency {
 
 const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'testing', 'settings'];
 
-export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, stripeProducts = {}, timezone = 'America/New_York', domainConfig, leadStages, leadPropertySchema }: WorkspaceTabsProps) {
+export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, resendTemplates = {}, stripeProducts = {}, timezone = 'America/New_York', domainConfig, leadStages, leadPropertySchema }: WorkspaceTabsProps) {
   // Initialize with default to avoid hydration mismatch, then sync from hash in useEffect
   const [activeTab, setActiveTab] = useState<TabType>('workflows');
   const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
@@ -281,6 +282,7 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
                   workflows={workflows}
                   configuredIntegrations={configuredIntegrations}
                   mailerliteGroups={mailerliteGroups}
+                  resendTemplates={resendTemplates}
                   stripeProducts={stripeProducts}
                   leadStages={leadStages}
                   leadPropertySchema={leadPropertySchema}
@@ -297,6 +299,7 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
             workspaceId={workspaceId}
             configuredIntegrations={configuredIntegrations}
             mailerliteGroups={mailerliteGroups}
+            resendTemplates={resendTemplates}
             stripeProducts={stripeProducts}
             leadStages={leadStages}
             leadPropertySchema={leadPropertySchema}

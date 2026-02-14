@@ -372,6 +372,7 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
               onChange={setMetaText}
               error={error}
               integrationId={integration.id}
+              workspaceId={workspaceId}
             />
           ) : (
             <>

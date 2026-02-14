@@ -2,7 +2,7 @@
  * Resend Integration Adapter
  * 
  * Handles Resend API operations for a specific workspace.
- * Configuration includes sender settings stored in integration meta.
+ * Configuration includes sender settings and template references stored in integration meta.
  * 
  * Secret names:
  * - "API Key" - Required for all operations
@@ -16,7 +16,7 @@
 import { IntegrationType } from '@prisma/client';
 import { Resend } from 'resend';
 import { BaseIntegrationAdapter } from './base';
-import { ResendMeta, IntegrationResult } from '@/app/_lib/types';
+import { ResendMeta, ResendTemplate, IntegrationResult } from '@/app/_lib/types';
 
 /** Default secret name for Resend API key */
 export const RESEND_API_KEY_SECRET = 'API Key';
@@ -29,7 +29,7 @@ export interface SendEmailResult {
 }
 
 /**
- * Parameters for sending an email
+ * Parameters for sending an email (inline HTML mode)
  */
 export interface SendEmailParams {
   to: string | string[];
@@ -41,6 +41,30 @@ export interface SendEmailParams {
   fromEmail?: string;
   /** Override from name (uses config default if not provided) */
   fromName?: string;
+}
+
+/**
+ * Parameters for sending an email using a Resend template
+ */
+export interface SendTemplateParams {
+  to: string | string[];
+  /** Resend template ID (UUID) */
+  templateId: string;
+  /** Template variables as key-value pairs */
+  variables?: Record<string, string | number>;
+  /** Optional subject override (takes precedence over template default) */
+  subject?: string;
+  /** Optional reply-to override */
+  replyTo?: string;
+}
+
+/**
+ * A remote template fetched from the Resend API
+ */
+export interface RemoteResendTemplate {
+  id: string;
+  name: string;
+  variables?: Array<{ key: string; type: string; fallbackValue?: string | number }>;
 }
 
 /**
@@ -197,6 +221,190 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
       );
     }
   }
+
+  // ===========================================================================
+  // TEMPLATE OPERATIONS
+  // ===========================================================================
+
+  /**
+   * Get the configured templates from meta
+   * Mirrors MailerLiteAdapter.getConfiguredGroups()
+   */
+  getConfiguredTemplates(): Record<string, ResendTemplate> {
+    return this.meta?.templates ?? {};
+  }
+
+  /**
+   * Get a specific template by key
+   * Mirrors MailerLiteAdapter.getGroup()
+   */
+  getTemplate(key: string): ResendTemplate | null {
+    return this.meta?.templates?.[key] ?? null;
+  }
+
+  /**
+   * Check if the integration has templates configured
+   * Mirrors MailerLiteAdapter.hasGroups()
+   */
+  hasTemplates(): boolean {
+    const templates = this.meta?.templates;
+    return !!templates && Object.keys(templates).length > 0;
+  }
+
+  /**
+   * Send an email using a Resend template with variables
+   * Uses Resend's native template system (template.id + template.variables)
+   */
+  async sendTemplate(params: SendTemplateParams): Promise<IntegrationResult<SendEmailResult>> {
+    const { to, templateId, variables, subject, replyTo } = params;
+
+    try {
+      // Build from address
+      const from = this.buildFromAddress();
+
+      // Use override reply-to or fall back to config
+      const effectiveReplyTo = replyTo || this.getReplyTo() || undefined;
+
+      const client = this.getClient();
+
+      // Build the send payload with Resend's native template support
+      // When template is provided, html/text/react must NOT be included
+      const sendPayload: Parameters<typeof client.emails.send>[0] = {
+        from,
+        to: Array.isArray(to) ? to : [to],
+        template: {
+          id: templateId,
+          ...(variables && Object.keys(variables).length > 0 ? { variables } : {}),
+        },
+      };
+
+      // Subject override takes precedence over template default
+      if (subject) {
+        sendPayload.subject = subject;
+      }
+
+      if (effectiveReplyTo) {
+        sendPayload.replyTo = effectiveReplyTo;
+      }
+
+      const { data, error } = await client.emails.send(sendPayload);
+
+      if (error) {
+        console.error('Resend template API error:', {
+          workspaceId: this.workspaceId,
+          templateId,
+          error: error.message,
+        });
+        await this.markUnhealthy();
+        return this.error(error.message, false);
+      }
+
+      await this.touch();
+      return this.success({
+        messageId: data?.id || 'unknown',
+      });
+
+    } catch (error) {
+      console.error('Resend sendTemplate error:', {
+        workspaceId: this.workspaceId,
+        templateId,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      await this.markUnhealthy();
+      return this.error(
+        error instanceof Error ? error.message : 'Network error or API unavailable',
+        true
+      );
+    }
+  }
+
+  /**
+   * List templates from the Resend account
+   * Used by the config editor to fetch available templates for selection
+   */
+  async listRemoteTemplates(): Promise<IntegrationResult<RemoteResendTemplate[]>> {
+    try {
+      const client = this.getClient();
+      const { data, error } = await client.templates.list();
+
+      if (error) {
+        console.error('Resend list templates error:', {
+          workspaceId: this.workspaceId,
+          error: error.message,
+        });
+        return this.error(error.message, false);
+      }
+
+      // Map to our simplified shape
+      const templates: RemoteResendTemplate[] = (data?.data || []).map((t) => ({
+        id: t.id,
+        name: t.name,
+        // Variables may not be in the list response; they come from individual template fetch
+      }));
+
+      await this.touch();
+      return this.success(templates);
+
+    } catch (error) {
+      console.error('Resend listRemoteTemplates error:', {
+        workspaceId: this.workspaceId,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      return this.error(
+        error instanceof Error ? error.message : 'Network error or API unavailable',
+        true
+      );
+    }
+  }
+
+  /**
+   * Fetch a single template's details including variables
+   * Used to populate variable definitions when adding a template to config
+   */
+  async getRemoteTemplate(templateId: string): Promise<IntegrationResult<RemoteResendTemplate>> {
+    try {
+      const client = this.getClient();
+      const { data, error } = await client.templates.get(templateId);
+
+      if (error) {
+        console.error('Resend get template error:', {
+          workspaceId: this.workspaceId,
+          templateId,
+          error: error.message,
+        });
+        return this.error(error.message, false);
+      }
+
+      if (!data) {
+        return this.error('Template not found', false);
+      }
+
+      const template: RemoteResendTemplate = {
+        id: data.id,
+        name: data.name,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        variables: (data as any).variables,
+      };
+
+      await this.touch();
+      return this.success(template);
+
+    } catch (error) {
+      console.error('Resend getRemoteTemplate error:', {
+        workspaceId: this.workspaceId,
+        templateId,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      return this.error(
+        error instanceof Error ? error.message : 'Network error or API unavailable',
+        true
+      );
+    }
+  }
+
+  // ===========================================================================
+  // CONFIGURATION
+  // ===========================================================================
 
   /**
    * Check if the integration is properly configured

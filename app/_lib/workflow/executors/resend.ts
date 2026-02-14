@@ -3,7 +3,10 @@
  *
  * Executors for Resend email operations.
  * Uses the ResendAdapter for API calls.
- * Supports template variable resolution in subject and body.
+ * 
+ * Supports two modes:
+ * - Template mode: Uses Resend's native template system with variable mapping from lead properties
+ * - Inline mode: Raw HTML subject/body with {{lead.*}}, {{payload.*}} template variable resolution
  */
 
 import { ResendAdapter } from '@/app/_lib/integrations';
@@ -12,7 +15,7 @@ import { prisma } from '@/app/_lib/db';
 import { WorkflowContext, ActionResult, ActionExecutor } from '../types';
 
 // =============================================================================
-// TEMPLATE VARIABLE RESOLUTION
+// INLINE TEMPLATE VARIABLE RESOLUTION (backward-compatible)
 // =============================================================================
 
 /**
@@ -83,36 +86,180 @@ function resolveTemplateVars(
 /**
  * Send an email via Resend
  * 
- * Params:
- * - subject: Email subject line (supports {{lead.*}}, {{payload.*}} template vars)
- * - body: Email body content (HTML, supports template vars)
- * - replyTo: Optional override for reply-to address
+ * Two modes:
  * 
- * Template variables are resolved before sending:
- * - {{lead.email}}, {{lead.barcode}}, {{lead.memberType}} etc.
- * - {{payload.name}}, {{payload.phone}} etc.
- * - {{action.leadId}} etc.
+ * 1. Template mode (preferred):
+ *    - template: Template key from ResendMeta.templates config
+ *    - fields: Optional mapping of Resend variable names to lead property keys
+ *      e.g., { "BARCODE": "barcode", "FIRST_NAME": "firstName" }
+ *      Maps lead.properties[leadPropKey] → Resend template variable[resendVarName]
+ * 
+ * 2. Inline mode (backward compatible):
+ *    - subject: Email subject line (supports {{lead.*}}, {{payload.*}} template vars)
+ *    - body: Email body content (HTML, supports template vars)
+ * 
+ * Shared params:
+ *    - replyTo: Optional override for reply-to address
  */
 const sendEmail: ActionExecutor = {
   async execute(
     ctx: WorkflowContext,
     params: Record<string, unknown>
   ): Promise<ActionResult> {
-    let subject = params.subject as string;
-    let body = params.body as string;
+    const templateKey = params.template as string | undefined;
     const replyTo = params.replyTo as string | undefined;
-
-    // Validate required params
-    if (!subject) {
-      return { success: false, error: 'Missing subject parameter' };
-    }
-    if (!body) {
-      return { success: false, error: 'Missing body parameter' };
-    }
 
     // ctx.email is the recipient from the trigger payload
     if (!ctx.email) {
       return { success: false, error: 'No recipient email in workflow context' };
+    }
+
+    // Get adapter for this workspace
+    const adapter = await ResendAdapter.forWorkspace(ctx.workspaceId);
+    if (!adapter) {
+      return { success: false, error: 'Resend not configured for this workspace' };
+    }
+
+    // Validate adapter configuration
+    const validation = adapter.validateConfig();
+    if (!validation.valid) {
+      return { 
+        success: false, 
+        error: `Resend configuration error: ${validation.errors.join(', ')}` 
+      };
+    }
+
+    // =========================================================================
+    // TEMPLATE MODE: Use Resend's native template system
+    // =========================================================================
+    if (templateKey) {
+      // Look up template by key from meta (mirrors MailerLite group lookup)
+      const template = adapter.getTemplate(templateKey);
+      if (!template) {
+        return {
+          success: false,
+          error: `Template '${templateKey}' not found in Resend config`,
+        };
+      }
+
+      // Load lead data once — used for both variable mapping and subject resolution
+      let leadData: { email: string; source: string | null; stage: string; properties: Record<string, unknown> | null } | undefined;
+      if (ctx.leadId) {
+        const lead = await prisma.lead.findUnique({
+          where: { id: ctx.leadId },
+          select: { email: true, source: true, stage: true, properties: true },
+        });
+        if (lead) {
+          leadData = {
+            email: lead.email,
+            source: lead.source,
+            stage: lead.stage,
+            properties: (lead.properties as Record<string, unknown>) ?? null,
+          };
+        }
+      }
+
+      // Resolve custom template variables from lead properties
+      // Mirrors MailerLite executor field mapping (lines 54-76 of mailerlite.ts)
+      const variables: Record<string, string | number> = {};
+      const fieldMapping = params.fields as Record<string, string> | undefined;
+
+      if (leadData && fieldMapping && typeof fieldMapping === 'object') {
+        const leadProps = leadData.properties ?? {};
+        // Built-in lead fields available for mapping
+        const builtInFields: Record<string, unknown> = {
+          email: leadData.email,
+          source: leadData.source,
+          stage: leadData.stage,
+        };
+
+        for (const [resendVarName, leadPropKey] of Object.entries(fieldMapping)) {
+          // Check built-in fields first, then custom properties
+          const value = builtInFields[leadPropKey] ?? leadProps[leadPropKey];
+          variables[resendVarName] = (value !== undefined && value !== null)
+            ? (typeof value === 'number' ? value : String(value))
+            : '';
+        }
+      }
+
+      // Ensure ALL template-defined variables are present (fail-safe).
+      // Resend rejects the request if any required variable is missing.
+      // Send empty string for any variable not covered by the field mapping.
+      const templateVars = template.variables ?? [];
+      for (const varName of templateVars) {
+        if (!(varName in variables)) {
+          variables[varName] = '';
+        }
+      }
+
+      // Resolve subject — required since Resend templates don't include subject
+      let subject = params.subject as string | undefined;
+      if (!subject) {
+        return { success: false, error: 'Missing subject parameter (required — Resend templates do not include a subject line)' };
+      }
+
+      // Resolve {{lead.*}}, {{payload.*}} template vars in subject
+      const hasSubjectVars = TEMPLATE_VAR_REGEX.test(subject);
+      TEMPLATE_VAR_REGEX.lastIndex = 0;
+
+      if (hasSubjectVars && leadData) {
+        subject = resolveTemplateVars(subject, {
+          lead: leadData,
+          payload: ctx.trigger.payload,
+          actionData: ctx.actionData,
+        });
+      }
+
+      // Send using Resend's native template system
+      const result = await adapter.sendTemplate({
+        to: ctx.email,
+        templateId: template.id,
+        variables: Object.keys(variables).length > 0 ? variables : undefined,
+        subject,
+        replyTo,
+      });
+
+      // Emit event for tracking
+      await emitEvent({
+        workspaceId: ctx.workspaceId,
+        leadId: ctx.leadId,
+        system: EventSystem.RESEND,
+        eventType: result.success
+          ? 'resend_template_sent'
+          : 'resend_template_failed',
+        success: result.success,
+        errorMessage: result.error,
+      });
+
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+
+      return {
+        success: true,
+        data: {
+          messageId: result.data?.messageId,
+          to: ctx.email,
+          subject,
+          templateKey,
+          templateId: template.id,
+          ...(Object.keys(variables).length > 0 ? { variablesSent: Object.keys(variables) } : {}),
+        },
+      };
+    }
+
+    // =========================================================================
+    // INLINE MODE: Raw HTML with {{lead.*}} variable resolution (backward compatible)
+    // =========================================================================
+    let subject = params.subject as string;
+    let body = params.body as string;
+
+    // Validate required params for inline mode
+    if (!subject) {
+      return { success: false, error: 'Missing subject parameter (required for inline mode)' };
+    }
+    if (!body) {
+      return { success: false, error: 'Missing body parameter (required for inline mode)' };
     }
 
     // Resolve template variables if any are present
@@ -147,21 +294,6 @@ const sendEmail: ActionExecutor = {
 
       subject = resolveTemplateVars(subject, templateContext);
       body = resolveTemplateVars(body, templateContext);
-    }
-
-    // Get adapter for this workspace
-    const adapter = await ResendAdapter.forWorkspace(ctx.workspaceId);
-    if (!adapter) {
-      return { success: false, error: 'Resend not configured for this workspace' };
-    }
-
-    // Validate adapter configuration
-    const validation = adapter.validateConfig();
-    if (!validation.valid) {
-      return { 
-        success: false, 
-        error: `Resend configuration error: ${validation.errors.join(', ')}` 
-      };
     }
 
     // Send the email
