@@ -54,6 +54,12 @@ function getDisplayParams(
   if (params.flowId) {
     displayParams.push({ label: 'Flow', value: formatParamValue(params.flowId) });
   }
+  if (params.template) {
+    displayParams.push({ label: 'Template', value: formatParamValue(params.template) });
+  }
+  if (params.subject && !params.template) {
+    displayParams.push({ label: 'Subject', value: formatParamValue(params.subject) });
+  }
 
   return displayParams;
 }

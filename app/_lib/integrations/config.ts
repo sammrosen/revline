@@ -275,17 +275,20 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
       fromEmail: '',
       fromName: '',
       replyTo: '',
+      templates: {},
     },
-    metaDescription: 'Configure sender settings for transactional emails',
+    metaDescription: 'Configure sender settings and email templates for transactional emails',
     metaFields: [
       { key: 'fromEmail', description: 'Verified sender email address', required: true },
       { key: 'fromName', description: 'Sender display name (e.g., "Sports West")' },
       { key: 'replyTo', description: 'Default reply-to address' },
+      { key: 'templates.*', description: 'Named templates with Resend template ID, name, and variable definitions' },
     ],
     tips: [
       'Verify your sending domain in Resend before configuring',
       'Use fromName for branded emails: e.g., "Sports West <bookings@gym.com>"',
       'The from address must use a verified domain',
+      'Create email templates in the Resend dashboard, then fetch and configure them here',
     ],
     warnings: [
       'Emails will fail if the domain is not verified in Resend',
