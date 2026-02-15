@@ -11,6 +11,7 @@ interface Lead {
   stage: string;
   source: string | null;
   properties?: Record<string, unknown> | null;
+  errorState?: string | null;
   lastEventAt: Date | string | null;
   createdAt: Date | string;
 }
@@ -45,6 +46,29 @@ function StageBadge({ stage, stages }: { stage: string; stages: LeadStageDefinit
       }}
     >
       {label}
+    </span>
+  );
+}
+
+const ERROR_STATE_DISPLAY: Record<string, { label: string; color: string; bg: string }> = {
+  'resend.email_bounced': { label: 'Bounced', color: 'text-red-400', bg: 'bg-red-500/10' },
+  'resend.email_complained': { label: 'Spam', color: 'text-orange-400', bg: 'bg-orange-500/10' },
+  'resend.email_failed': { label: 'Failed', color: 'text-red-400', bg: 'bg-red-500/10' },
+  'resend.delivery_delayed': { label: 'Delayed', color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
+};
+
+function ErrorBadge({ errorState }: { errorState?: string | null }) {
+  if (!errorState) return null;
+
+  const display = ERROR_STATE_DISPLAY[errorState] ?? {
+    label: errorState.replace(/^[^.]+\./, ''),
+    color: 'text-zinc-400',
+    bg: 'bg-zinc-500/10',
+  };
+
+  return (
+    <span className={`ml-2 px-1.5 py-0.5 text-[10px] rounded font-medium ${display.color} ${display.bg}`}>
+      {display.label}
     </span>
   );
 }
@@ -171,7 +195,10 @@ export function LeadsView({ workspaceId, leads, leadStages, leadPropertySchema }
                         isStale ? 'bg-yellow-500/5' : ''
                       }`}
                     >
-                      <td className="px-4 py-2 font-mono text-xs whitespace-nowrap">{lead.email}</td>
+                      <td className="px-4 py-2 font-mono text-xs whitespace-nowrap">
+                        {lead.email}
+                        <ErrorBadge errorState={lead.errorState} />
+                      </td>
                       <td className="px-4 py-2 whitespace-nowrap">
                         <StageBadge stage={lead.stage} stages={stages} />
                       </td>
