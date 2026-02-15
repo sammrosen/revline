@@ -26,6 +26,7 @@ async function getWorkspace(id: string) {
             stage: true,
             source: true,
             properties: true,
+            errorState: true,
             lastEventAt: true,
             createdAt: true,
           },
