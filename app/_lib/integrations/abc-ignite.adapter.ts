@@ -554,6 +554,17 @@ export function isDateInWindow(dateStr: string, since: Date, until: Date): boole
  * - personal.gender     → gender
  * - memberId            → member_id
  */
+/**
+ * Convert ALL CAPS or lowercase name to Title Case.
+ * Handles hyphenated names (e.g., "MARY-JANE" → "Mary-Jane")
+ * and multi-word names (e.g., "DE LA CRUZ" → "De La Cruz").
+ */
+export function titleCase(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/(^|[\s-])(\w)/g, (_match, sep, char) => sep + char.toUpperCase());
+}
+
 export function normalizeMemberPayload(member: AbcIgniteMember): Record<string, string> {
   const p = member.personal;
   const a = member.agreement;
@@ -562,9 +573,9 @@ export function normalizeMemberPayload(member: AbcIgniteMember): Record<string, 
   // Email is the critical field — always include if available
   if (p?.email) payload.email = p.email;
 
-  // Personal info
-  if (p?.firstName) payload.first_name = p.firstName;
-  if (p?.lastName) payload.last_name = p.lastName;
+  // Personal info — title case names (ABC returns ALL CAPS)
+  if (p?.firstName) payload.first_name = titleCase(p.firstName);
+  if (p?.lastName) payload.last_name = titleCase(p.lastName);
   if (p?.primaryPhone) payload.phone = p.primaryPhone;
   if (p?.barcode) payload.barcode = p.barcode;
   if (p?.memberStatus) payload.member_status = p.memberStatus;

@@ -242,6 +242,11 @@ export function extractProviderEventId(
         // Calendly uses event URI as unique identifier
         return payload.payload?.event || payload.payload?.uri || null;
       
+      case 'resend':
+        // Resend uses svix-id header for dedup, but as fallback extract from body
+        // The webhook route will prefer the svix-id header over this
+        return payload.data?.email_id || `resend-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      
       case 'revline':
         // Internal events - generate a unique ID based on content
         // For email capture, use email + timestamp

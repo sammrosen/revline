@@ -608,6 +608,8 @@ export interface ResendMeta {
   replyTo?: string;
   /** Named templates with Resend template IDs and variable definitions */
   templates?: Record<string, ResendTemplate>;
+  /** Svix signing secret from Resend webhook config (whsec_...) for inbound webhook verification */
+  webhookSecret?: string;
 }
 
 /**

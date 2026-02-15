@@ -451,7 +451,50 @@ export const RESEND_ADAPTER: AdapterDefinition = {
     secrets: ['API Key'],
     metaKeys: ['fromEmail'],
   },
-  triggers: {}, // No inbound webhooks from Resend
+  triggers: {
+    email_bounced: {
+      name: 'email_bounced',
+      label: 'Email Bounced',
+      description: 'Fires when a sent email permanently bounces. Use to remove invalid leads or flag for review.',
+      payloadSchema: CommonPayloadSchema.extend({
+        email: z.string().email().describe('Recipient email that bounced'),
+        error_state: z.string().optional().describe('Provider-prefixed error state (e.g., "resend.email_bounced")'),
+        bounce_type: z.string().optional().describe('Bounce classification (e.g., "Permanent", "Temporary")'),
+        bounce_message: z.string().optional().describe('Bounce reason from the mail server'),
+        subject: z.string().optional().describe('Original email subject'),
+      }),
+    },
+    email_complained: {
+      name: 'email_complained',
+      label: 'Email Complained (Spam)',
+      description: 'Fires when a recipient marks the email as spam. Use to suppress future sends or remove from lists.',
+      payloadSchema: CommonPayloadSchema.extend({
+        email: z.string().email().describe('Recipient email that reported spam'),
+        error_state: z.string().optional().describe('Provider-prefixed error state (e.g., "resend.email_complained")'),
+        subject: z.string().optional().describe('Original email subject'),
+      }),
+    },
+    email_failed: {
+      name: 'email_failed',
+      label: 'Email Failed',
+      description: 'Fires when an email fails to send. Use to retry or flag leads with delivery issues.',
+      payloadSchema: CommonPayloadSchema.extend({
+        email: z.string().email().describe('Recipient email that failed'),
+        error_state: z.string().optional().describe('Provider-prefixed error state (e.g., "resend.email_failed")'),
+        subject: z.string().optional().describe('Original email subject'),
+      }),
+    },
+    email_delivery_delayed: {
+      name: 'email_delivery_delayed',
+      label: 'Email Delivery Delayed',
+      description: 'Fires when email delivery is temporarily delayed. Transient -- auto-clears when the email is eventually delivered.',
+      payloadSchema: CommonPayloadSchema.extend({
+        email: z.string().email().describe('Recipient email with delayed delivery'),
+        error_state: z.string().optional().describe('Provider-prefixed error state (e.g., "resend.delivery_delayed")'),
+        subject: z.string().optional().describe('Original email subject'),
+      }),
+    },
+  },
   actions: {
     send_email: {
       name: 'send_email',

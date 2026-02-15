@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/_lib/db';
 import { getUserIdFromHeaders } from '@/app/_lib/auth';
 import { getWorkspaceAccess, WorkspaceRole } from '@/app/_lib/workspace-access';
-import { AbcIgniteAdapter, normalizeMemberPayload } from '@/app/_lib/integrations';
+import { AbcIgniteAdapter, normalizeMemberPayload, ResendAdapter } from '@/app/_lib/integrations';
 import { emitTrigger } from '@/app/_lib/workflow';
 import { IntegrationType } from '@prisma/client';
 import type { AbcIgniteMeta } from '@/app/_lib/types';
@@ -52,6 +52,13 @@ const SCENARIOS: ScenarioDefinition[] = [
     fields: [
       { name: 'lookbackMinutes', label: 'Lookback Window (minutes)', placeholder: '75', required: false },
     ],
+  },
+  {
+    id: 'resend_webhook_status',
+    name: 'Resend Webhook Status',
+    description: 'Check webhook configuration and view leads with email delivery issues (bounces, complaints, failures). Diagnostic only — no destructive actions.',
+    integration: 'RESEND',
+    fields: [],
   },
 ];
 
@@ -467,6 +474,103 @@ export async function POST(
           members: memberSummaries,
         },
         duration_ms: Date.now() - normalizeStart,
+      });
+
+      return NextResponse.json({
+        scenario,
+        success: true,
+        steps,
+        duration_ms: Date.now() - startTime,
+      });
+    }
+
+    // =========================================================================
+    // SCENARIO: resend_webhook_status
+    // =========================================================================
+    if (scenario === 'resend_webhook_status') {
+      const steps: Array<{ step: string; status: 'success' | 'failed' | 'skipped'; data?: unknown; error?: string; duration_ms?: number }> = [];
+
+      // Step 1: Load Resend adapter and check webhook config
+      const stepStart = Date.now();
+      const resendAdapter = await ResendAdapter.forWorkspace(workspaceId);
+      if (!resendAdapter) {
+        steps.push({
+          step: 'Load Resend adapter',
+          status: 'failed',
+          error: 'Resend is not configured. Add the Resend integration with an API Key first.',
+          duration_ms: Date.now() - stepStart,
+        });
+        return NextResponse.json({
+          scenario,
+          success: false,
+          steps,
+          duration_ms: Date.now() - startTime,
+        });
+      }
+
+      const webhookConfigured = resendAdapter.isWebhookConfigured();
+      steps.push({
+        step: 'Check Resend webhook configuration',
+        status: webhookConfigured ? 'success' : 'failed',
+        data: {
+          adapterLoaded: true,
+          webhookSecretConfigured: webhookConfigured,
+          fromEmail: resendAdapter.getFromEmail(),
+        },
+        error: webhookConfigured ? undefined : 'Webhook signing secret is not configured. Add it in the Resend integration settings.',
+        duration_ms: Date.now() - stepStart,
+      });
+
+      // Step 2: Show leads with non-null errorState (bounce audit)
+      const auditStart = Date.now();
+      const leadsWithErrors = await prisma.lead.findMany({
+        where: {
+          workspaceId,
+          errorState: { not: null },
+        },
+        select: {
+          id: true,
+          email: true,
+          errorState: true,
+          stage: true,
+          lastEventAt: true,
+        },
+        orderBy: { lastEventAt: 'desc' },
+        take: 50,
+      });
+
+      steps.push({
+        step: 'Audit leads with delivery issues',
+        status: 'success',
+        data: {
+          totalWithErrors: leadsWithErrors.length,
+          leads: leadsWithErrors.map(l => ({
+            email: l.email,
+            errorState: l.errorState,
+            stage: l.stage,
+            lastEventAt: l.lastEventAt,
+          })),
+        },
+        duration_ms: Date.now() - auditStart,
+      });
+
+      // Step 3: Breakdown by errorState value
+      const breakdownStart = Date.now();
+      const errorStateCounts = leadsWithErrors.reduce<Record<string, number>>((acc, lead) => {
+        const state = lead.errorState || 'unknown';
+        acc[state] = (acc[state] || 0) + 1;
+        return acc;
+      }, {});
+
+      steps.push({
+        step: 'Error state breakdown',
+        status: 'success',
+        data: {
+          breakdown: errorStateCounts,
+          totalLeads: await prisma.lead.count({ where: { workspaceId } }),
+          totalWithErrors: leadsWithErrors.length,
+        },
+        duration_ms: Date.now() - breakdownStart,
       });
 
       return NextResponse.json({

@@ -324,8 +324,8 @@ describe('ABC Ignite Adapter', () => {
       });
 
       expect(payload.email).toBe('debarn825@gmail.com');
-      expect(payload.first_name).toBe('DEBBIE');
-      expect(payload.last_name).toBe('ARNETT');
+      expect(payload.first_name).toBe('Debbie');
+      expect(payload.last_name).toBe('Arnett');
       expect(payload.member_id).toBe('0fa92d4f04804083b7b7dd33b8b56217');
       expect(payload.join_status).toBe('Member');
       expect(payload.is_converted_prospect).toBe('true');

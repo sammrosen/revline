@@ -22,7 +22,7 @@ export type { AddSubscriberResult } from './mailerlite.adapter';
 export { StripeAdapter } from './stripe.adapter';
 export type { CheckoutData, VerifiedWebhookEvent } from './stripe.adapter';
 
-export { AbcIgniteAdapter, normalizeMemberPayload, formatAbcTimestamp, isDateInWindow } from './abc-ignite.adapter';
+export { AbcIgniteAdapter, normalizeMemberPayload, formatAbcTimestamp, isDateInWindow, titleCase } from './abc-ignite.adapter';
 export type { 
   AbcIgniteEvent, 
   AbcIgniteEventType,
@@ -41,8 +41,8 @@ export type {
 export { RevlineAdapter } from './revline.adapter';
 export type { FormConfig } from './revline.adapter';
 
-export { ResendAdapter } from './resend.adapter';
-export type { SendEmailResult, SendEmailParams, SendTemplateParams, RemoteResendTemplate } from './resend.adapter';
+export { ResendAdapter, resendEventToErrorState, TRANSIENT_ERROR_STATES } from './resend.adapter';
+export type { SendEmailResult, SendEmailParams, SendTemplateParams, RemoteResendTemplate, ResendWebhookEvent } from './resend.adapter';
 
 // Integration config - single source of truth
 export {
