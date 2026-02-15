@@ -19,7 +19,7 @@ const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
   MANYCHAT: ['API Key'],
   ABC_IGNITE: ['App ID', 'App Key'],
   REVLINE: [], // No secrets - internal system
-  RESEND: ['API Key'],
+  RESEND: ['API Key', 'Webhook Secret'],
 };
 
 interface SecretSummary {

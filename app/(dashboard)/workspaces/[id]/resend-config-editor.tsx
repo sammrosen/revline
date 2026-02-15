@@ -28,7 +28,6 @@ interface ResendMeta {
   fromName?: string;
   replyTo?: string;
   templates?: Record<string, ResendTemplate>;
-  webhookSecret?: string;
 }
 
 /**
@@ -73,7 +72,6 @@ function parseMeta(value: string): ResendMeta {
       fromName: parsed.fromName || '',
       replyTo: parsed.replyTo || '',
       templates: parsed.templates || {},
-      webhookSecret: parsed.webhookSecret || '',
     };
   } catch {
     return DEFAULT_CONFIG;
@@ -102,9 +100,6 @@ function serializeMeta(meta: ResendMeta): string {
   }
   if (meta.templates && Object.keys(meta.templates).length > 0) {
     output.templates = meta.templates;
-  }
-  if (meta.webhookSecret?.trim()) {
-    output.webhookSecret = meta.webhookSecret;
   }
   return JSON.stringify(output, null, 2);
 }
@@ -169,7 +164,6 @@ export function ResendConfigEditor({
         fromName: parsed.fromName || '',
         replyTo: parsed.replyTo || '',
         templates: parsed.templates || {},
-        webhookSecret: parsed.webhookSecret || '',
       });
       setIsJsonMode(false);
       setJsonError(null);
@@ -441,21 +435,10 @@ export function ResendConfigEditor({
             </div>
           )}
 
-          {/* Webhook Secret */}
-          <div>
-            <label className="text-xs text-zinc-400 block mb-1.5">
-              Webhook Signing Secret
-            </label>
-            <input
-              type="password"
-              value={meta.webhookSecret || ''}
-              onChange={(e) => setMeta({ ...meta, webhookSecret: e.target.value })}
-              placeholder="whsec_..."
-              className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm font-mono text-white focus:border-indigo-500/50 focus:outline-none transition-colors"
-              autoComplete="off"
-            />
-            <p className="text-xs text-zinc-600 mt-1">
-              Found in Resend Dashboard &rarr; Webhooks &rarr; Signing Secret. Starts with <span className="font-mono text-zinc-500">whsec_</span>
+          {/* Webhook Secret note */}
+          <div className="p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg">
+            <p className="text-xs text-zinc-400">
+              <span className="font-medium text-zinc-300">Webhook Signing Secret</span> — Add the <span className="font-mono text-zinc-500">whsec_...</span> secret via <span className="text-indigo-400">Manage Secrets</span> above (secret name: &quot;Webhook Secret&quot;).
             </p>
           </div>
 

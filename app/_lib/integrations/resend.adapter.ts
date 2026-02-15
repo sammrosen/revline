@@ -21,6 +21,8 @@ import { ResendMeta, ResendTemplate, IntegrationResult, WebhookVerification } fr
 
 /** Default secret name for Resend API key */
 export const RESEND_API_KEY_SECRET = 'API Key';
+/** Secret name for Resend webhook signing secret */
+export const RESEND_WEBHOOK_SECRET = 'Webhook Secret';
 
 /**
  * Result of sending an email
@@ -408,10 +410,10 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
   // ===========================================================================
 
   /**
-   * Get the configured webhook signing secret
+   * Get the configured webhook signing secret from secrets store
    */
   getWebhookSecret(): string | null {
-    return this.meta?.webhookSecret || null;
+    return this.getSecret(RESEND_WEBHOOK_SECRET) || null;
   }
 
   /**
