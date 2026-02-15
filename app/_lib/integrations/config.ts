@@ -270,6 +270,12 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
         description: 'Get from Resend dashboard → API Keys',
         required: true,
       },
+      {
+        name: 'Webhook Secret',
+        placeholder: 'whsec_xxxxxxxxxxxxx',
+        description: 'From Resend → Webhooks → Your endpoint → Signing secret',
+        required: false,
+      },
     ],
     metaTemplate: {
       fromEmail: '',
