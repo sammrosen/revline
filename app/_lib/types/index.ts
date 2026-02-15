@@ -305,6 +305,16 @@ export interface AbcIgniteMeta {
   memberSync?: {
     /** Enable hourly polling for new ABC members */
     enabled: boolean;
+    /** ISO timestamp of the last successful sync run (watermark for next run) */
+    lastSyncTimestamp?: string;
+    /** Recently processed member IDs for cross-run dedup (capped at ~500) */
+    recentMemberIds?: string[];
+    /**
+     * Membership types to exclude from sync (exact match on agreement.membershipType).
+     * Free-text strings — must match the ABC Ignite membership type name exactly.
+     * Example: ["Kids Club", "Prospect"]
+     */
+    excludedMemberTypes?: string[];
   };
 }
 

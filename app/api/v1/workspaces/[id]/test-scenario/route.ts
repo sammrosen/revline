@@ -15,6 +15,7 @@ import { getWorkspaceAccess, WorkspaceRole } from '@/app/_lib/workspace-access';
 import { AbcIgniteAdapter, normalizeMemberPayload } from '@/app/_lib/integrations';
 import { emitTrigger } from '@/app/_lib/workflow';
 import { IntegrationType } from '@prisma/client';
+import type { AbcIgniteMeta } from '@/app/_lib/types';
 
 // =============================================================================
 // SCENARIO DEFINITIONS
@@ -41,6 +42,15 @@ const SCENARIOS: ScenarioDefinition[] = [
     integration: 'ABC_IGNITE',
     fields: [
       { name: 'barcode', label: 'Member Barcode', placeholder: 'e.g., 1234567890', required: true },
+    ],
+  },
+  {
+    id: 'abc_member_sync_preview',
+    name: 'Member Sync Preview (Dry Run)',
+    description: 'Preview which members would be detected by the sync cron without emitting triggers or creating leads. Shows both new direct signups and recently converted prospects.',
+    integration: 'ABC_IGNITE',
+    fields: [
+      { name: 'lookbackMinutes', label: 'Lookback Window (minutes)', placeholder: '75', required: false },
     ],
   },
 ];
@@ -316,6 +326,155 @@ export async function POST(
           duration_ms: Date.now() - startTime,
         });
       }
+    }
+
+    // =========================================================================
+    // SCENARIO: abc_member_sync_preview (Dry Run)
+    // =========================================================================
+    if (scenario === 'abc_member_sync_preview') {
+      const lookbackMinutes = parseInt(fields?.lookbackMinutes?.trim() || '75', 10) || 75;
+
+      const steps: Array<{ step: string; status: 'success' | 'failed' | 'skipped'; data?: unknown; error?: string; duration_ms?: number }> = [];
+
+      // Step 1: Load ABC Ignite adapter
+      const stepStart = Date.now();
+      const adapter = await AbcIgniteAdapter.forClient(workspaceId);
+      if (!adapter) {
+        steps.push({
+          step: 'Load ABC Ignite adapter',
+          status: 'failed',
+          error: 'ABC Ignite is not configured. Check App ID, App Key, and Club Number.',
+          duration_ms: Date.now() - stepStart,
+        });
+        return NextResponse.json({
+          scenario,
+          success: false,
+          steps,
+          duration_ms: Date.now() - startTime,
+        });
+      }
+      steps.push({
+        step: 'Load ABC Ignite adapter',
+        status: 'success',
+        duration_ms: Date.now() - stepStart,
+      });
+
+      // Step 2: Run detection queries
+      const detectStart = Date.now();
+      const now = new Date();
+      const since = new Date(now.getTime() - lookbackMinutes * 60 * 1000);
+
+      const membersResult = await adapter.getNewAndConvertedMembers(since, now);
+
+      if (!membersResult.success) {
+        steps.push({
+          step: `Detect members (${lookbackMinutes}min window)`,
+          status: 'failed',
+          error: membersResult.error || 'Detection query failed',
+          duration_ms: Date.now() - detectStart,
+        });
+        return NextResponse.json({
+          scenario,
+          success: false,
+          steps,
+          duration_ms: Date.now() - startTime,
+        });
+      }
+
+      const allDetected = membersResult.data || [];
+      steps.push({
+        step: `Detect members (${lookbackMinutes}min window)`,
+        status: 'success',
+        data: {
+          totalDetected: allDetected.length,
+          window: {
+            since: since.toISOString(),
+            until: now.toISOString(),
+          },
+        },
+        duration_ms: Date.now() - detectStart,
+      });
+
+      // Step 3: Apply member type filter from workspace config
+      const filterStart = Date.now();
+      const integration = await prisma.workspaceIntegration.findFirst({
+        where: { workspaceId, integration: IntegrationType.ABC_IGNITE },
+        select: { meta: true },
+      });
+      const abcMeta = integration?.meta as AbcIgniteMeta | null;
+      const excludedTypes = abcMeta?.memberSync?.excludedMemberTypes || [];
+      const excludedSet = new Set(excludedTypes.map(t => t.toLowerCase()));
+
+      const detected = excludedSet.size > 0
+        ? allDetected.filter(m => {
+            const memberType = m.agreement?.membershipType?.toLowerCase();
+            return !memberType || !excludedSet.has(memberType);
+          })
+        : allDetected;
+      const skippedMemberType = allDetected.length - detected.length;
+
+      if (excludedTypes.length > 0) {
+        steps.push({
+          step: `Filter excluded member types`,
+          status: 'success',
+          data: {
+            excludedTypes,
+            beforeFilter: allDetected.length,
+            afterFilter: detected.length,
+            skipped: skippedMemberType,
+          },
+          duration_ms: Date.now() - filterStart,
+        });
+      }
+
+      // Step 4: Show normalized results
+      const normalizeStart = Date.now();
+      const memberSummaries = detected.map(member => {
+        const payload = normalizeMemberPayload(member);
+        return {
+          memberId: member.memberId,
+          name: `${member.personal?.firstName || ''} ${member.personal?.lastName || ''}`.trim() || '(no name)',
+          email: member.personal?.email || '(no email)',
+          memberStatus: member.personal?.memberStatus,
+          joinStatus: member.personal?.joinStatus,
+          isConvertedProspect: member.personal?.isConvertedProspect,
+          convertedDate: member.agreement?.convertedDate || null,
+          membershipType: member.agreement?.membershipType,
+          createTimestamp: member.personal?.createTimestamp,
+          detectionReason: member._detectionReason,
+          hasEmail: !!payload.email,
+          normalizedPayload: payload,
+        };
+      });
+
+      const withEmail = memberSummaries.filter(m => m.hasEmail).length;
+      const withoutEmail = memberSummaries.filter(m => !m.hasEmail).length;
+      const directCount = memberSummaries.filter(m => m.detectionReason === 'new_direct_signup').length;
+      const convertedCount = memberSummaries.filter(m => m.detectionReason === 'converted_prospect').length;
+
+      steps.push({
+        step: 'Preview detected members (NO triggers emitted)',
+        status: detected.length > 0 ? 'success' : 'skipped',
+        error: detected.length === 0 ? `No new members or conversions found in the last ${lookbackMinutes} minutes.` : undefined,
+        data: {
+          summary: {
+            total: detected.length,
+            withEmail,
+            withoutEmail,
+            newDirectSignups: directCount,
+            convertedProspects: convertedCount,
+          },
+          members: memberSummaries,
+        },
+        duration_ms: Date.now() - normalizeStart,
+      });
+
+      return NextResponse.json({
+        scenario,
+        success: true,
+        steps,
+        duration_ms: Date.now() - startTime,
+      });
     }
 
     return NextResponse.json({ error: `Unknown scenario: ${scenario}` }, { status: 400 });

@@ -333,7 +333,7 @@ export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
     new_member: {
       name: 'new_member',
       label: 'New Member Detected',
-      description: 'Fires when a new member is detected via hourly sync (requires Member Sync enabled in ABC config)',
+      description: 'Fires when a new member is detected via hourly sync — catches both direct signups and prospect-to-member conversions (requires Member Sync enabled in ABC config)',
       payloadSchema: z.object({
         email: z.string().email(),
         first_name: z.string().optional(),
@@ -344,6 +344,12 @@ export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
         member_status: z.string().optional(),
         home_club: z.string().optional(),
         gender: z.string().optional(),
+        // New fields for conversion tracking
+        join_status: z.string().optional().describe('"Member" or "Prospect"'),
+        is_converted_prospect: z.string().optional().describe('"true" if member was originally a prospect'),
+        membership_type: z.string().optional().describe('Agreement membership type (e.g., "Monthly Premier")'),
+        converted_date: z.string().optional().describe('ISO date when prospect was converted to member'),
+        agreement_entry_source: z.string().optional().describe('How the agreement was created (e.g., "Web", "DataTrak EAE")'),
       }),
     },
   },

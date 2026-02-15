@@ -22,7 +22,7 @@ export type { AddSubscriberResult } from './mailerlite.adapter';
 export { StripeAdapter } from './stripe.adapter';
 export type { CheckoutData, VerifiedWebhookEvent } from './stripe.adapter';
 
-export { AbcIgniteAdapter, normalizeMemberPayload } from './abc-ignite.adapter';
+export { AbcIgniteAdapter, normalizeMemberPayload, formatAbcTimestamp, isDateInWindow } from './abc-ignite.adapter';
 export type { 
   AbcIgniteEvent, 
   AbcIgniteEventType,
@@ -30,6 +30,10 @@ export type {
   AbcIgniteEmployeePersonal,
   AbcIgniteEmployeeEmployment,
   AbcIgniteEmployeeRole,
+  AbcIgniteMember,
+  AbcIgniteMemberPersonal,
+  AbcIgniteMemberAgreement,
+  DetectedMember,
   EnrollmentResult, 
   WaitlistResult,
 } from './abc-ignite.adapter';
