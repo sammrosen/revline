@@ -48,6 +48,7 @@ interface AbcIgniteMeta {
   }>;
   memberSync?: {
     enabled: boolean;
+    excludedMemberTypes?: string[];
   };
 }
 
@@ -104,6 +105,98 @@ function slugify(name: string): string {
     .replace(/^_+|_+$/g, '')
     .substring(0, 30);
 }
+
+// =============================================================================
+// EXCLUDED MEMBER TYPES (tag input)
+// =============================================================================
+
+/**
+ * Tag-style input for excluded membership types.
+ * Free text since there's no API to fetch member types.
+ * Match must be exact (case-insensitive at filter time).
+ */
+function ExcludedMemberTypes({ 
+  values, 
+  onChange 
+}: { 
+  values: string[]; 
+  onChange: (types: string[]) => void;
+}) {
+  const [inputValue, setInputValue] = useState('');
+
+  function handleAdd() {
+    const trimmed = inputValue.trim();
+    if (!trimmed) return;
+    // Avoid duplicates (case-insensitive)
+    if (values.some(v => v.toLowerCase() === trimmed.toLowerCase())) {
+      setInputValue('');
+      return;
+    }
+    onChange([...values, trimmed]);
+    setInputValue('');
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAdd();
+    }
+    // Backspace on empty input removes last tag
+    if (e.key === 'Backspace' && !inputValue && values.length > 0) {
+      onChange(values.slice(0, -1));
+    }
+  }
+
+  function handleRemove(index: number) {
+    onChange(values.filter((_, i) => i !== index));
+  }
+
+  return (
+    <div>
+      <label className="text-xs text-zinc-400 block mb-1.5">
+        Excluded Member Types
+      </label>
+      <p className="text-xs text-zinc-600 mb-2">
+        Membership types to skip during sync (e.g., Kids Club, Prospect). Must match the ABC Ignite membership type name exactly.
+      </p>
+      <div className="flex flex-wrap gap-1.5 p-2 bg-zinc-900 border border-zinc-700 rounded min-h-[38px] focus-within:border-orange-500/50 transition-colors">
+        {values.map((type, i) => (
+          <span
+            key={i}
+            className="inline-flex items-center gap-1 px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-xs text-zinc-300"
+          >
+            {type}
+            <button
+              type="button"
+              onClick={() => handleRemove(i)}
+              className="text-zinc-500 hover:text-red-400 transition-colors ml-0.5"
+            >
+              &times;
+            </button>
+          </span>
+        ))}
+        <input
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={handleAdd}
+          placeholder={values.length === 0 ? 'Type a membership type and press Enter...' : 'Add more...'}
+          className="flex-1 min-w-[120px] bg-transparent text-sm text-white outline-none placeholder:text-zinc-600"
+        />
+      </div>
+      {values.length > 0 && (
+        <p className="text-xs text-zinc-600 mt-1">
+          {values.length} type{values.length !== 1 ? 's' : ''} excluded from sync
+        </p>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// MAIN EDITOR
+// =============================================================================
 
 /**
  * Structured editor for ABC Ignite configuration
@@ -728,7 +821,10 @@ export function AbcIgniteConfigEditor({
             type="button"
             onClick={() => setMeta(prev => ({
               ...prev,
-              memberSync: { enabled: !prev.memberSync?.enabled },
+              memberSync: { 
+                ...prev.memberSync,
+                enabled: !prev.memberSync?.enabled,
+              },
             }))}
             className={`w-10 h-5 rounded-full relative transition-colors ${
               meta.memberSync?.enabled ? 'bg-orange-500' : 'bg-zinc-700'
@@ -747,14 +843,28 @@ export function AbcIgniteConfigEditor({
               <p className="text-xs text-zinc-400">
                 RevLine will check ABC Ignite hourly for new members and emit a{' '}
                 <span className="font-mono text-orange-400">new_member</span>{' '}
-                workflow trigger for each one. Create a workflow with the{' '}
+                workflow trigger for each one. Detects both direct signups and prospect-to-member conversions. Create a workflow with the{' '}
                 <span className="font-medium text-zinc-300">&quot;New Member Detected&quot;</span>{' '}
                 trigger to auto-create leads with their info.
               </p>
               <p className="text-xs text-zinc-500 mt-2">
-                Payload fields: <span className="font-mono">email</span>, <span className="font-mono">first_name</span>, <span className="font-mono">last_name</span>, <span className="font-mono">phone</span>, <span className="font-mono">barcode</span>, <span className="font-mono">member_id</span>
+                Payload fields: <span className="font-mono">email</span>, <span className="font-mono">first_name</span>, <span className="font-mono">last_name</span>, <span className="font-mono">phone</span>, <span className="font-mono">barcode</span>, <span className="font-mono">member_id</span>, <span className="font-mono">join_status</span>, <span className="font-mono">is_converted_prospect</span>, <span className="font-mono">membership_type</span>, <span className="font-mono">converted_date</span>
               </p>
             </div>
+
+            {/* Excluded Member Types */}
+            <ExcludedMemberTypes
+              values={meta.memberSync?.excludedMemberTypes || []}
+              onChange={(types) => setMeta(prev => ({
+                ...prev,
+                memberSync: {
+                  ...prev.memberSync,
+                  enabled: prev.memberSync?.enabled ?? true,
+                  excludedMemberTypes: types.length > 0 ? types : undefined,
+                },
+              }))}
+            />
+
             {workspaceId && (
               <FieldCompatibilityCheck
                 workspaceId={workspaceId}

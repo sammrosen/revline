@@ -1,10 +1,18 @@
 /**
  * ABC Member Sync Cron
  *
- * Hourly sync that polls ABC Ignite for new members and emits
- * workflow triggers for each one. Stateless — each run queries
- * a 75-minute window (60 + 15 overlap buffer). Duplicate members
- * across runs are handled by the lead upsert's unique constraint.
+ * Hourly sync that polls ABC Ignite for new members (direct signups
+ * and prospect-to-member conversions) and emits workflow triggers.
+ *
+ * Detection strategy:
+ * 1. New direct signups — joinStatus=member + createdTimestampRange
+ * 2. Converted prospects — joinStatus=member + lastModifiedTimestampRange
+ *    filtered locally by agreement.convertedDate in the window
+ *
+ * State management:
+ * - Watermark-based: stores lastSyncTimestamp in integration meta
+ * - Falls back to now - 75min on first run or missing watermark
+ * - Sync-level dedup via recentMemberIds in integration meta (capped)
  *
  * Requires:
  * - CRON_SECRET environment variable
@@ -29,8 +37,14 @@ import type { AbcIgniteMeta } from '@/app/_lib/types';
 // CONSTANTS
 // =============================================================================
 
-/** Minutes to look back for new members (75 = 60 + 15 overlap buffer) */
-const SYNC_WINDOW_MINUTES = 75;
+/** Default fallback window in minutes when no watermark exists */
+const DEFAULT_WINDOW_MINUTES = 75;
+
+/** Overlap buffer added to watermark (minutes) to prevent edge-case gaps */
+const OVERLAP_BUFFER_MINUTES = 15;
+
+/** Maximum number of recent member IDs to store for dedup */
+const RECENT_MEMBER_IDS_CAP = 500;
 
 // =============================================================================
 // LOGGING
@@ -62,6 +76,61 @@ function validateAuth(request: NextRequest): boolean {
 }
 
 // =============================================================================
+// WATERMARK HELPERS
+// =============================================================================
+
+/**
+ * Compute the sync window start from the watermark or default fallback.
+ * Adds an overlap buffer to the watermark to prevent edge-case gaps.
+ */
+function getSyncWindowStart(meta: AbcIgniteMeta | null): Date {
+  const lastSync = meta?.memberSync?.lastSyncTimestamp;
+
+  if (lastSync) {
+    const watermark = new Date(lastSync);
+    if (!isNaN(watermark.getTime())) {
+      // Subtract overlap buffer from watermark
+      return new Date(watermark.getTime() - OVERLAP_BUFFER_MINUTES * 60 * 1000);
+    }
+  }
+
+  // No watermark — fall back to default window
+  return new Date(Date.now() - DEFAULT_WINDOW_MINUTES * 60 * 1000);
+}
+
+/**
+ * Persist the watermark and recent member IDs to integration meta.
+ * Uses a partial merge so we don't overwrite other meta fields.
+ */
+async function persistSyncState(
+  integrationId: string,
+  currentMeta: AbcIgniteMeta | null,
+  newTimestamp: string,
+  newMemberIds: string[]
+): Promise<void> {
+  const existingRecentIds = currentMeta?.memberSync?.recentMemberIds || [];
+
+  // Merge new IDs with existing, then trim to cap
+  const mergedIds = [...new Set([...newMemberIds, ...existingRecentIds])];
+  const cappedIds = mergedIds.slice(0, RECENT_MEMBER_IDS_CAP);
+
+  const updatedMeta = {
+    ...currentMeta,
+    memberSync: {
+      ...currentMeta?.memberSync,
+      enabled: currentMeta?.memberSync?.enabled ?? true,
+      lastSyncTimestamp: newTimestamp,
+      recentMemberIds: cappedIds,
+    },
+  };
+
+  await prisma.workspaceIntegration.update({
+    where: { id: integrationId },
+    data: { meta: updatedMeta },
+  });
+}
+
+// =============================================================================
 // MAIN HANDLER
 // =============================================================================
 
@@ -72,6 +141,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const startTime = Date.now();
+  const now = new Date();
   const memBefore = process.memoryUsage();
   log('ABC member sync starting', {
     memoryMB: {
@@ -112,13 +182,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const results: Array<{
     workspace: string;
     membersFound: number;
+    membersSkippedMemberType: number;
+    membersSkippedDedup: number;
+    membersSkippedNoEmail: number;
     triggersEmitted: number;
+    detectionBreakdown: { newDirect: number; converted: number };
     error?: string;
   }> = [];
 
   for (const integration of syncEnabled) {
     const workspaceId = integration.workspace.id;
     const workspaceName = integration.workspace.name;
+    const meta = integration.meta as AbcIgniteMeta | null;
 
     try {
       // Load adapter for this workspace
@@ -127,34 +202,82 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         results.push({
           workspace: workspaceName,
           membersFound: 0,
+          membersSkippedMemberType: 0,
+          membersSkippedDedup: 0,
+          membersSkippedNoEmail: 0,
           triggersEmitted: 0,
+          detectionBreakdown: { newDirect: 0, converted: 0 },
           error: 'Failed to load adapter',
         });
         continue;
       }
 
-      // Query for new members
-      const membersResult = await adapter.getNewMembers(SYNC_WINDOW_MINUTES);
+      // Compute sync window from watermark
+      const since = getSyncWindowStart(meta);
+      log('Sync window computed', {
+        workspaceId,
+        since: since.toISOString(),
+        until: now.toISOString(),
+        hasWatermark: !!meta?.memberSync?.lastSyncTimestamp,
+      });
+
+      // Run new detection: direct signups + converted prospects
+      const membersResult = await adapter.getNewAndConvertedMembers(since, now);
       if (!membersResult.success) {
         results.push({
           workspace: workspaceName,
           membersFound: 0,
+          membersSkippedMemberType: 0,
+          membersSkippedDedup: 0,
+          membersSkippedNoEmail: 0,
           triggersEmitted: 0,
+          detectionBreakdown: { newDirect: 0, converted: 0 },
           error: membersResult.error || 'API call failed',
         });
         continue;
       }
 
-      const members = membersResult.data || [];
-      let triggersEmitted = 0;
+      const allDetected = membersResult.data || [];
 
-      // Emit trigger for each member with a valid email
+      // Member type filtering: exclude configured membership types (e.g., "Kids Club")
+      const excludedTypes = meta?.memberSync?.excludedMemberTypes || [];
+      const excludedSet = new Set(excludedTypes.map(t => t.toLowerCase()));
+      const members = excludedSet.size > 0
+        ? allDetected.filter(m => {
+            const memberType = m.agreement?.membershipType?.toLowerCase();
+            return !memberType || !excludedSet.has(memberType);
+          })
+        : allDetected;
+      const skippedMemberType = allDetected.length - members.length;
+
+      const recentIds = new Set(meta?.memberSync?.recentMemberIds || []);
+      let triggersEmitted = 0;
+      let skippedDedup = 0;
+      let skippedNoEmail = 0;
+      let newDirect = 0;
+      let converted = 0;
+      const newlyProcessedIds: string[] = [];
+
+      // Emit trigger for each member
       for (const member of members) {
+        // Sync-level dedup: skip if already processed in recent runs
+        if (recentIds.has(member.memberId)) {
+          skippedDedup++;
+          continue;
+        }
+
         const payload = normalizeMemberPayload(member);
 
         if (!payload.email) {
-          // Skip members without email — can't create a lead
+          skippedNoEmail++;
           continue;
+        }
+
+        // Track detection breakdown
+        if (member._detectionReason === 'new_direct_signup') {
+          newDirect++;
+        } else {
+          converted++;
         }
 
         try {
@@ -163,10 +286,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             operation: 'new_member',
           }, payload);
           triggersEmitted++;
+          newlyProcessedIds.push(member.memberId);
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Unknown';
           log('Trigger emission failed', { workspaceId, email: '[redacted]', error: msg });
         }
+      }
+
+      // Persist watermark + newly processed IDs
+      try {
+        await persistSyncState(
+          integration.id,
+          meta,
+          now.toISOString(),
+          newlyProcessedIds
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown';
+        log('Failed to persist sync state', { workspaceId, error: msg });
+        // Non-fatal: sync still succeeded, just watermark not updated
       }
 
       // Emit summary event for audit trail
@@ -175,13 +313,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         system: EventSystem.ABC_IGNITE,
         eventType: 'member_sync_completed',
         success: true,
-        errorMessage: `Found ${members.length} new members, emitted ${triggersEmitted} triggers`,
+        errorMessage: `Found ${allDetected.length} members (${newDirect} direct, ${converted} converted), emitted ${triggersEmitted} triggers, skipped ${skippedMemberType} member-type / ${skippedDedup} dedup / ${skippedNoEmail} no-email`,
       });
 
       results.push({
         workspace: workspaceName,
-        membersFound: members.length,
+        membersFound: allDetected.length,
+        membersSkippedMemberType: skippedMemberType,
+        membersSkippedDedup: skippedDedup,
+        membersSkippedNoEmail: skippedNoEmail,
         triggersEmitted,
+        detectionBreakdown: { newDirect, converted },
       });
 
     } catch (err) {
@@ -204,7 +346,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       results.push({
         workspace: workspaceName,
         membersFound: 0,
+        membersSkippedMemberType: 0,
+        membersSkippedDedup: 0,
+        membersSkippedNoEmail: 0,
         triggersEmitted: 0,
+        detectionBreakdown: { newDirect: 0, converted: 0 },
         error: msg,
       });
     }

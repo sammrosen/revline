@@ -106,25 +106,95 @@ export interface AbcIgniteMemberPersonal {
   lastName?: string;
   email?: string;
   primaryPhone?: string;
+  mobilePhone?: string;
   barcode?: string;
   homeClub?: string;
   isActive?: string;
   memberStatus?: string;
+  /** "Member" | "Prospect" */
+  joinStatus?: string;
+  /** "true" | "false" — whether this member was originally a prospect */
+  isConvertedProspect?: string;
   birthDate?: string;
   gender?: string;
+  /** ISO timestamp when the member record was created */
+  createTimestamp?: string;
+  /** ISO timestamp of the last modification (check-in, profile edit, conversion, etc.) */
+  lastModifiedTimestamp?: string;
+  /** ISO timestamp of the member's first check-in */
+  firstCheckInTimestamp?: string;
+  /** ISO timestamp of the member's most recent check-in */
+  lastCheckInTimestamp?: string;
+  /** Total number of check-ins as a string (e.g., "12") */
+  totalCheckInCount?: string;
+  /** "OK" or reason for status */
+  memberStatusReason?: string;
+  hasPhoto?: string;
+  addressLine1?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  countryCode?: string;
+}
+
+/**
+ * ABC Ignite member agreement info (nested in GET /members response)
+ * Contains billing, membership type, and conversion details.
+ */
+export interface AbcIgniteMemberAgreement {
+  agreementNumber?: string;
+  isPrimaryMember?: string;
+  /** Membership plan name (e.g., "Monthly Premier", "Prospect") */
+  membershipType?: string;
+  /** ABC internal code (e.g., "MONPRM", "PROSPECT") */
+  membershipTypeAbcCode?: string;
+  /** Payment plan name */
+  paymentPlan?: string;
+  paymentPlanId?: string;
+  term?: string;
+  paymentFrequency?: string;
+  managedType?: string;
+  isPastDue?: string;
+  /** "None" | other renewal types */
+  renewalType?: string;
+  agreementPaymentMethod?: string;
+  /** ISO date when the member's agreement "since" date was set */
+  sinceDate?: string;
+  /** ISO date when the agreement period begins */
+  beginDate?: string;
+  /** ISO date when the agreement was signed */
+  signDate?: string;
+  /** ISO date when a prospect was converted to a member — ONLY present for converted prospects */
+  convertedDate?: string;
+  /** Source of agreement entry (e.g., "Web", "DataTrak EAE", "Web Service") */
+  agreementEntrySource?: string;
+  agreementEntrySourceReportName?: string;
+  /** Next billing date */
+  nextBillingDate?: string;
+  nextDueAmount?: string;
+  pastDueBalance?: string;
+  totalPastDueBalance?: string;
+  /** Sales person info */
+  salesPersonId?: string;
+  salesPersonName?: string;
+  /** Campaign info */
+  campaignId?: string;
+  campaignName?: string;
 }
 
 /**
  * ABC Ignite member
  * 
  * Supports two response formats:
- * - GET /members: Has nested `personal` object with member details
+ * - GET /members: Has nested `personal` and `agreement` objects with member details
  * - Event member context: Has flat fields directly on the object
  */
 export interface AbcIgniteMember {
   memberId: string;
   // Nested personal info (from GET /members endpoint)
   personal?: AbcIgniteMemberPersonal;
+  // Nested agreement info (from GET /members endpoint)
+  agreement?: AbcIgniteMemberAgreement;
   // Flat fields for backwards compatibility (event member context)
   hasActiveRecurringService?: boolean;
   opportunityLevel?: string;
@@ -404,6 +474,68 @@ export interface DateRange {
 export type EventCategory = 'appointment' | 'event';
 
 // =============================================================================
+// DETECTED MEMBER TYPE
+// =============================================================================
+
+/**
+ * A member detected by getNewAndConvertedMembers() with a tag
+ * indicating how it was detected (for debugging and audit).
+ */
+export interface DetectedMember extends AbcIgniteMember {
+  /** Why this member was detected: new direct signup or converted from prospect */
+  _detectionReason: 'new_direct_signup' | 'converted_prospect';
+}
+
+// =============================================================================
+// TIMESTAMP HELPERS
+// =============================================================================
+
+/**
+ * Format a Date to ABC Ignite timestamp format: "YYYY-MM-DD HH:mm:ss.000000"
+ * Used for createdTimestampRange, lastModifiedTimestampRange, etc.
+ */
+export function formatAbcTimestamp(d: Date): string {
+  const pad = (n: number, len = 2) => String(n).padStart(len, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.000000`;
+}
+
+/**
+ * Check if a date string (ISO "YYYY-MM-DD" or ABC timestamp) falls within a window.
+ * Used to filter converted prospects by their agreement.convertedDate.
+ * 
+ * @param dateStr - Date string to check (e.g., "2026-01-12" or "2026-01-12 10:30:00")
+ * @param since - Start of window (inclusive)
+ * @param until - End of window (inclusive)
+ */
+export function isDateInWindow(dateStr: string, since: Date, until: Date): boolean {
+  // Parse the date — handle both "YYYY-MM-DD" and "YYYY-MM-DD HH:mm:ss.000000"
+  // Truncate microseconds to milliseconds for JS Date compatibility
+  let normalized = dateStr.replace(' ', 'T');
+  // Convert "2026-01-12T10:30:00.000000" → "2026-01-12T10:30:00.000Z"
+  normalized = normalized.replace(/\.(\d{3})\d*$/, '.$1Z');
+  // If no timezone info and no trailing Z, assume UTC by appending Z
+  if (!normalized.endsWith('Z') && !normalized.includes('+') && !normalized.includes('T')) {
+    // Date-only, leave as-is for Date constructor
+  } else if (!normalized.endsWith('Z') && normalized.includes('T') && !normalized.includes('+')) {
+    normalized += 'Z';
+  }
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return false;
+
+  // For date-only strings (no time component), treat as start of day
+  // and extend until end of that day for inclusive matching
+  const isDateOnly = !dateStr.includes(':');
+  const checkStart = d;
+  const checkEnd = isDateOnly
+    ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
+    : d;
+
+  // The date window overlaps with our sync window if:
+  // checkEnd >= since AND checkStart <= until
+  return checkEnd >= since && checkStart <= until;
+}
+
+// =============================================================================
 // PAYLOAD NORMALIZATION
 // =============================================================================
 
@@ -422,21 +554,42 @@ export type EventCategory = 'appointment' | 'event';
  * - personal.gender     → gender
  * - memberId            → member_id
  */
+/**
+ * Convert ALL CAPS or lowercase name to Title Case.
+ * Handles hyphenated names (e.g., "MARY-JANE" → "Mary-Jane")
+ * and multi-word names (e.g., "DE LA CRUZ" → "De La Cruz").
+ */
+export function titleCase(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/(^|[\s-])(\w)/g, (_match, sep, char) => sep + char.toUpperCase());
+}
+
 export function normalizeMemberPayload(member: AbcIgniteMember): Record<string, string> {
   const p = member.personal;
+  const a = member.agreement;
   const payload: Record<string, string> = {};
 
   // Email is the critical field — always include if available
   if (p?.email) payload.email = p.email;
 
-  // Personal info
-  if (p?.firstName) payload.first_name = p.firstName;
-  if (p?.lastName) payload.last_name = p.lastName;
+  // Personal info — title case names (ABC returns ALL CAPS)
+  if (p?.firstName) payload.first_name = titleCase(p.firstName);
+  if (p?.lastName) payload.last_name = titleCase(p.lastName);
   if (p?.primaryPhone) payload.phone = p.primaryPhone;
   if (p?.barcode) payload.barcode = p.barcode;
   if (p?.memberStatus) payload.member_status = p.memberStatus;
   if (p?.homeClub) payload.home_club = p.homeClub;
   if (p?.gender) payload.gender = p.gender;
+
+  // Join/conversion status
+  if (p?.joinStatus) payload.join_status = p.joinStatus;
+  if (p?.isConvertedProspect) payload.is_converted_prospect = p.isConvertedProspect;
+
+  // Agreement info
+  if (a?.membershipType) payload.membership_type = a.membershipType;
+  if (a?.convertedDate) payload.converted_date = a.convertedDate;
+  if (a?.agreementEntrySource) payload.agreement_entry_source = a.agreementEntrySource;
 
   // Top-level member ID
   if (member.memberId) payload.member_id = member.memberId;
@@ -840,6 +993,8 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
     createdTimestampRange?: string;
     /** Date range filter: "YYYY-MM-DD HH:mm:ss.000000,YYYY-MM-DD HH:mm:ss.000000" */
     memberSinceDateRange?: string;
+    /** Date range filter on lastModifiedTimestamp: "YYYY-MM-DD HH:mm:ss.000000,YYYY-MM-DD HH:mm:ss.000000" */
+    lastModifiedTimestampRange?: string;
     /** Page number (1-based, defaults to 1) */
     page?: number;
     /** Page size */
@@ -868,6 +1023,9 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
     if (options?.memberSinceDateRange) {
       params.append('memberSinceDateRange', options.memberSinceDateRange);
     }
+    if (options?.lastModifiedTimestampRange) {
+      params.append('lastModifiedTimestampRange', options.lastModifiedTimestampRange);
+    }
     if (options?.page !== undefined) {
       params.append('page', String(options.page));
     }
@@ -891,61 +1049,138 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
   }
 
   /**
-   * Get new members created within the last N minutes.
-   * Handles pagination automatically — fetches all pages.
+   * Paginate through a getMembers query, collecting all pages.
+   * Shared helper for getNewMembers and getNewAndConvertedMembers.
    * 
-   * @param sinceMinutes - How many minutes back to query (e.g., 75 for hourly with overlap)
-   * @returns All members created in the time window
+   * @param baseOptions - Query options (without page/size)
+   * @returns All members across pages
    */
-  async getNewMembers(sinceMinutes: number): Promise<IntegrationResult<AbcIgniteMember[]>> {
-    const now = new Date();
-    const since = new Date(now.getTime() - sinceMinutes * 60 * 1000);
-
-    // Format: YYYY-MM-DD HH:mm:ss.000000
-    const fmt = (d: Date): string => {
-      const pad = (n: number, len = 2) => String(n).padStart(len, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.000000`;
-    };
-
-    const createdTimestampRange = `${fmt(since)},${fmt(now)}`;
+  private async getMembersPaginated(
+    baseOptions: Parameters<typeof this.getMembers>[0]
+  ): Promise<IntegrationResult<AbcIgniteMember[]>> {
     const allMembers: AbcIgniteMember[] = [];
     const PAGE_SIZE = 50;
     let page = 1;
 
-    // Paginate until we get fewer results than page size
     while (true) {
       const result = await this.getMembers({
-        createdTimestampRange,
+        ...baseOptions,
         page,
         size: PAGE_SIZE,
       });
 
       if (!result.success) {
-        // If first page fails, return the error
-        if (page === 1) {
-          return result;
-        }
-        // If a subsequent page fails, return what we have so far
+        if (page === 1) return result;
         break;
       }
 
       const members = result.data || [];
       allMembers.push(...members);
 
-      // If we got fewer than PAGE_SIZE, we've reached the last page
-      if (members.length < PAGE_SIZE) {
-        break;
-      }
-
+      if (members.length < PAGE_SIZE) break;
       page++;
-
-      // Safety cap: don't paginate forever
-      if (page > 100) {
-        break;
-      }
+      if (page > 100) break;
     }
 
     return this.success(allMembers);
+  }
+
+  /**
+   * Get new members created within the last N minutes.
+   * Handles pagination automatically — fetches all pages.
+   * 
+   * @deprecated Use getNewAndConvertedMembers() which also catches prospect-to-member conversions
+   * @param sinceMinutes - How many minutes back to query (e.g., 75 for hourly with overlap)
+   * @returns All members created in the time window
+   */
+  async getNewMembers(sinceMinutes: number): Promise<IntegrationResult<AbcIgniteMember[]>> {
+    const now = new Date();
+    const since = new Date(now.getTime() - sinceMinutes * 60 * 1000);
+    const range = `${formatAbcTimestamp(since)},${formatAbcTimestamp(now)}`;
+
+    return this.getMembersPaginated({ createdTimestampRange: range });
+  }
+
+  /**
+   * Detect new members using two strategies:
+   * 
+   * 1. **New direct signups**: Members created as `joinStatus=member` in the window.
+   *    These are people who signed up and immediately became members (no prospect phase).
+   * 
+   * 2. **Converted prospects**: Members modified in the window who have
+   *    `isConvertedProspect === "true"` AND `agreement.convertedDate` falls within
+   *    the sync window. This catches prospects who were converted to members by staff.
+   * 
+   * Both queries run in parallel. Results are merged and deduplicated by `memberId`.
+   * 
+   * @param since - Start of the detection window
+   * @param until - End of the detection window (defaults to now)
+   * @returns Detected members with a `_detectionReason` tag on each
+   */
+  async getNewAndConvertedMembers(
+    since: Date,
+    until?: Date
+  ): Promise<IntegrationResult<DetectedMember[]>> {
+    const now = until || new Date();
+    const range = `${formatAbcTimestamp(since)},${formatAbcTimestamp(now)}`;
+
+    // Run both queries in parallel
+    const [directResult, modifiedResult] = await Promise.all([
+      // Query 1: New direct member signups
+      this.getMembersPaginated({
+        joinStatus: 'member',
+        createdTimestampRange: range,
+      }),
+      // Query 2: Recently modified members (for conversion detection)
+      this.getMembersPaginated({
+        joinStatus: 'member',
+        lastModifiedTimestampRange: range,
+      }),
+    ]);
+
+    // Collect direct signups
+    const detected = new Map<string, DetectedMember>();
+
+    if (directResult.success && directResult.data) {
+      for (const member of directResult.data) {
+        detected.set(member.memberId, {
+          ...member,
+          _detectionReason: 'new_direct_signup',
+        });
+      }
+    }
+
+    // Filter modified members for actual conversions
+    if (modifiedResult.success && modifiedResult.data) {
+      for (const member of modifiedResult.data) {
+        // Skip if already captured by Query 1
+        if (detected.has(member.memberId)) continue;
+
+        // Only keep genuine conversions: must be a converted prospect
+        // with a convertedDate inside our sync window
+        if (
+          member.personal?.isConvertedProspect === 'true' &&
+          member.agreement?.convertedDate &&
+          isDateInWindow(member.agreement.convertedDate, since, now)
+        ) {
+          detected.set(member.memberId, {
+            ...member,
+            _detectionReason: 'converted_prospect',
+          });
+        }
+      }
+    }
+
+    // If both queries failed, return the first error
+    if (!directResult.success && !modifiedResult.success) {
+      return {
+        success: false,
+        error: directResult.error || modifiedResult.error,
+        retryable: directResult.retryable || modifiedResult.retryable,
+      };
+    }
+
+    return this.success(Array.from(detected.values()));
   }
 
   /**

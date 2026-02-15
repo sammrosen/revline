@@ -298,6 +298,237 @@ describe('ABC Ignite Adapter', () => {
     });
   });
 
+  describe('normalizeMemberPayload', () => {
+    it('should normalize a full member with agreement data', async () => {
+      const { normalizeMemberPayload } = await import('@/app/_lib/integrations/abc-ignite.adapter');
+
+      const payload = normalizeMemberPayload({
+        memberId: '0fa92d4f04804083b7b7dd33b8b56217',
+        personal: {
+          firstName: 'DEBBIE',
+          lastName: 'ARNETT',
+          email: 'debarn825@gmail.com',
+          primaryPhone: '(214) 632-1561',
+          barcode: '26133',
+          memberStatus: 'Active',
+          joinStatus: 'Member',
+          isConvertedProspect: 'true',
+          homeClub: '7715',
+          gender: 'Female',
+        },
+        agreement: {
+          membershipType: 'Monthly Premier',
+          convertedDate: '2026-01-12',
+          agreementEntrySource: 'DataTrak EAE',
+        },
+      });
+
+      expect(payload.email).toBe('debarn825@gmail.com');
+      expect(payload.first_name).toBe('Debbie');
+      expect(payload.last_name).toBe('Arnett');
+      expect(payload.member_id).toBe('0fa92d4f04804083b7b7dd33b8b56217');
+      expect(payload.join_status).toBe('Member');
+      expect(payload.is_converted_prospect).toBe('true');
+      expect(payload.membership_type).toBe('Monthly Premier');
+      expect(payload.converted_date).toBe('2026-01-12');
+      expect(payload.agreement_entry_source).toBe('DataTrak EAE');
+    });
+
+    it('should handle member without agreement (direct signup)', async () => {
+      const { normalizeMemberPayload } = await import('@/app/_lib/integrations/abc-ignite.adapter');
+
+      const payload = normalizeMemberPayload({
+        memberId: '40c0b341b2014574a57f48aaf5eed694',
+        personal: {
+          firstName: 'CAITLIN',
+          lastName: 'BIGHAM',
+          email: 'caitlinbigham23@gmail.com',
+          barcode: '25871',
+          joinStatus: 'Member',
+          isConvertedProspect: 'false',
+        },
+      });
+
+      expect(payload.email).toBe('caitlinbigham23@gmail.com');
+      expect(payload.is_converted_prospect).toBe('false');
+      expect(payload.converted_date).toBeUndefined();
+      expect(payload.membership_type).toBeUndefined();
+    });
+
+    it('should handle prospect (no agreement conversion)', async () => {
+      const { normalizeMemberPayload } = await import('@/app/_lib/integrations/abc-ignite.adapter');
+
+      const payload = normalizeMemberPayload({
+        memberId: 'f6a5244232a148c39fcd89419914163e',
+        personal: {
+          firstName: 'Bo',
+          lastName: 'A',
+          email: 'joey.calzone6969@gmail.com',
+          barcode: 'GOORTD5MNB6HBGV',
+          joinStatus: 'Prospect',
+          isConvertedProspect: 'false',
+          memberStatus: 'Expired',
+        },
+        agreement: {
+          membershipType: 'Prospect',
+          membershipTypeAbcCode: 'PROSPECT',
+        },
+      });
+
+      expect(payload.join_status).toBe('Prospect');
+      expect(payload.membership_type).toBe('Prospect');
+      expect(payload.converted_date).toBeUndefined();
+    });
+  });
+
+  describe('excludedMemberTypes filtering', () => {
+    it('should filter out excluded member types (case-insensitive)', () => {
+      const excludedTypes = ['Kids Club', 'Prospect'];
+      const excludedSet = new Set(excludedTypes.map(t => t.toLowerCase()));
+
+      const members = [
+        { memberId: '1', agreement: { membershipType: 'Monthly Premier' } },
+        { memberId: '2', agreement: { membershipType: 'Kids Club' } },
+        { memberId: '3', agreement: { membershipType: 'Monthly Executive' } },
+        { memberId: '4', agreement: { membershipType: 'Prospect' } },
+        { memberId: '5', agreement: { membershipType: 'kids club' } }, // lowercase variant
+        { memberId: '6' }, // no agreement at all
+      ];
+
+      const filtered = members.filter(m => {
+        const memberType = (m as { agreement?: { membershipType?: string } }).agreement?.membershipType?.toLowerCase();
+        return !memberType || !excludedSet.has(memberType);
+      });
+
+      expect(filtered).toHaveLength(3);
+      expect(filtered.map(m => m.memberId)).toEqual(['1', '3', '6']);
+    });
+
+    it('should pass all members when excludedMemberTypes is empty', () => {
+      const excludedSet = new Set<string>();
+
+      const members = [
+        { memberId: '1', agreement: { membershipType: 'Kids Club' } },
+        { memberId: '2', agreement: { membershipType: 'Monthly Premier' } },
+      ];
+
+      const filtered = excludedSet.size > 0
+        ? members.filter(m => {
+            const memberType = (m as { agreement?: { membershipType?: string } }).agreement?.membershipType?.toLowerCase();
+            return !memberType || !excludedSet.has(memberType);
+          })
+        : members;
+
+      expect(filtered).toHaveLength(2);
+    });
+
+    it('should handle members with no agreement gracefully', () => {
+      const excludedSet = new Set(['kids club']);
+
+      const members = [
+        { memberId: '1' }, // no agreement
+        { memberId: '2', agreement: {} }, // agreement but no membershipType
+        { memberId: '3', agreement: { membershipType: 'Kids Club' } },
+      ];
+
+      const filtered = members.filter(m => {
+        const memberType = (m as { agreement?: { membershipType?: string } }).agreement?.membershipType?.toLowerCase();
+        return !memberType || !excludedSet.has(memberType);
+      });
+
+      // Members 1 and 2 pass through (no type to match), member 3 is excluded
+      expect(filtered).toHaveLength(2);
+      expect(filtered.map(m => m.memberId)).toEqual(['1', '2']);
+    });
+  });
+
+  describe('isDateInWindow', () => {
+    it('should detect date-only string inside window', async () => {
+      const { isDateInWindow } = await import('@/app/_lib/integrations/abc-ignite.adapter');
+
+      const since = new Date('2026-01-10T00:00:00Z');
+      const until = new Date('2026-01-15T23:59:59Z');
+
+      expect(isDateInWindow('2026-01-12', since, until)).toBe(true);
+    });
+
+    it('should reject date-only string outside window', async () => {
+      const { isDateInWindow } = await import('@/app/_lib/integrations/abc-ignite.adapter');
+
+      const since = new Date('2026-01-10T00:00:00Z');
+      const until = new Date('2026-01-11T23:59:59Z');
+
+      expect(isDateInWindow('2026-01-12', since, until)).toBe(false);
+    });
+
+    it('should handle ABC timestamp format with time', async () => {
+      const { isDateInWindow } = await import('@/app/_lib/integrations/abc-ignite.adapter');
+
+      const since = new Date('2026-02-15T09:00:00Z');
+      const until = new Date('2026-02-15T11:00:00Z');
+
+      expect(isDateInWindow('2026-02-15 10:30:00.000000', since, until)).toBe(true);
+      expect(isDateInWindow('2026-02-15 08:00:00.000000', since, until)).toBe(false);
+    });
+
+    it('should return false for invalid date strings', async () => {
+      const { isDateInWindow } = await import('@/app/_lib/integrations/abc-ignite.adapter');
+
+      const since = new Date('2026-01-01');
+      const until = new Date('2026-12-31');
+
+      expect(isDateInWindow('not-a-date', since, until)).toBe(false);
+      expect(isDateInWindow('', since, until)).toBe(false);
+    });
+
+    it('should handle edge case: date exactly at window boundary', async () => {
+      const { isDateInWindow } = await import('@/app/_lib/integrations/abc-ignite.adapter');
+
+      const since = new Date('2026-01-12T00:00:00Z');
+      const until = new Date('2026-01-12T23:59:59Z');
+
+      // Date-only "2026-01-12" treated as start of day, should be in window
+      expect(isDateInWindow('2026-01-12', since, until)).toBe(true);
+    });
+  });
+
+  describe('formatAbcTimestamp', () => {
+    it('should format date to ABC timestamp format (local time)', async () => {
+      const { formatAbcTimestamp } = await import('@/app/_lib/integrations/abc-ignite.adapter');
+
+      // Use a known local date to avoid timezone issues
+      const d = new Date(2026, 1, 15, 10, 30, 45); // Feb 15, 2026 10:30:45 local
+      const result = formatAbcTimestamp(d);
+
+      expect(result).toBe('2026-02-15 10:30:45.000000');
+    });
+
+    it('should zero-pad single-digit months and days', async () => {
+      const { formatAbcTimestamp } = await import('@/app/_lib/integrations/abc-ignite.adapter');
+
+      const d = new Date(2026, 0, 5, 3, 7, 9); // Jan 5, 2026 03:07:09 local
+      const result = formatAbcTimestamp(d);
+
+      expect(result).toBe('2026-01-05 03:07:09.000000');
+    });
+
+    it('should produce consistent output matching local Date getters', async () => {
+      const { formatAbcTimestamp } = await import('@/app/_lib/integrations/abc-ignite.adapter');
+
+      const d = new Date();
+      const result = formatAbcTimestamp(d);
+
+      // Verify the year, month, date match local time getters
+      const parts = result.split(/[- :.]/).map(Number);
+      expect(parts[0]).toBe(d.getFullYear());
+      expect(parts[1]).toBe(d.getMonth() + 1);
+      expect(parts[2]).toBe(d.getDate());
+      expect(parts[3]).toBe(d.getHours());
+      expect(parts[4]).toBe(d.getMinutes());
+      expect(parts[5]).toBe(d.getSeconds());
+    });
+  });
+
   describe('enrollment operations', () => {
     it('should enroll member by memberId', async () => {
       const client = await createTestWorkspace({ slug: 'abc-enroll-id' });

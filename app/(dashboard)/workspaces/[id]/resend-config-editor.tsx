@@ -28,6 +28,7 @@ interface ResendMeta {
   fromName?: string;
   replyTo?: string;
   templates?: Record<string, ResendTemplate>;
+  webhookSecret?: string;
 }
 
 /**
@@ -45,6 +46,7 @@ interface ResendConfigEditorProps {
   error?: string;
   integrationId?: string; // For API calls to fetch templates
   workspaceId?: string;   // For fetching lead properties
+  workspaceSlug?: string; // For constructing webhook URL
 }
 
 /**
@@ -71,6 +73,7 @@ function parseMeta(value: string): ResendMeta {
       fromName: parsed.fromName || '',
       replyTo: parsed.replyTo || '',
       templates: parsed.templates || {},
+      webhookSecret: parsed.webhookSecret || '',
     };
   } catch {
     return DEFAULT_CONFIG;
@@ -100,6 +103,9 @@ function serializeMeta(meta: ResendMeta): string {
   if (meta.templates && Object.keys(meta.templates).length > 0) {
     output.templates = meta.templates;
   }
+  if (meta.webhookSecret?.trim()) {
+    output.webhookSecret = meta.webhookSecret;
+  }
   return JSON.stringify(output, null, 2);
 }
 
@@ -118,6 +124,7 @@ export function ResendConfigEditor({
   error: externalError,
   integrationId,
   workspaceId,
+  workspaceSlug,
 }: ResendConfigEditorProps) {
   const [isJsonMode, setIsJsonMode] = useState(false);
   const [jsonText, setJsonText] = useState(value);
@@ -162,6 +169,7 @@ export function ResendConfigEditor({
         fromName: parsed.fromName || '',
         replyTo: parsed.replyTo || '',
         templates: parsed.templates || {},
+        webhookSecret: parsed.webhookSecret || '',
       });
       setIsJsonMode(false);
       setJsonError(null);
@@ -389,6 +397,84 @@ export function ResendConfigEditor({
             {!replyToValid && (
               <p className="text-xs text-red-400 mt-1">Invalid email format</p>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Webhook Configuration Section */}
+      <div>
+        <h4 className="text-sm font-medium text-zinc-300 mb-2">Webhook Configuration</h4>
+        <p className="text-xs text-zinc-500 mb-4">
+          Receive Resend delivery events (bounces, complaints, failures) to automatically update lead error states and trigger workflows.
+        </p>
+
+        <div className="space-y-4">
+          {/* Webhook URL (read-only) */}
+          {workspaceSlug && (
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1.5">
+                Webhook URL
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/resend-webhook?source=${workspaceSlug}`}
+                  className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm font-mono text-zinc-400 select-all cursor-text"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = `${window.location.origin}/api/v1/resend-webhook?source=${workspaceSlug}`;
+                    navigator.clipboard.writeText(url);
+                  }}
+                  className="flex-shrink-0 px-2.5 py-2 text-xs text-zinc-400 hover:text-white border border-zinc-700 rounded hover:border-zinc-600 transition-colors"
+                  title="Copy webhook URL"
+                >
+                  Copy
+                </button>
+              </div>
+              <p className="text-xs text-zinc-600 mt-1">
+                Paste this URL in Resend Dashboard &rarr; Webhooks &rarr; Add Endpoint
+              </p>
+            </div>
+          )}
+
+          {/* Webhook Secret */}
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1.5">
+              Webhook Signing Secret
+            </label>
+            <input
+              type="password"
+              value={meta.webhookSecret || ''}
+              onChange={(e) => setMeta({ ...meta, webhookSecret: e.target.value })}
+              placeholder="whsec_..."
+              className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm font-mono text-white focus:border-indigo-500/50 focus:outline-none transition-colors"
+              autoComplete="off"
+            />
+            <p className="text-xs text-zinc-600 mt-1">
+              Found in Resend Dashboard &rarr; Webhooks &rarr; Signing Secret. Starts with <span className="font-mono text-zinc-500">whsec_</span>
+            </p>
+          </div>
+
+          {/* Recommended events note */}
+          <div className="p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg">
+            <p className="text-xs text-zinc-400 mb-2">Enable these events in Resend:</p>
+            <div className="flex flex-wrap gap-1.5">
+              {['email.bounced', 'email.complained', 'email.failed', 'email.delivery_delayed', 'email.delivered'].map((evt) => (
+                <span
+                  key={evt}
+                  className="px-2 py-0.5 text-[11px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded"
+                >
+                  {evt}
+                </span>
+              ))}
+            </div>
+            <p className="text-[11px] text-zinc-600 mt-2">
+              Bounces and complaints set <span className="font-mono text-zinc-500">errorState</span> on leads. Delivered events clear transient delays.
+            </p>
           </div>
         </div>
       </div>

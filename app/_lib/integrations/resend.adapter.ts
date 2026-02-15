@@ -15,8 +15,9 @@
 
 import { IntegrationType } from '@prisma/client';
 import { Resend } from 'resend';
+import { Webhook } from 'svix';
 import { BaseIntegrationAdapter } from './base';
-import { ResendMeta, ResendTemplate, IntegrationResult } from '@/app/_lib/types';
+import { ResendMeta, ResendTemplate, IntegrationResult, WebhookVerification } from '@/app/_lib/types';
 
 /** Default secret name for Resend API key */
 export const RESEND_API_KEY_SECRET = 'API Key';
@@ -403,6 +404,47 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
   }
 
   // ===========================================================================
+  // WEBHOOK VERIFICATION
+  // ===========================================================================
+
+  /**
+   * Get the configured webhook signing secret
+   */
+  getWebhookSecret(): string | null {
+    return this.meta?.webhookSecret || null;
+  }
+
+  /**
+   * Verify and parse a Resend webhook payload using Svix signature verification.
+   * 
+   * @param rawBody - The raw request body string (must NOT be parsed/stringified)
+   * @param headers - The svix headers from the request
+   * @returns Verified payload or error
+   */
+  verifyWebhook(
+    rawBody: string,
+    headers: { svixId: string; svixTimestamp: string; svixSignature: string }
+  ): WebhookVerification {
+    const secret = this.getWebhookSecret();
+    if (!secret) {
+      return { valid: false, error: 'Webhook secret not configured in Resend integration meta' };
+    }
+
+    try {
+      const wh = new Webhook(secret);
+      const payload = wh.verify(rawBody, {
+        'svix-id': headers.svixId,
+        'svix-timestamp': headers.svixTimestamp,
+        'svix-signature': headers.svixSignature,
+      });
+      return { valid: true, payload };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Signature verification failed';
+      return { valid: false, error: msg };
+    }
+  }
+
+  // ===========================================================================
   // CONFIGURATION
   // ===========================================================================
 
@@ -411,6 +453,13 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
    */
   isConfigured(): boolean {
     return !!this.getFromEmail();
+  }
+
+  /**
+   * Check if webhook verification is configured
+   */
+  isWebhookConfigured(): boolean {
+    return !!this.getWebhookSecret();
   }
 
   /**
@@ -438,3 +487,55 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
     };
   }
 }
+
+// =============================================================================
+// RESEND WEBHOOK EVENT TYPES
+// =============================================================================
+
+/**
+ * Resend webhook event payload structure.
+ * Matches the JSON body Resend POSTs to webhook endpoints.
+ */
+export interface ResendWebhookEvent {
+  type: 'email.sent' | 'email.delivered' | 'email.bounced' | 'email.complained' 
+    | 'email.delivery_delayed' | 'email.failed' | 'email.opened' | 'email.clicked';
+  created_at: string;
+  data: {
+    email_id: string;
+    from: string;
+    to: string[];
+    subject?: string;
+    /** Present on bounce events */
+    bounce?: {
+      message: string;
+      type: string;    // "Permanent" | "Temporary"
+      subType: string; // "Suppressed" | "MessageRejected" etc.
+    };
+    /** Tags set when the email was sent */
+    tags?: Record<string, string>;
+    template_id?: string;
+    broadcast_id?: string;
+  };
+}
+
+/**
+ * Map Resend event type to our provider-prefixed errorState value.
+ * Returns null for event types that don't set an error state.
+ */
+export function resendEventToErrorState(eventType: string): string | null {
+  switch (eventType) {
+    case 'email.bounced':
+      return 'resend.email_bounced';
+    case 'email.complained':
+      return 'resend.email_complained';
+    case 'email.failed':
+      return 'resend.email_failed';
+    case 'email.delivery_delayed':
+      return 'resend.delivery_delayed';
+    default:
+      return null;
+  }
+}
+
+/** Error states that are transient and can be auto-cleared on delivery */
+export const TRANSIENT_ERROR_STATES = new Set(['resend.delivery_delayed']);
