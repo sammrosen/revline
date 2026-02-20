@@ -20,6 +20,8 @@ import {
   BookingCopyConfig, 
   WorkspaceFeatures,
   RevlineMeta,
+  ThemeMapping,
+  HeaderStyle,
   SignupCopyConfig,
   SignupClubInfo,
   SignupFeatures,
@@ -28,6 +30,8 @@ import {
 } from '@/app/_lib/types';
 import {
   DEFAULT_BRANDING,
+  DEFAULT_THEME_MAPPING,
+  DEFAULT_HEADER_STYLE,
   DEFAULT_BOOKING_COPY,
   DEFAULT_FEATURES,
   DEFAULT_SIGNUP_CONFIG,
@@ -48,11 +52,25 @@ import {
  * Fully resolved branding config (no optional fields)
  */
 export interface ResolvedBranding {
-  primaryColor: string;
-  secondaryColor: string;
-  backgroundColor: string;
+  color1: string;
+  color2: string;
+  color3: string;
+  color4: string;
+  color5: string;
   logo: string;
   fontFamily: 'inter' | 'poppins' | 'roboto' | 'system';
+}
+
+/**
+ * Fully resolved theme mapping (no optional fields)
+ */
+export interface ResolvedThemeMapping {
+  primary: number;
+  primaryHover: number;
+  background: number;
+  card: number;
+  text: number;
+  header: number;
 }
 
 /**
@@ -76,11 +94,23 @@ export interface ResolvedFeatures {
 }
 
 /**
+ * Fully resolved header style (no optional fields)
+ */
+export interface ResolvedHeaderStyle {
+  variant: 'pill' | 'plain';
+  size: 'sm' | 'base' | 'lg' | 'xl';
+  bold: boolean;
+  italic: boolean;
+}
+
+/**
  * Complete resolved config for a workspace
  */
 export interface ResolvedWorkspaceConfig {
   workspaceId: string;
   branding: ResolvedBranding;
+  theme: ResolvedThemeMapping;
+  headerStyle: ResolvedHeaderStyle;
   features: ResolvedFeatures;
 }
 
@@ -101,6 +131,10 @@ export interface ResolvedSignupCopy {
   submitButton: string;
   successTitle: string;
   successMessage: string;
+  footerText: string;
+  footerEmail: string;
+  headerText: string;
+  headerLink: string;
 }
 
 /**
@@ -156,7 +190,7 @@ export interface ResolvedSignupConfig extends ResolvedWorkspaceConfig {
  * 
  * @example
  * const config = await WorkspaceConfigService.resolveForBooking(workspaceId);
- * // config.branding.primaryColor is always defined
+ * // config.branding.color1 is always defined
  * // config.copy.headline is always defined
  */
 export class WorkspaceConfigService {
@@ -170,6 +204,8 @@ export class WorkspaceConfigService {
     return {
       workspaceId,
       branding: this.resolveBranding(meta?.branding),
+      theme: this.resolveThemeMapping(meta?.theme),
+      headerStyle: this.resolveHeaderStyle(meta?.headerStyle),
       features: this.resolveFeatures(meta?.features),
     };
   }
@@ -202,6 +238,8 @@ export class WorkspaceConfigService {
     return {
       workspaceId,
       branding: this.resolveBranding(mergedBranding),
+      theme: this.resolveThemeMapping(meta?.theme),
+      headerStyle: this.resolveHeaderStyle(meta?.headerStyle),
       features: this.resolveFeatures(meta?.features),
       copy: this.resolveBookingCopy(mergedCopy),
     };
@@ -237,6 +275,8 @@ export class WorkspaceConfigService {
     return {
       workspaceId,
       branding: this.resolveBranding(mergedBranding),
+      theme: this.resolveThemeMapping(meta?.theme),
+      headerStyle: this.resolveHeaderStyle(meta?.headerStyle),
       features: this.resolveFeatures(meta?.features),
       enabled: signupConfig?.enabled ?? false,
       club: this.resolveSignupClub(signupConfig?.club),
@@ -345,19 +385,11 @@ export class WorkspaceConfigService {
       return result;
     }
 
-    // Primary color
-    if (overrides.primaryColor && isValidHexColor(overrides.primaryColor)) {
-      result.primaryColor = overrides.primaryColor;
-    }
-
-    // Secondary color
-    if (overrides.secondaryColor && isValidHexColor(overrides.secondaryColor)) {
-      result.secondaryColor = overrides.secondaryColor;
-    }
-
-    // Background color
-    if (overrides.backgroundColor && isValidHexColor(overrides.backgroundColor)) {
-      result.backgroundColor = overrides.backgroundColor;
+    // Palette colors 1-5
+    for (const key of ['color1', 'color2', 'color3', 'color4', 'color5'] as const) {
+      if (overrides[key] && isValidHexColor(overrides[key]!)) {
+        result[key] = overrides[key]!;
+      }
     }
 
     // Logo URL
@@ -370,6 +402,54 @@ export class WorkspaceConfigService {
     // Font family
     if (overrides.fontFamily) {
       result.fontFamily = overrides.fontFamily;
+    }
+
+    return result;
+  }
+
+  /**
+   * Resolve theme mapping by merging overrides with defaults.
+   * Clamps palette indices to 1-5.
+   */
+  private static resolveThemeMapping(overrides?: ThemeMapping): ResolvedThemeMapping {
+    const result = { ...DEFAULT_THEME_MAPPING };
+
+    if (!overrides) {
+      return result;
+    }
+
+    const clamp = (v: number) => Math.max(1, Math.min(5, Math.round(v)));
+
+    for (const key of ['primary', 'primaryHover', 'background', 'card', 'text', 'header'] as const) {
+      if (typeof overrides[key] === 'number') {
+        result[key] = clamp(overrides[key]!);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Resolve header style by merging overrides with defaults.
+   */
+  private static resolveHeaderStyle(overrides?: HeaderStyle): ResolvedHeaderStyle {
+    const result = { ...DEFAULT_HEADER_STYLE };
+
+    if (!overrides) {
+      return result;
+    }
+
+    if (overrides.variant === 'pill' || overrides.variant === 'plain') {
+      result.variant = overrides.variant;
+    }
+    if (['sm', 'base', 'lg', 'xl'].includes(overrides.size || '')) {
+      result.size = overrides.size as ResolvedHeaderStyle['size'];
+    }
+    if (typeof overrides.bold === 'boolean') {
+      result.bold = overrides.bold;
+    }
+    if (typeof overrides.italic === 'boolean') {
+      result.italic = overrides.italic;
     }
 
     return result;
@@ -517,6 +597,10 @@ export class WorkspaceConfigService {
       submitButton: DEFAULT_SIGNUP_COPY.submitButton,
       successTitle: DEFAULT_SIGNUP_COPY.successTitle,
       successMessage: DEFAULT_SIGNUP_COPY.successMessage,
+      footerText: DEFAULT_SIGNUP_COPY.footerText,
+      footerEmail: DEFAULT_SIGNUP_COPY.footerEmail,
+      headerText: DEFAULT_SIGNUP_COPY.headerText,
+      headerLink: DEFAULT_SIGNUP_COPY.headerLink,
     };
 
     if (!overrides) {
@@ -548,6 +632,18 @@ export class WorkspaceConfigService {
     }
     if (overrides.successMessage) {
       result.successMessage = sanitizeCopyText(overrides.successMessage, 200);
+    }
+    if (overrides.footerText) {
+      result.footerText = sanitizeCopyText(overrides.footerText, 100);
+    }
+    if (overrides.footerEmail) {
+      result.footerEmail = sanitizeCopyText(overrides.footerEmail, 100);
+    }
+    if (overrides.headerText) {
+      result.headerText = sanitizeCopyText(overrides.headerText, 60);
+    }
+    if (overrides.headerLink) {
+      result.headerLink = sanitizeCopyText(overrides.headerLink, 200);
     }
 
     return result;

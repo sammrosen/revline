@@ -98,6 +98,8 @@ export default async function PublicSignupPage({ params }: SignupPageProps) {
       workspaceName={workspace.name}
       initialStep={initialStep}
       branding={config.branding}
+      theme={config.theme}
+      headerStyle={config.headerStyle}
       club={config.club}
       plans={config.plans}
       copy={config.copy}

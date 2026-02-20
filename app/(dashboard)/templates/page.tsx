@@ -20,9 +20,11 @@ interface Template {
   };
   defaultCopy: Record<string, string>;
   defaultBranding: {
-    primaryColor?: string;
-    secondaryColor?: string;
-    backgroundColor?: string;
+    color1?: string;
+    color2?: string;
+    color3?: string;
+    color4?: string;
+    color5?: string;
     logo?: string;
     fontFamily?: string;
   } | null;
@@ -266,29 +268,18 @@ export default function TemplatesPage() {
                 </div>
 
                 {/* Branding Preview */}
-                {template.defaultBranding?.primaryColor && (
+                {template.defaultBranding?.color1 && (
                   <div className="mt-4 pt-4 border-t border-zinc-800">
                     <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider">Branding</p>
                     <div className="flex items-center gap-2">
-                      <div
-                        className="w-6 h-6 rounded"
-                        style={{ backgroundColor: template.defaultBranding.primaryColor }}
-                        title="Primary color"
-                      />
-                      {template.defaultBranding.secondaryColor && (
+                      {[template.defaultBranding.color1, template.defaultBranding.color2, template.defaultBranding.color3, template.defaultBranding.color4, template.defaultBranding.color5].filter(Boolean).map((c, i) => (
                         <div
+                          key={i}
                           className="w-6 h-6 rounded"
-                          style={{ backgroundColor: template.defaultBranding.secondaryColor }}
-                          title="Secondary color"
+                          style={{ backgroundColor: c }}
+                          title={`Color ${i + 1}`}
                         />
-                      )}
-                      {template.defaultBranding.backgroundColor && (
-                        <div
-                          className="w-6 h-6 rounded border border-zinc-700"
-                          style={{ backgroundColor: template.defaultBranding.backgroundColor }}
-                          title="Background color"
-                        />
-                      )}
+                      ))}
                       {template.defaultBranding.fontFamily && (
                         <span className="text-xs text-zinc-500 ml-2">
                           {template.defaultBranding.fontFamily}

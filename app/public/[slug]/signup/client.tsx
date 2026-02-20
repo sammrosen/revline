@@ -20,15 +20,17 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import type { SignupPlan } from '@/app/_lib/types';
+import type { SignupPlan, HeaderStyle } from '@/app/_lib/types';
 import type { 
   ResolvedBranding, 
+  ResolvedThemeMapping,
   ResolvedSignupCopy, 
   ResolvedSignupClub, 
   ResolvedSignupFeatures, 
   ResolvedSignupPolicies,
   ResolvedFeatures,
 } from '@/app/_lib/config';
+import { DEFAULT_THEME_MAPPING } from '@/app/_lib/config';
 
 // Import step components
 import { StepIndicator } from './steps/step-indicator';
@@ -53,6 +55,7 @@ export interface DerivedBrand {
   text: string;
   textMuted: string;
   border: string;
+  header: string;
   success: string;
   error: string;
 }
@@ -101,12 +104,15 @@ interface SignupClientProps {
   workspaceName: string;
   initialStep: number;
   branding: ResolvedBranding;
+  theme?: ResolvedThemeMapping;
+  headerStyle?: HeaderStyle;
   club: ResolvedSignupClub;
   plans: SignupPlan[];
   copy: ResolvedSignupCopy;
   policies: ResolvedSignupPolicies;
   features: ResolvedFeatures;
   signupFeatures: ResolvedSignupFeatures;
+  previewMode?: boolean;
 }
 
 // =============================================================================
@@ -116,15 +122,19 @@ interface SignupClientProps {
 /**
  * Derive full brand colors from primary color
  */
-function deriveBrandColors(branding: ResolvedBranding): DerivedBrand {
+function deriveBrandColors(branding: ResolvedBranding, theme: ResolvedThemeMapping): DerivedBrand {
+  const palette = [branding.color1, branding.color2, branding.color3, branding.color4, branding.color5];
+  const pick = (slot: number) => palette[slot - 1] || palette[0];
+
   return {
-    primary: branding.primaryColor,
-    primaryHover: branding.secondaryColor,
-    background: branding.backgroundColor,
-    card: '#ffffff',
-    text: '#111827',
-    textMuted: '#6b7280',
-    border: '#e5e7eb',
+    primary: pick(theme.primary),
+    primaryHover: pick(theme.primaryHover),
+    background: pick(theme.background),
+    card: pick(theme.card),
+    text: pick(theme.text),
+    textMuted: pick(theme.text) + '80',
+    border: pick(theme.text) + '26',
+    header: pick(theme.header),
     success: '#059669',
     error: '#dc2626',
   };
@@ -185,12 +195,15 @@ export function SignupClient({
   workspaceName,
   initialStep,
   branding,
+  theme,
+  headerStyle,
   club,
   plans,
   copy,
   policies,
   features,
   signupFeatures,
+  previewMode = false,
 }: SignupClientProps) {
   // features.showPoweredBy available for global branding; signupFeatures.showPoweredBy used for signup-specific
   void features;
@@ -205,7 +218,8 @@ export function SignupClient({
   const [error, setError] = useState<string | null>(null);
   
   // Derive brand colors
-  const brand = useMemo(() => deriveBrandColors(branding), [branding]);
+  const resolvedTheme = theme ?? DEFAULT_THEME_MAPPING;
+  const brand = useMemo(() => deriveBrandColors(branding, resolvedTheme), [branding, resolvedTheme]);
   
   // Get selected plan details
   const selectedPlan = useMemo(() => {
@@ -232,12 +246,20 @@ export function SignupClient({
     if (step < 2 || step > 6) return;
     setCurrentStep(step);
     setError(null);
-    // Update URL for bookmarkability
-    router.push(`/public/${workspaceSlug}/signup/step/${step}`, { scroll: false });
-  }, [router, workspaceSlug]);
+    // Skip URL updates in preview mode — no router navigation
+    if (!previewMode) {
+      router.push(`/public/${workspaceSlug}/signup/step/${step}`, { scroll: false });
+    }
+  }, [router, workspaceSlug, previewMode]);
   
   // Validate current step and proceed
   const handleNext = useCallback(() => {
+    // In preview mode, skip all validation and advance freely
+    if (previewMode) {
+      if (currentStep < 6) goToStep(currentStep + 1);
+      return;
+    }
+
     // Validate based on current step
     switch (currentStep) {
       case 2: // Personal Info
@@ -330,7 +352,7 @@ export function SignupClient({
     
     // Proceed to next step
     goToStep(currentStep + 1);
-  }, [currentStep, formState, signupFeatures.requireSmsConsent, goToStep]);
+  }, [currentStep, formState, signupFeatures.requireSmsConsent, goToStep, previewMode]);
   
   // Go back to previous step
   const handleBack = useCallback(() => {
@@ -349,7 +371,7 @@ export function SignupClient({
   return (
     <div className="min-h-screen" style={{ backgroundColor: brand.background }}>
       {/* Header */}
-      <header className="bg-zinc-800 text-white">
+      <header className="text-white" style={{ backgroundColor: brand.header }}>
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             {branding.logo ? (
@@ -358,13 +380,28 @@ export function SignupClient({
                 alt={workspaceName} 
                 className="h-8 object-contain"
               />
-            ) : (
-              <div className="bg-white px-3 py-2 rounded">
-                <span className="font-bold text-zinc-800 text-sm">{workspaceName.toUpperCase()}</span>
-              </div>
-            )}
+            ) : (() => {
+              const hs = headerStyle || {};
+              const sizeClass = { sm: 'text-sm', base: 'text-base', lg: 'text-lg', xl: 'text-xl' }[hs.size || 'sm'];
+              const weightClass = (hs.bold ?? true) ? 'font-bold' : 'font-normal';
+              const italicClass = hs.italic ? 'italic' : '';
+              const variant = hs.variant || 'pill';
+              return variant === 'pill' ? (
+                <div className="bg-white px-3 py-2 rounded">
+                  <span className={`text-zinc-800 ${sizeClass} ${weightClass} ${italicClass}`}>{workspaceName.toUpperCase()}</span>
+                </div>
+              ) : (
+                <span className={`text-white ${sizeClass} ${weightClass} ${italicClass}`}>{workspaceName.toUpperCase()}</span>
+              );
+            })()}
           </div>
-          <span className="text-sm text-zinc-400">Join {workspaceName}</span>
+          {copy.headerLink ? (
+            <a href={copy.headerLink} className="text-sm text-zinc-400 hover:text-white transition-colors">
+              {copy.headerText || `Join ${workspaceName}`}
+            </a>
+          ) : (
+            <span className="text-sm text-zinc-400">{copy.headerText || `Join ${workspaceName}`}</span>
+          )}
         </div>
         
         {/* Step indicator (not on confirmation) */}
@@ -514,6 +551,20 @@ export function SignupClient({
             </div>
           </div>
           
+          {/* Footer text + email */}
+          {(copy.footerText || copy.footerEmail) && (
+            <div className="text-center mt-4">
+              {copy.footerText && (
+                <p className="text-xs" style={{ color: brand.textMuted }}>{copy.footerText}</p>
+              )}
+              {copy.footerEmail && (
+                <a href={`mailto:${copy.footerEmail}`} className="text-xs hover:underline" style={{ color: brand.textMuted }}>
+                  {copy.footerEmail}
+                </a>
+              )}
+            </div>
+          )}
+
           {/* Powered by */}
           {signupFeatures.showPoweredBy && (
             <div className="text-center mt-4">

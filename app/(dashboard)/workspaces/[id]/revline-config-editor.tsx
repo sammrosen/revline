@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { BRANDING_SCHEMA, BOOKING_COPY_SCHEMA, SIGNUP_COPY_SCHEMA } from '@/app/_lib/templates';
 import { 
   DEFAULT_SIGNUP_CONFIG,
+  DEFAULT_THEME_MAPPING,
+  DEFAULT_HEADER_STYLE,
+  DEFAULT_BRANDING,
   EXAMPLE_SIGNUP_PLAN,
   isValidHexColor, 
   isValidLogoUrl,
@@ -39,9 +42,11 @@ interface FormConfig {
 }
 
 interface BrandingConfig {
-  primaryColor?: string;
-  secondaryColor?: string;
-  backgroundColor?: string;
+  color1?: string;
+  color2?: string;
+  color3?: string;
+  color4?: string;
+  color5?: string;
   logo?: string;
   fontFamily?: 'inter' | 'poppins' | 'roboto' | 'system';
 }
@@ -64,12 +69,30 @@ interface FeaturesConfig {
   showPoweredBy?: boolean;
 }
 
+interface ThemeMapping {
+  primary?: number;
+  primaryHover?: number;
+  background?: number;
+  card?: number;
+  text?: number;
+  header?: number;
+}
+
+interface HeaderStyleConfig {
+  variant?: 'pill' | 'plain';
+  size?: 'sm' | 'base' | 'lg' | 'xl';
+  bold?: boolean;
+  italic?: boolean;
+}
+
 interface RevlineMeta {
   forms: Record<string, FormConfig>;
   settings: {
     defaultSource?: string;
   };
   branding?: BrandingConfig;
+  theme?: ThemeMapping;
+  headerStyle?: HeaderStyleConfig;
   copy?: CopyConfig;
   features?: FeaturesConfig;
   signup?: SignupConfig;
@@ -467,6 +490,8 @@ export function RevlineConfigEditor({
                   >
                     <FormPreviewMock
                       branding={meta.branding}
+                      theme={meta.theme}
+                      headerStyle={meta.headerStyle}
                       copy={meta.copy?.booking}
                       workspaceName={workspaceSlug}
                       formType={(previewForm || selectedBuildForm || '').includes('signup') ? 'signup' : 'booking'}
@@ -1029,6 +1054,12 @@ function BuildTab({
         </>
       )}
       
+      {/* Header Style */}
+      <HeaderStyleSection meta={meta} updateMeta={updateMeta} />
+
+      {/* Theme Mapping */}
+      <ThemeSection meta={meta} updateMeta={updateMeta} />
+
       {/* Fallback for unknown form types */}
       {!isBookingForm && !isSignupForm && selectedForm && (
         <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
@@ -1037,6 +1068,163 @@ function BuildTab({
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+// =============================================================================
+// HEADER STYLE SECTION (for Build tab)
+// =============================================================================
+
+function HeaderStyleSection({
+  meta,
+  updateMeta,
+}: {
+  meta: RevlineMeta;
+  updateMeta: (m: RevlineMeta) => void;
+}) {
+  const hs = meta.headerStyle || {};
+
+  const update = (field: keyof HeaderStyleConfig, value: string | boolean) => {
+    updateMeta({
+      ...meta,
+      headerStyle: { ...hs, [field]: value },
+    });
+  };
+
+  return (
+    <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
+      <h4 className="text-sm font-medium text-zinc-300 mb-1">Header Style</h4>
+      <p className="text-xs text-zinc-500 mb-3">How the workspace name renders when no logo is set</p>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-zinc-400 mb-1 block">Style</label>
+          <select
+            value={hs.variant || DEFAULT_HEADER_STYLE.variant}
+            onChange={(e) => update('variant', e.target.value)}
+            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none transition-colors"
+          >
+            <option value="pill">Pill Badge</option>
+            <option value="plain">Plain Text</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs text-zinc-400 mb-1 block">Size</label>
+          <select
+            value={hs.size || DEFAULT_HEADER_STYLE.size}
+            onChange={(e) => update('size', e.target.value)}
+            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none transition-colors"
+          >
+            <option value="sm">Small</option>
+            <option value="base">Base</option>
+            <option value="lg">Large</option>
+            <option value="xl">XL</option>
+          </select>
+        </div>
+
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={hs.bold ?? DEFAULT_HEADER_STYLE.bold}
+            onChange={(e) => update('bold', e.target.checked)}
+            className="rounded border-zinc-600 bg-zinc-900 text-amber-500 focus:ring-amber-500/30"
+          />
+          <span className="text-sm text-zinc-300">Bold</span>
+        </label>
+
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={hs.italic ?? DEFAULT_HEADER_STYLE.italic}
+            onChange={(e) => update('italic', e.target.checked)}
+            className="rounded border-zinc-600 bg-zinc-900 text-amber-500 focus:ring-amber-500/30"
+          />
+          <span className="text-sm text-zinc-300">Italic</span>
+        </label>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// THEME SECTION (for Build tab)
+// =============================================================================
+
+const THEME_SLOTS: { key: keyof Required<ThemeMapping>; label: string; description: string }[] = [
+  { key: 'header', label: 'Header', description: 'Top navigation bar' },
+  { key: 'primary', label: 'Accent', description: 'Buttons, headers, step indicator' },
+  { key: 'primaryHover', label: 'Accent Hover', description: 'Hover state for buttons' },
+  { key: 'background', label: 'Page Background', description: 'Page background' },
+  { key: 'card', label: 'Card Background', description: 'Card and panel surfaces' },
+  { key: 'text', label: 'Text', description: 'Body text and headings' },
+];
+
+function ThemeSection({
+  meta,
+  updateMeta,
+}: {
+  meta: RevlineMeta;
+  updateMeta: (m: RevlineMeta) => void;
+}) {
+  const theme = meta.theme ?? {};
+  const branding = meta.branding ?? {};
+
+  const palette = [
+    branding.color1 || DEFAULT_BRANDING.color1,
+    branding.color2 || DEFAULT_BRANDING.color2,
+    branding.color3 || DEFAULT_BRANDING.color3,
+    branding.color4 || DEFAULT_BRANDING.color4,
+    branding.color5 || DEFAULT_BRANDING.color5,
+  ];
+
+  const updateThemeSlot = (key: keyof ThemeMapping, index: number) => {
+    updateMeta({
+      ...meta,
+      theme: { ...theme, [key]: index },
+    });
+  };
+
+  return (
+    <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
+      <h4 className="text-sm font-medium text-zinc-300 mb-1">Theme</h4>
+      <p className="text-xs text-zinc-500 mb-3">Assign palette colors to form elements</p>
+
+      <div className="space-y-2">
+        {THEME_SLOTS.map(({ key, label, description }) => {
+          const selected = theme[key] ?? DEFAULT_THEME_MAPPING[key];
+
+          return (
+            <div key={key} className="flex items-center justify-between py-1">
+              <div className="min-w-0">
+                <span className="text-sm text-zinc-300">{label}</span>
+                <span className="text-xs text-zinc-600 ml-2 hidden sm:inline">{description}</span>
+              </div>
+              <div className="flex items-center gap-1.5 ml-3">
+                {palette.map((color, i) => {
+                  const idx = i + 1;
+                  const isSelected = selected === idx;
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => updateThemeSlot(key, idx)}
+                      className={`w-6 h-6 rounded-full border-2 transition-all ${
+                        isSelected
+                          ? 'border-amber-400 scale-110 ring-1 ring-amber-400/40'
+                          : 'border-zinc-700 hover:border-zinc-500'
+                      }`}
+                      style={{ backgroundColor: color }}
+                      title={`Color ${idx}`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1488,13 +1676,94 @@ function SignupConfigSection({
                           <label className="block text-xs text-zinc-400 mb-1">Benefits (one per line)</label>
                           <textarea
                             value={plan.benefits.join('\n')}
-                            onChange={(e) => updatePlan(index, { benefits: e.target.value.split('\n').filter(b => b.trim()) })}
+                            onChange={(e) => updatePlan(index, { benefits: e.target.value.split('\n') })}
+                            onBlur={(e) => updatePlan(index, { benefits: e.target.value.split('\n').filter(b => b.trim()) })}
                             className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none resize-none"
                             rows={4}
                             placeholder="Full gym access&#10;Locker room access&#10;Free fitness assessment"
                           />
                         </div>
                         
+                        {/* Pricing Details */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-xs text-zinc-400">Pricing Details</label>
+                            <button
+                              type="button"
+                              onClick={() => updatePlan(index, {
+                                pricingDetails: [...plan.pricingDetails, { label: '', value: '' }],
+                              })}
+                              className="text-xs text-amber-400 hover:text-amber-300 transition-colors"
+                            >
+                              + Add Row
+                            </button>
+                          </div>
+                          <div className="space-y-1.5">
+                            {plan.pricingDetails.map((detail, di) => (
+                              <div key={di} className="flex items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  value={detail.label}
+                                  onChange={(e) => {
+                                    const rows = [...plan.pricingDetails];
+                                    rows[di] = { ...rows[di], label: e.target.value };
+                                    updatePlan(index, { pricingDetails: rows });
+                                  }}
+                                  placeholder="Label"
+                                  className="flex-1 px-2 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none"
+                                />
+                                <input
+                                  type="text"
+                                  value={detail.value}
+                                  onChange={(e) => {
+                                    const rows = [...plan.pricingDetails];
+                                    rows[di] = { ...rows[di], value: e.target.value };
+                                    updatePlan(index, { pricingDetails: rows });
+                                  }}
+                                  placeholder="Value"
+                                  className="w-20 px-2 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none"
+                                />
+                                <input
+                                  type="text"
+                                  value={detail.strikethrough || ''}
+                                  onChange={(e) => {
+                                    const rows = [...plan.pricingDetails];
+                                    rows[di] = { ...rows[di], strikethrough: e.target.value || undefined };
+                                    updatePlan(index, { pricingDetails: rows });
+                                  }}
+                                  placeholder="Strike"
+                                  className="w-16 px-2 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const rows = plan.pricingDetails.filter((_, ri) => ri !== di);
+                                    updatePlan(index, { pricingDetails: rows });
+                                  }}
+                                  className="text-zinc-600 hover:text-red-400 transition-colors text-sm px-1"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                            {plan.pricingDetails.length === 0 && (
+                              <p className="text-xs text-zinc-600 italic">No pricing details — click + Add Row</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Plan disclaimer */}
+                        <div>
+                          <label className="block text-xs text-zinc-400 mb-1">Plan Fine Print</label>
+                          <input
+                            type="text"
+                            value={plan.disclaimer || ''}
+                            onChange={(e) => updatePlan(index, { disclaimer: e.target.value })}
+                            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                            placeholder="e.g., Cancellation requires 30-day notice"
+                          />
+                        </div>
+
                         <div className="grid grid-cols-3 gap-2">
                           <div>
                             <label className="block text-xs text-zinc-400 mb-1">Due Today</label>
@@ -1591,6 +1860,35 @@ function SignupConfigSection({
             </div>
           </div>
           
+          {/* Footer */}
+          <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
+            <h4 className="text-sm font-medium text-zinc-300 mb-3">Footer</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">Page Disclaimer</label>
+                <input
+                  type="text"
+                  value={signupConfig.copy?.disclaimer || ''}
+                  onChange={(e) => updateSignup({
+                    copy: { ...(signupConfig.copy || {}), disclaimer: e.target.value },
+                  })}
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none"
+                  placeholder="e.g., Results may vary from individual to individual."
+                />
+                <p className="text-xs text-zinc-600 mt-1">Shown at the bottom of every page with an asterisk</p>
+              </div>
+              <label className="flex items-center justify-between pt-1">
+                <span className="text-sm text-zinc-300">Show &ldquo;Powered by RevLine&rdquo;</span>
+                <input
+                  type="checkbox"
+                  checked={signupConfig.features.showPoweredBy ?? true}
+                  onChange={(e) => updateFeature('showPoweredBy', e.target.checked)}
+                  className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500/50"
+                />
+              </label>
+            </div>
+          </div>
+
           {/* Features */}
           <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
             <h4 className="text-sm font-medium text-zinc-300 mb-3">Features</h4>
@@ -1610,15 +1908,6 @@ function SignupConfigSection({
                   type="checkbox"
                   checked={signupConfig.features.requireSmsConsent ?? true}
                   onChange={(e) => updateFeature('requireSmsConsent', e.target.checked)}
-                  className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500/50"
-                />
-              </label>
-              <label className="flex items-center justify-between">
-                <span className="text-sm text-zinc-300">Show Powered By Footer</span>
-                <input
-                  type="checkbox"
-                  checked={signupConfig.features.showPoweredBy ?? true}
-                  onChange={(e) => updateFeature('showPoweredBy', e.target.checked)}
                   className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500/50"
                 />
               </label>
