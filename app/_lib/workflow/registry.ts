@@ -521,6 +521,50 @@ export const RESEND_ADAPTER: AdapterDefinition = {
   },
 };
 
+/**
+ * Twilio Adapter
+ * Handles SMS messaging via Twilio
+ */
+export const TWILIO_ADAPTER: AdapterDefinition = {
+  id: 'twilio',
+  name: 'Twilio',
+  requiresIntegration: true,
+  requirements: {
+    secrets: ['Account SID', 'Auth Token'],
+  },
+  triggers: {
+    sms_received: {
+      name: 'sms_received',
+      label: 'SMS Received',
+      description: 'Fires when an inbound SMS arrives at the workspace phone number',
+      payloadSchema: z.object({
+        from: z.string().describe('Sender phone number (E.164)'),
+        to: z.string().optional().describe('Recipient phone number'),
+        body: z.string().describe('SMS message text'),
+        messageSid: z.string().optional().describe('Twilio message SID'),
+        numSegments: z.number().optional().describe('Number of SMS segments'),
+      }),
+      testFields: [
+        { name: 'from', label: 'From Phone', type: 'text', required: true, placeholder: '+15551234567' },
+        { name: 'body', label: 'Message Body', type: 'text', required: true, placeholder: 'Hello!' },
+      ],
+    },
+  },
+  actions: {
+    send_sms: {
+      name: 'send_sms',
+      label: 'Send SMS',
+      description: 'Send an SMS message via Twilio. Supports {{lead.*}}, {{payload.*}} template variables in the body.',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        to: z.string().optional().describe('Recipient phone number (defaults to trigger "from" for replies)'),
+        body: z.string().describe('Message text (supports {{lead.*}}, {{payload.*}} template vars)'),
+        phoneNumber: z.string().optional().describe('Phone number key from Twilio config (uses default if not provided)'),
+      }),
+    },
+  },
+};
+
 // =============================================================================
 // REGISTRY
 // =============================================================================
@@ -536,6 +580,7 @@ export const ADAPTER_REGISTRY: Record<string, AdapterDefinition> = {
   manychat: MANYCHAT_ADAPTER,
   abc_ignite: ABC_IGNITE_ADAPTER,
   resend: RESEND_ADAPTER,
+  twilio: TWILIO_ADAPTER,
 };
 
 // =============================================================================

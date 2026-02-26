@@ -23,6 +23,7 @@ export const INTEGRATION_TYPES = [
   'ABC_IGNITE',
   'REVLINE',
   'RESEND',
+  'TWILIO',
 ] as const;
 
 export type IntegrationTypeId = typeof INTEGRATION_TYPES[number];
@@ -298,6 +299,47 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
     ],
     warnings: [
       'Emails will fail if the domain is not verified in Resend',
+    ],
+  },
+
+  TWILIO: {
+    id: 'TWILIO',
+    name: 'twilio',
+    displayName: 'Twilio',
+    color: 'text-emerald-400',
+    secrets: [
+      {
+        name: 'Account SID',
+        placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+        description: 'From Twilio Console dashboard',
+        required: true,
+      },
+      {
+        name: 'Auth Token',
+        placeholder: 'your_auth_token',
+        description: 'From Twilio Console dashboard (also used for webhook signature verification)',
+        required: true,
+      },
+    ],
+    metaTemplate: {
+      phoneNumbers: {
+        main: { number: '+15551234567', label: 'Main Line' },
+      },
+      defaultPhoneNumber: 'main',
+    },
+    metaDescription: 'Configure phone numbers for SMS messaging',
+    metaFields: [
+      { key: 'phoneNumbers.*', description: 'Named phone numbers in E.164 format with display label', required: true },
+      { key: 'defaultPhoneNumber', description: 'Default phone number key for outbound SMS' },
+    ],
+    tips: [
+      'Phone numbers must be in E.164 format (e.g., +15551234567)',
+      'Webhook URL: /api/v1/twilio-webhook?source=workspace_slug',
+      'Configure this webhook URL in Twilio Console → Phone Numbers → Your Number → Messaging',
+      'Ensure the phone number is SMS-capable in your Twilio account',
+    ],
+    warnings: [
+      'Auth Token is used for webhook signature verification — keep it secure',
     ],
   },
 };

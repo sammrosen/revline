@@ -611,6 +611,30 @@ export interface ResendMeta {
 }
 
 /**
+ * Twilio integration metadata
+ * Phone number configuration for SMS messaging
+ * 
+ * @example
+ * {
+ *   "phoneNumbers": {
+ *     "main": { "number": "+15551234567", "label": "Main Line" }
+ *   },
+ *   "defaultPhoneNumber": "main"
+ * }
+ */
+export interface TwilioMeta {
+  /** Configured phone numbers: key → { number (E.164), label } */
+  phoneNumbers: Record<string, {
+    /** E.164 format phone number (e.g., "+15551234567") */
+    number: string;
+    /** Display label (e.g., "Main Line") */
+    label: string;
+  }>;
+  /** Default phone number key for outbound SMS */
+  defaultPhoneNumber?: string;
+}
+
+/**
  * Union of all integration meta types
  */
 export type IntegrationMeta = 
@@ -621,6 +645,7 @@ export type IntegrationMeta =
   | AbcIgniteMeta
   | RevlineMeta
   | ResendMeta
+  | TwilioMeta
   | Record<string, unknown>;
 
 /**
@@ -645,6 +670,14 @@ export function isResendMeta(meta: IntegrationMeta | null): meta is ResendMeta {
 export function isStripeMeta(meta: IntegrationMeta | null): meta is StripeMeta {
   if (!meta) return false;
   return 'productMap' in meta || 'apiKey' in meta || Object.keys(meta).length === 0;
+}
+
+/**
+ * Type guard for Twilio meta
+ */
+export function isTwilioMeta(meta: IntegrationMeta | null): meta is TwilioMeta {
+  if (!meta) return false;
+  return 'phoneNumbers' in meta;
 }
 
 // =============================================================================

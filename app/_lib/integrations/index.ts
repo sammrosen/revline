@@ -44,6 +44,9 @@ export type { FormConfig } from './revline.adapter';
 export { ResendAdapter, resendEventToErrorState, TRANSIENT_ERROR_STATES } from './resend.adapter';
 export type { SendEmailResult, SendEmailParams, SendTemplateParams, RemoteResendTemplate, ResendWebhookEvent } from './resend.adapter';
 
+export { TwilioAdapter } from './twilio.adapter';
+export type { SendSmsResult, SendSmsParams, TwilioWebhookPayload } from './twilio.adapter';
+
 // Integration config - single source of truth
 export {
   INTEGRATION_TYPES,

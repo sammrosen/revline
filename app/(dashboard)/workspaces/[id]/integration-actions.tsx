@@ -9,7 +9,7 @@ import { AbcIgniteConfigEditor } from './abc-ignite-config-editor';
 import { RevlineConfigEditor } from './revline-config-editor';
 import { ResendConfigEditor } from './resend-config-editor';
 
-type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND';
+type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND' | 'TWILIO';
 
 // Available secret names by integration type
 const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
@@ -20,6 +20,7 @@ const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
   ABC_IGNITE: ['App ID', 'App Key'],
   REVLINE: [], // No secrets - internal system
   RESEND: ['API Key', 'Webhook Secret'],
+  TWILIO: ['Account SID', 'Auth Token'],
 };
 
 interface SecretSummary {
@@ -72,6 +73,7 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
   const isAbcIgnite = integrationType === 'ABC_IGNITE';
   const isRevline = integrationType === 'REVLINE';
   const isResend = integrationType === 'RESEND';
+  const isTwilio = integrationType === 'TWILIO';
   
   // Check if this integration has dependent workflows
   const hasDependents = dependentWorkflows.length > 0;

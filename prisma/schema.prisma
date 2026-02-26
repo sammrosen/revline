@@ -154,6 +154,7 @@ enum IntegrationType {
   ABC_IGNITE
   REVLINE
   RESEND
+  TWILIO
 }
 
 enum HealthStatus {
@@ -217,6 +218,7 @@ enum EventSystem {
   MANYCHAT
   ABC_IGNITE
   RESEND
+  TWILIO
   CRON
   WORKFLOW
 }

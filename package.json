@@ -35,7 +35,8 @@
     "reactflow": "^11.11.4",
     "resend": "^6.6.0",
     "stripe": "^20.0.0",
-    "svix": "^1.85.0"
+    "svix": "^1.85.0",
+    "twilio": "^5.12.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
