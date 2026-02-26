@@ -24,6 +24,8 @@ export const INTEGRATION_TYPES = [
   'REVLINE',
   'RESEND',
   'TWILIO',
+  'OPENAI',
+  'ANTHROPIC',
 ] as const;
 
 export type IntegrationTypeId = typeof INTEGRATION_TYPES[number];
@@ -306,7 +308,8 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
     id: 'TWILIO',
     name: 'twilio',
     displayName: 'Twilio',
-    color: 'text-emerald-400',
+    color: 'text-red-400',
+    hasStructuredEditor: true,
     secrets: [
       {
         name: 'Account SID',
@@ -322,24 +325,91 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
       },
     ],
     metaTemplate: {
-      phoneNumbers: {
-        main: { number: '+15551234567', label: 'Main Line' },
-      },
-      defaultPhoneNumber: 'main',
+      phoneNumbers: {},
     },
     metaDescription: 'Configure phone numbers for SMS messaging',
     metaFields: [
       { key: 'phoneNumbers.*', description: 'Named phone numbers in E.164 format with display label', required: true },
-      { key: 'defaultPhoneNumber', description: 'Default phone number key for outbound SMS' },
     ],
     tips: [
-      'Phone numbers must be in E.164 format (e.g., +15551234567)',
+      'Add your Account SID and Auth Token, then use "Fetch Phone Numbers" to pull numbers from your Twilio account',
       'Webhook URL: /api/v1/twilio-webhook?source=workspace_slug',
       'Configure this webhook URL in Twilio Console → Phone Numbers → Your Number → Messaging',
-      'Ensure the phone number is SMS-capable in your Twilio account',
     ],
     warnings: [
       'Auth Token is used for webhook signature verification — keep it secure',
+    ],
+  },
+
+  OPENAI: {
+    id: 'OPENAI',
+    name: 'openai',
+    displayName: 'OpenAI',
+    color: 'text-zinc-300',
+    hasStructuredEditor: true,
+    secrets: [
+      {
+        name: 'API Key',
+        placeholder: 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+        description: 'From OpenAI dashboard → API Keys',
+        required: true,
+      },
+    ],
+    metaTemplate: {
+      model: 'gpt-4.1-mini',
+    },
+    metaDescription: 'Configure model and generation settings for AI completions',
+    metaFields: [
+      { key: 'model', description: 'Model ID (e.g., "gpt-4.1-mini", "gpt-4o")', required: true },
+      { key: 'temperature', description: 'Sampling temperature 0-2 (lower = more deterministic)' },
+      { key: 'maxTokens', description: 'Maximum tokens in the completion response' },
+      { key: 'organizationId', description: 'OpenAI organization ID for org-scoped API keys' },
+    ],
+    tips: [
+      'Add your API Key, then use "Fetch Models" to see available models in your account',
+      'gpt-4.1-mini is recommended for most chatbot use cases (fast, cheap, capable)',
+      'gpt-4.1 is the flagship model for complex reasoning tasks',
+      'gpt-4.1-nano is the fastest and cheapest option for simple tasks',
+    ],
+    warnings: [
+      'API usage is billed by OpenAI based on token consumption',
+    ],
+  },
+
+  ANTHROPIC: {
+    id: 'ANTHROPIC',
+    name: 'anthropic',
+    displayName: 'Anthropic',
+    color: 'text-amber-300',
+    hasStructuredEditor: true,
+    secrets: [
+      {
+        name: 'API Key',
+        placeholder: 'sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+        description: 'From Anthropic Console → API Keys',
+        required: true,
+      },
+    ],
+    metaTemplate: {
+      model: 'claude-sonnet-4-6',
+      maxTokens: 1024,
+    },
+    metaDescription: 'Configure model and generation settings for Anthropic Claude completions',
+    metaFields: [
+      { key: 'model', description: 'Model ID (e.g., "claude-sonnet-4-6", "claude-haiku-4-5-20251001")', required: true },
+      { key: 'maxTokens', description: 'Maximum tokens in the response (required by Anthropic)', required: true },
+      { key: 'temperature', description: 'Sampling temperature 0-1 (lower = more deterministic)' },
+    ],
+    tips: [
+      'Add your API Key, then use "Fetch Models" to see available models in your account',
+      'claude-sonnet-4-6 is recommended for most chatbot use cases (balanced speed & quality)',
+      'claude-opus-4-6 is the most capable model for complex reasoning',
+      'claude-haiku-4-5-20251001 is the fastest and cheapest option for simple tasks',
+      'max_tokens is required on every Anthropic API call — set a sensible default here',
+    ],
+    warnings: [
+      'API usage is billed by Anthropic based on token consumption',
+      'max_tokens is required — the API will reject calls without it',
     ],
   },
 };

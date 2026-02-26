@@ -565,6 +565,64 @@ export const TWILIO_ADAPTER: AdapterDefinition = {
   },
 };
 
+/**
+ * Handles AI text generation via OpenAI
+ */
+export const OPENAI_ADAPTER: AdapterDefinition = {
+  id: 'openai',
+  name: 'OpenAI',
+  requiresIntegration: true,
+  requirements: {
+    secrets: ['API Key'],
+    metaKeys: ['model'],
+  },
+  triggers: {},
+  actions: {
+    generate_text: {
+      name: 'generate_text',
+      label: 'Generate Text',
+      description: 'Generate text using OpenAI Chat Completions. Supports {{lead.*}}, {{payload.*}} template variables in the prompt.',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        prompt: z.string().describe('User prompt (supports {{lead.*}}, {{payload.*}} template vars)'),
+        systemPrompt: z.string().optional().describe('Developer/system instructions for the AI'),
+        model: z.string().optional().describe('Override model from integration config'),
+        temperature: z.number().optional().describe('Override temperature (0-2)'),
+        maxTokens: z.number().optional().describe('Override max tokens'),
+      }),
+    },
+  },
+};
+
+/**
+ * Handles AI text generation via Anthropic Claude
+ */
+export const ANTHROPIC_ADAPTER: AdapterDefinition = {
+  id: 'anthropic',
+  name: 'Anthropic',
+  requiresIntegration: true,
+  requirements: {
+    secrets: ['API Key'],
+    metaKeys: ['model', 'maxTokens'],
+  },
+  triggers: {},
+  actions: {
+    generate_text: {
+      name: 'generate_text',
+      label: 'Generate Text',
+      description: 'Generate text using Anthropic Claude Messages API. Supports {{lead.*}}, {{payload.*}} template variables in the prompt.',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        prompt: z.string().describe('User prompt (supports {{lead.*}}, {{payload.*}} template vars)'),
+        systemPrompt: z.string().optional().describe('System instructions for Claude'),
+        model: z.string().optional().describe('Override model from integration config'),
+        temperature: z.number().optional().describe('Override temperature (0-1)'),
+        maxTokens: z.number().optional().describe('Override max tokens'),
+      }),
+    },
+  },
+};
+
 // =============================================================================
 // REGISTRY
 // =============================================================================
@@ -581,6 +639,8 @@ export const ADAPTER_REGISTRY: Record<string, AdapterDefinition> = {
   abc_ignite: ABC_IGNITE_ADAPTER,
   resend: RESEND_ADAPTER,
   twilio: TWILIO_ADAPTER,
+  openai: OPENAI_ADAPTER,
+  anthropic: ANTHROPIC_ADAPTER,
 };
 
 // =============================================================================

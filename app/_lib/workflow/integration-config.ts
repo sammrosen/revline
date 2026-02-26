@@ -11,6 +11,7 @@ import {
   Mail,
   Zap,
   MessageCircle,
+  Sparkles,
   LucideIcon,
 } from 'lucide-react';
 
@@ -94,6 +95,33 @@ export const INTEGRATION_CONFIG: Record<string, IntegrationStyle> = {
     textClass: 'text-zinc-300',
     icon: Mail,
     logo: '/logos/resend.png',
+  },
+  twilio: {
+    name: 'Twilio',
+    color: '#F22F46',
+    bgClass: 'bg-red-500/20',
+    borderClass: 'border-red-500/40',
+    textClass: 'text-red-400',
+    icon: MessageCircle,
+    logo: '/logos/twilio.png',
+  },
+  openai: {
+    name: 'OpenAI',
+    color: '#000000',
+    bgClass: 'bg-zinc-500/20',
+    borderClass: 'border-zinc-500/40',
+    textClass: 'text-zinc-300',
+    icon: Sparkles,
+    logo: '/logos/openai.png',
+  },
+  anthropic: {
+    name: 'Anthropic',
+    color: '#D4A574',
+    bgClass: 'bg-amber-500/20',
+    borderClass: 'border-amber-500/40',
+    textClass: 'text-amber-300',
+    icon: Sparkles,
+    logo: '/logos/anthropic.png',
   },
   capture: {
     name: 'Capture',

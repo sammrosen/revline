@@ -109,23 +109,19 @@ export class TwilioAdapter extends BaseIntegrationAdapter<TwilioMeta> {
   // ===========================================================================
 
   /**
-   * Get a phone number by key from meta, or the default phone number
+   * Get a phone number by key from meta.
+   * If no key is provided and there's exactly one number, uses that.
    */
   getPhoneNumber(key?: string): string | null {
     if (!this.meta?.phoneNumbers) return null;
 
-    const resolvedKey = key || this.meta.defaultPhoneNumber;
-    if (!resolvedKey) {
-      const keys = Object.keys(this.meta.phoneNumbers);
-      if (keys.length === 0) return null;
-      return this.meta.phoneNumbers[keys[0]].number;
+    if (key) {
+      return this.meta.phoneNumbers[key]?.number || null;
     }
 
-    return this.meta.phoneNumbers[resolvedKey]?.number || null;
-  }
-
-  getDefaultPhoneNumber(): string | null {
-    return this.getPhoneNumber();
+    const keys = Object.keys(this.meta.phoneNumbers);
+    if (keys.length === 1) return this.meta.phoneNumbers[keys[0]].number;
+    return null;
   }
 
   // ===========================================================================
@@ -224,7 +220,7 @@ export class TwilioAdapter extends BaseIntegrationAdapter<TwilioMeta> {
   // ===========================================================================
 
   isConfigured(): boolean {
-    return !!this.getDefaultPhoneNumber();
+    return !!this.meta?.phoneNumbers && Object.keys(this.meta.phoneNumbers).length > 0;
   }
 
   isWebhookConfigured(): boolean {
@@ -243,12 +239,6 @@ export class TwilioAdapter extends BaseIntegrationAdapter<TwilioMeta> {
         if (!phone.number || !phone.number.startsWith('+')) {
           errors.push(`Phone number "${key}" must be in E.164 format (e.g., +15551234567)`);
         }
-      }
-    }
-
-    if (this.meta?.defaultPhoneNumber && this.meta.phoneNumbers) {
-      if (!this.meta.phoneNumbers[this.meta.defaultPhoneNumber]) {
-        errors.push(`Default phone number key "${this.meta.defaultPhoneNumber}" not found in phoneNumbers`);
       }
     }
 

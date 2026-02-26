@@ -11,6 +11,8 @@ import { revlineExecutors } from './revline';
 import { abcIgniteExecutors } from './abc-ignite';
 import { resendExecutors } from './resend';
 import { twilioExecutors } from './twilio';
+import { openaiExecutors } from './openai';
+import { anthropicExecutors } from './anthropic';
 
 // =============================================================================
 // EXECUTOR REGISTRY
@@ -25,6 +27,8 @@ const EXECUTORS: Record<string, Record<string, ActionExecutor>> = {
   abc_ignite: abcIgniteExecutors,
   resend: resendExecutors,
   twilio: twilioExecutors,
+  openai: openaiExecutors,
+  anthropic: anthropicExecutors,
 };
 
 // =============================================================================

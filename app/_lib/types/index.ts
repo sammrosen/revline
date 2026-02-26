@@ -618,8 +618,7 @@ export interface ResendMeta {
  * {
  *   "phoneNumbers": {
  *     "main": { "number": "+15551234567", "label": "Main Line" }
- *   },
- *   "defaultPhoneNumber": "main"
+ *   }
  * }
  */
 export interface TwilioMeta {
@@ -630,8 +629,37 @@ export interface TwilioMeta {
     /** Display label (e.g., "Main Line") */
     label: string;
   }>;
-  /** Default phone number key for outbound SMS */
-  defaultPhoneNumber?: string;
+}
+
+/**
+ * OpenAI integration metadata
+ * Model and generation settings for AI completions
+ * 
+ * @example
+ * {
+ *   "model": "gpt-4.1-mini",
+ *   "temperature": 0.7,
+ *   "maxTokens": 1024
+ * }
+ */
+export interface OpenAIMeta {
+  /** Model ID (e.g., "gpt-4.1-mini", "gpt-4o") */
+  model: string;
+  /** Sampling temperature (0-2). Lower = more deterministic. */
+  temperature?: number;
+  /** Maximum tokens in the completion response */
+  maxTokens?: number;
+  /** OpenAI organization ID (for org-scoped API keys) */
+  organizationId?: string;
+}
+
+export interface AnthropicMeta {
+  /** Model ID (e.g., "claude-sonnet-4-6") */
+  model: string;
+  /** Maximum tokens in the response -- required by Anthropic on every call */
+  maxTokens: number;
+  /** Sampling temperature (0-1). Anthropic range is 0-1. */
+  temperature?: number;
 }
 
 /**
@@ -646,6 +674,8 @@ export type IntegrationMeta =
   | RevlineMeta
   | ResendMeta
   | TwilioMeta
+  | OpenAIMeta
+  | AnthropicMeta
   | Record<string, unknown>;
 
 /**
@@ -678,6 +708,19 @@ export function isStripeMeta(meta: IntegrationMeta | null): meta is StripeMeta {
 export function isTwilioMeta(meta: IntegrationMeta | null): meta is TwilioMeta {
   if (!meta) return false;
   return 'phoneNumbers' in meta;
+}
+
+/**
+ * Type guard for OpenAI meta
+ */
+export function isOpenAIMeta(meta: IntegrationMeta | null): meta is OpenAIMeta {
+  if (!meta) return false;
+  return 'model' in meta && typeof (meta as OpenAIMeta).model === 'string' && !('maxTokens' in meta && typeof (meta as AnthropicMeta).maxTokens === 'number');
+}
+
+export function isAnthropicMeta(meta: IntegrationMeta | null): meta is AnthropicMeta {
+  if (!meta) return false;
+  return 'model' in meta && 'maxTokens' in meta && typeof (meta as AnthropicMeta).maxTokens === 'number';
 }
 
 // =============================================================================
