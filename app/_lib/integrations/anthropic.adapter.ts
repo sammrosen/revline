@@ -26,7 +26,6 @@ import Anthropic from '@anthropic-ai/sdk';
 import { BaseIntegrationAdapter } from './base';
 import { AnthropicMeta, IntegrationResult } from '@/app/_lib/types';
 import type {
-  ChatMessage,
   ChatCompletionParams,
   ChatCompletionResult,
   ToolCall,
@@ -198,7 +197,7 @@ export class AnthropicAdapter extends BaseIntegrationAdapter<AnthropicMeta> {
       return this.success({
         content: textContent,
         toolCalls,
-        finishReason: finishReasonMap[response.stop_reason] || response.stop_reason,
+        finishReason: (response.stop_reason && finishReasonMap[response.stop_reason]) || response.stop_reason || 'stop',
         usage: {
           promptTokens: response.usage.input_tokens,
           completionTokens: response.usage.output_tokens,

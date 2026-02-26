@@ -27,6 +27,9 @@ import {
   WebhookProcessor,
   logStructured,
 } from '@/app/_lib/reliability';
+import { prisma } from '@/app/_lib/db';
+import { ConversationStatus } from '@prisma/client';
+import { handleInboundMessage } from '@/app/_lib/chatbot';
 
 const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 
@@ -182,51 +185,103 @@ export async function POST(request: NextRequest) {
       success: true,
     });
 
-    let warning: string | undefined;
-    const triggerResult = await emitTrigger(
-      client.id,
-      { adapter: 'twilio', operation: 'sms_received' },
-      {
-        from: payload.from,
-        to: payload.to,
-        body: payload.body,
-        messageSid: payload.messageSid,
-        numSegments: payload.numSegments,
-        correlationId: registration.correlationId,
-      }
-    );
+    // Check for active chatbot conversation before workflow trigger.
+    // Subsequent messages in an active conversation go directly to the engine.
+    const activeConversation = await prisma.conversation.findFirst({
+      where: {
+        workspaceId: client.id,
+        contactAddress: payload.from,
+        channelAddress: payload.to,
+        status: ConversationStatus.ACTIVE,
+      },
+      select: { id: true, chatbotId: true },
+    });
 
-    const hasFailure = triggerResult.executions.some((e) => e.status === 'failed');
-    if (hasFailure) {
-      warning = triggerResult.executions
-        .filter((e) => e.status === 'failed')
-        .map((e) => e.error)
-        .join('; ');
+    if (activeConversation) {
+      logStructured({
+        correlationId: registration.correlationId,
+        event: 'twilio_chatbot_route_direct',
+        workspaceId: client.id,
+        provider: 'twilio',
+        metadata: {
+          conversationId: activeConversation.id,
+          chatbotId: activeConversation.chatbotId,
+          from: payload.from,
+        },
+      });
+
+      const chatbotResult = await handleInboundMessage({
+        workspaceId: client.id,
+        chatbotId: activeConversation.chatbotId,
+        contactAddress: payload.from,
+        channelAddress: payload.to,
+        channel: 'SMS',
+        messageText: payload.body,
+      });
+
+      await WebhookProcessor.markProcessed(registration.id);
 
       logStructured({
         correlationId: registration.correlationId,
-        event: 'twilio_workflow_partial_failure',
+        event: 'twilio_webhook_processed',
         workspaceId: client.id,
         provider: 'twilio',
-        error: warning,
-        metadata: { from: payload.from },
+        success: chatbotResult.success,
+        metadata: {
+          messageSid: payload.messageSid,
+          from: payload.from,
+          routedToChatbot: true,
+          conversationId: activeConversation.id,
+        },
+      });
+    } else {
+      // No active conversation -- fire workflow trigger (may include route_to_chatbot action)
+      let warning: string | undefined;
+      const triggerResult = await emitTrigger(
+        client.id,
+        { adapter: 'twilio', operation: 'sms_received' },
+        {
+          from: payload.from,
+          to: payload.to,
+          body: payload.body,
+          messageSid: payload.messageSid,
+          numSegments: payload.numSegments,
+          correlationId: registration.correlationId,
+        }
+      );
+
+      const hasFailure = triggerResult.executions.some((e) => e.status === 'failed');
+      if (hasFailure) {
+        warning = triggerResult.executions
+          .filter((e) => e.status === 'failed')
+          .map((e) => e.error)
+          .join('; ');
+
+        logStructured({
+          correlationId: registration.correlationId,
+          event: 'twilio_workflow_partial_failure',
+          workspaceId: client.id,
+          provider: 'twilio',
+          error: warning,
+          metadata: { from: payload.from },
+        });
+      }
+
+      await WebhookProcessor.markProcessed(registration.id);
+
+      logStructured({
+        correlationId: registration.correlationId,
+        event: 'twilio_webhook_processed',
+        workspaceId: client.id,
+        provider: 'twilio',
+        success: true,
+        metadata: {
+          messageSid: payload.messageSid,
+          from: payload.from,
+          triggerFired: triggerResult.workflowsExecuted > 0,
+        },
       });
     }
-
-    await WebhookProcessor.markProcessed(registration.id);
-
-    logStructured({
-      correlationId: registration.correlationId,
-      event: 'twilio_webhook_processed',
-      workspaceId: client.id,
-      provider: 'twilio',
-      success: true,
-      metadata: {
-        messageSid: payload.messageSid,
-        from: payload.from,
-        triggerFired: triggerResult.workflowsExecuted > 0,
-      },
-    });
 
     const response = twimlResponse(200);
     const headers = getRateLimitHeaders(rateLimit);

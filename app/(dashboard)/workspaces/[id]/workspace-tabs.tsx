@@ -13,10 +13,11 @@ import { IntegrationNetworkGraph } from './_components/network-graph';
 import { TestingTab } from './testing-tab';
 import { WorkspaceSettings } from './workspace-settings';
 import { EventsLog } from './_components/events-log';
+import { ChatbotList } from './chatbot-list';
 import { Workflow as WorkflowIcon, Plus, List } from 'lucide-react';
 import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
 
-type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'testing' | 'settings';
+type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'chatbots' | 'testing' | 'settings';
 
 interface SecretSummary {
   id: string;
@@ -133,7 +134,7 @@ interface IntegrationDependency {
   usedBy: Array<{ workflowId: string; workflowName: string }>;
 }
 
-const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'testing', 'settings'];
+const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'chatbots', 'testing', 'settings'];
 
 export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, resendTemplates = {}, stripeProducts = {}, timezone = 'America/New_York', domainConfig, leadStages, leadPropertySchema }: WorkspaceTabsProps) {
   // Initialize with default to avoid hydration mismatch, then sync from hash in useEffect
@@ -409,6 +410,12 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
         {activeTab === 'events' && (
           <div className="max-w-[1600px] mx-auto">
             <EventsLog workspaceId={workspaceId} />
+          </div>
+        )}
+
+        {activeTab === 'chatbots' && (
+          <div className="max-w-[1600px] mx-auto">
+            <ChatbotList workspaceId={workspaceId} />
           </div>
         )}
 

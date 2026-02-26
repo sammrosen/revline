@@ -12,6 +12,7 @@ import {
   Zap,
   MessageCircle,
   Sparkles,
+  Bot,
   LucideIcon,
 } from 'lucide-react';
 
@@ -123,6 +124,15 @@ export const INTEGRATION_CONFIG: Record<string, IntegrationStyle> = {
     icon: Sparkles,
     logo: '/logos/anthropic.png',
   },
+  chatbot: {
+    name: 'Chatbot',
+    color: '#8B5CF6',
+    bgClass: 'bg-violet-500/20',
+    borderClass: 'border-violet-500/40',
+    textClass: 'text-violet-400',
+    icon: Bot,
+    logo: '/logos/chatbot.png',
+  },
   capture: {
     name: 'Capture',
     color: '#71717A',
@@ -164,6 +174,11 @@ export const OPERATION_LABELS: Record<string, string> = {
   subscription_canceled: 'Subscription Canceled',
   email_captured: 'Email Captured',
   dm_received: 'DM Received',
+  // Chatbot triggers
+  conversation_started: 'Conversation Started',
+  escalation_requested: 'Escalation Requested',
+  conversation_completed: 'Conversation Completed',
+  bot_event: 'Bot Event',
   // Actions
   add_to_group: 'Add to Group',
   remove_from_group: 'Remove from Group',
@@ -172,6 +187,7 @@ export const OPERATION_LABELS: Record<string, string> = {
   update_lead_stage: 'Update Lead Stage',
   emit_event: 'Emit Event',
   trigger_flow: 'Trigger Flow',
+  route_to_chatbot: 'Route to Chatbot',
 };
 
 /**

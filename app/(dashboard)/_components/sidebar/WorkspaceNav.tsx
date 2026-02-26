@@ -8,6 +8,7 @@ import {
   Plug,
   Users,
   Activity,
+  Bot,
   FlaskConical,
   Settings,
   Loader2,
@@ -40,13 +41,14 @@ interface WorkspaceListItem {
   slug: string;
 }
 
-type TabId = 'workflows' | 'integrations' | 'leads' | 'events' | 'testing' | 'settings';
+type TabId = 'workflows' | 'integrations' | 'leads' | 'events' | 'chatbots' | 'testing' | 'settings';
 
 const tabs: { id: TabId; label: string; icon: typeof Workflow; countKey?: keyof WorkspaceSummary['counts'] }[] = [
   { id: 'workflows', label: 'Workflows', icon: Workflow, countKey: 'workflows' },
   { id: 'integrations', label: 'Integrations', icon: Plug, countKey: 'integrations' },
   { id: 'leads', label: 'Leads', icon: Users, countKey: 'leads' },
   { id: 'events', label: 'Events', icon: Activity, countKey: 'events' },
+  { id: 'chatbots', label: 'Chatbots', icon: Bot },
   { id: 'testing', label: 'Testing', icon: FlaskConical },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];

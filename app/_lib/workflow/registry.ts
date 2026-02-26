@@ -623,6 +623,76 @@ export const ANTHROPIC_ADAPTER: AdapterDefinition = {
   },
 };
 
+/**
+ * Chatbot Adapter (Internal)
+ * Handles autonomous conversational loops between leads and AI.
+ * Channel-agnostic and AI-agnostic -- configuration lives on the Chatbot model.
+ */
+export const CHATBOT_ADAPTER: AdapterDefinition = {
+  id: 'chatbot',
+  name: 'Chatbot',
+  requiresIntegration: false,
+  triggers: {
+    conversation_started: {
+      name: 'conversation_started',
+      label: 'Conversation Started',
+      description: 'Fires when a new chatbot conversation is created',
+      payloadSchema: z.object({
+        chatbotId: z.string(),
+        conversationId: z.string(),
+        contactAddress: z.string(),
+        channel: z.string(),
+        leadId: z.string().optional(),
+      }),
+    },
+    escalation_requested: {
+      name: 'escalation_requested',
+      label: 'Escalation Requested',
+      description: 'Fires when the bot cannot handle a request and needs human intervention',
+      payloadSchema: z.object({
+        chatbotId: z.string(),
+        conversationId: z.string(),
+        reason: z.string().optional(),
+        leadId: z.string().optional(),
+      }),
+    },
+    conversation_completed: {
+      name: 'conversation_completed',
+      label: 'Conversation Completed',
+      description: 'Fires when a conversation ends (limit hit, timeout, or goal completed)',
+      payloadSchema: z.object({
+        chatbotId: z.string(),
+        conversationId: z.string(),
+        reason: z.string().optional(),
+        leadId: z.string().optional(),
+      }),
+    },
+    bot_event: {
+      name: 'bot_event',
+      label: 'Bot Event',
+      description: 'Generic event emitted by the bot via allowedEvents config',
+      payloadSchema: z.object({
+        chatbotId: z.string(),
+        conversationId: z.string(),
+        eventType: z.string(),
+        data: z.record(z.string(), z.unknown()).optional(),
+        leadId: z.string().optional(),
+      }),
+    },
+  },
+  actions: {
+    route_to_chatbot: {
+      name: 'route_to_chatbot',
+      label: 'Route to Chatbot',
+      description: 'Activate a chatbot for this lead/channel. The chatbot handles the reply autonomously.',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        chatbotId: z.string().describe('ID of the chatbot to route to'),
+      }),
+    },
+  },
+};
+
 // =============================================================================
 // REGISTRY
 // =============================================================================
@@ -641,6 +711,7 @@ export const ADAPTER_REGISTRY: Record<string, AdapterDefinition> = {
   twilio: TWILIO_ADAPTER,
   openai: OPENAI_ADAPTER,
   anthropic: ANTHROPIC_ADAPTER,
+  chatbot: CHATBOT_ADAPTER,
 };
 
 // =============================================================================

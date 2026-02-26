@@ -202,14 +202,16 @@ export class OpenAIAdapter extends BaseIntegrationAdapter<OpenAIMeta> {
 
       return this.success({
         content: choice.message.content,
-        toolCalls: (choice.message.tool_calls || []).map((tc) => ({
-          id: tc.id,
-          type: tc.type,
-          function: {
-            name: tc.function.name,
-            arguments: tc.function.arguments,
-          },
-        })),
+        toolCalls: (choice.message.tool_calls || [])
+          .filter((tc): tc is Extract<typeof tc, { type: 'function' }> => tc.type === 'function')
+          .map((tc) => ({
+            id: tc.id,
+            type: tc.type,
+            function: {
+              name: tc.function.name,
+              arguments: tc.function.arguments,
+            },
+          })),
         finishReason: choice.finish_reason || 'stop',
         usage: {
           promptTokens: response.usage?.prompt_tokens ?? 0,
