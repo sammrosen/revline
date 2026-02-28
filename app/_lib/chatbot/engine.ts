@@ -450,16 +450,12 @@ async function sendReply(
       return;
     }
 
-    // Find the phone number key that matches our channelAddress
-    const phoneKeys = Object.entries(
-      (adapter as unknown as { meta: { phoneNumbers: Record<string, { number: string }> } }).meta?.phoneNumbers || {}
-    );
-    const matchingKey = phoneKeys.find(([, v]) => v.number === fromAddress)?.[0];
+    const fromKey = adapter.getPhoneKeyByNumber(fromAddress);
 
     const result = await adapter.sendSms({
       to: toAddress,
       body,
-      from: matchingKey,
+      from: fromKey,
     });
 
     if (!result.success) {
