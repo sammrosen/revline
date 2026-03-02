@@ -30,7 +30,11 @@ export async function GET(
     where: { workspaceId },
     orderBy: { createdAt: 'desc' },
     include: {
-      _count: { select: { conversations: true } },
+      _count: {
+        select: {
+          conversations: { where: { isTest: false } },
+        },
+      },
     },
   });
 

@@ -100,7 +100,7 @@ export async function handleInboundMessage(
       });
       eventsEmitted.push('conversation_completed');
 
-      if (chatbot.fallbackMessage) {
+      if (chatbot.fallbackMessage && !params.testMode) {
         await sendReply(params.workspaceId, chatbot, params.channelAddress, params.contactAddress, chatbot.fallbackMessage);
       }
 
@@ -143,17 +143,20 @@ export async function handleInboundMessage(
       select: { role: true, content: true },
     });
 
-    // 9. Build AI messages
+    // 9. Build AI messages (use prompt override in test mode if provided)
+    const systemPrompt = params.systemPromptOverride || chatbot.systemPrompt;
     const aiMessages: ChatMessage[] = [
-      { role: 'developer', content: chatbot.systemPrompt },
+      { role: 'developer', content: systemPrompt },
       ...history.map((msg) => ({
         role: mapRoleToAI(msg.role),
         content: msg.content,
       })),
     ];
 
-    // 10. Call AI adapter
+    // 10. Call AI adapter (measure latency)
+    const aiStartMs = performance.now();
     const aiResult = await callAI(params.workspaceId, chatbot, aiMessages);
+    const latencyMs = Math.round(performance.now() - aiStartMs);
 
     if (!aiResult.success || !aiResult.data) {
       logStructured({
@@ -173,8 +176,8 @@ export async function handleInboundMessage(
         errorMessage: aiResult.error,
       });
 
-      // Send fallback if available
-      if (chatbot.fallbackMessage) {
+      // Send fallback if available (skip in test mode)
+      if (chatbot.fallbackMessage && !params.testMode) {
         await sendReply(params.workspaceId, chatbot, params.channelAddress, params.contactAddress, chatbot.fallbackMessage);
       }
 
@@ -235,8 +238,8 @@ export async function handleInboundMessage(
       eventsEmitted.push('conversation_completed');
     }
 
-    // 14. Send reply via channel adapter
-    if (replyText) {
+    // 14. Send reply via channel adapter (skip in test mode)
+    if (replyText && !params.testMode) {
       await sendReply(
         params.workspaceId,
         chatbot,
@@ -277,6 +280,7 @@ export async function handleInboundMessage(
       status: finalStatus,
       usage: completion.usage,
       eventsEmitted,
+      latencyMs,
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown engine error';
@@ -331,7 +335,8 @@ async function findOrCreateConversation(
   params: InboundMessageParams,
   chatbot: ChatbotConfig
 ): Promise<{ conversation: { id: string; status: ConversationStatus; messageCount: number; totalTokens: number; startedAt: Date; lastMessageAt: Date | null }; isNew: boolean }> {
-  // Look for an active conversation for this contact+channel+bot
+  const isTest = params.testMode ?? false;
+
   const existing = await prisma.conversation.findFirst({
     where: {
       workspaceId: params.workspaceId,
@@ -339,6 +344,7 @@ async function findOrCreateConversation(
       contactAddress: params.contactAddress,
       channelAddress: params.channelAddress,
       status: ConversationStatus.ACTIVE,
+      isTest,
     },
     select: {
       id: true,
@@ -363,6 +369,7 @@ async function findOrCreateConversation(
       contactAddress: params.contactAddress,
       channelAddress: params.channelAddress,
       status: ConversationStatus.ACTIVE,
+      isTest,
     },
     select: {
       id: true,

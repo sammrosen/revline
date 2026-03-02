@@ -38,7 +38,7 @@ export async function GET(
   const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100);
   const offset = parseInt(searchParams.get('offset') || '0', 10);
 
-  const where: Record<string, unknown> = { chatbotId };
+  const where: Record<string, unknown> = { chatbotId, isTest: false };
   if (status) {
     where.status = status;
   }

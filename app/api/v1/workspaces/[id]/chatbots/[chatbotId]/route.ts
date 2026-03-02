@@ -34,7 +34,7 @@ export async function GET(
     include: {
       _count: {
         select: {
-          conversations: true,
+          conversations: { where: { isTest: false } },
         },
       },
     },

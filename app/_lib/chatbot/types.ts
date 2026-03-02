@@ -17,6 +17,8 @@ export interface InboundMessageParams {
   channel: string;
   messageText: string;
   leadId?: string;
+  testMode?: boolean;
+  systemPromptOverride?: string;
 }
 
 export interface ChatbotResponse {
@@ -39,6 +41,8 @@ export interface ChatbotResponse {
   error?: string;
   /** Events emitted during processing */
   eventsEmitted: string[];
+  /** AI response latency in milliseconds (only in test mode) */
+  latencyMs?: number;
 }
 
 export interface ConversationWithMessages {

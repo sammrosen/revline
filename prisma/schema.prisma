@@ -543,6 +543,7 @@ model Conversation {
   totalTokens  Int    @default(0) @map("total_tokens")
 
   metadata Json? // Flexible: detected intents, goal progress, etc.
+  isTest   Boolean @default(false) @map("is_test")
 
   startedAt     DateTime  @default(now()) @map("started_at")
   lastMessageAt DateTime? @map("last_message_at")
