@@ -1,7 +1,7 @@
 # AI Chatbot System
 
-> **Last Updated:** February 2026
-> **Status:** Core System Complete, Ready for Testing
+> **Last Updated:** March 4, 2026
+> **Status:** Core System Complete, Feature Expansion In Progress
 > **Phases:** Twilio Adapter, OpenAI Adapter, Anthropic Adapter, Chatbot Engine, Test Suite
 
 ## Executive Summary
@@ -354,15 +354,97 @@ The chatbot system emits these events into the event ledger:
 
 ---
 
-## Future Phases (Not Yet Built)
+## 3/4/2026 — Feature Audit & Next Steps
 
-- **Tool calling / function calling** -- Bots calling workflow actions mid-conversation
-- **Usage dashboard** -- Aggregated token spend views per chatbot and per integration
-- **Web chat widget** -- Browser-based chat channel (beyond SMS)
-- **Conversation UI for humans** -- Dashboard for reading/replying to conversations manually
-- **Conversation history in lead detail** -- Past conversations on a lead's profile
-- **Intent detection** -- Structured intent/goal tracking beyond what the AI naturally does
-- **Multi-channel** -- WhatsApp, email, web chat channels
+### Current Status by Category
+
+#### Done (3)
+
+- **Multi-turn conversation history** — Full message history is loaded from the DB and passed to the AI on every turn. Not just the latest message.
+- **Workspace-level chatbot isolation** — Every query is scoped by workspaceId. Bots, conversations, messages never bleed between clients.
+- **Escalation event emission** — Bot emits `escalation_requested` which can trigger workflows.
+
+#### Partial (4)
+
+- **Bot sleep / human takeover** — `ESCALATED` status stops the bot, but there is no `PAUSED` status, no auto-resume on inactivity, and no way for a human to manually pause a specific conversation from the dashboard.
+- **Escalation delivery** — The event fires and *can* trigger a workflow (e.g., email the gym owner), but there is no built-in notification and no conversation summary is generated for the human taking over.
+- **Per-conversation log** — API exists (`GET /chatbots/[id]/conversations`) with full messages, but no dashboard UI to view production conversations. Test playground shows test convos only.
+- **Per-client usage tracking** — Token counts are stored per-conversation and per-message. No aggregation view, no dashboard surface, no billing hooks.
+
+#### Missing (13)
+
+**Core Config:**
+- **Response delay** — Bot replies instantly. Need a configurable delay (e.g., 2-5 seconds) to prevent robotic feel.
+- **Initial message** — No dedicated first-message field. The bot only responds to inbound; it never initiates contact.
+- **FAQ override layer** — Every message hits the AI. Need keyword/pattern matching that bypasses AI for hardcoded answers (hours, location, pricing).
+- **Make channel config optional** — Currently required to create a bot. Should be optional so bots can be created and tested without Twilio configured. Channel only required when used in a workflow.
+
+**Conversation Quality:**
+- **Opt-out handling** — No STOP/UNSUBSCRIBE detection, no blocking of future messages, no dashboard surfacing. This is a compliance risk.
+- **Rate limiting per lead** — No per-lead throttle. A lead spamming messages gets unlimited AI responses up to the guardrail max.
+
+**Follow-up Sequencing (biggest gap):**
+- **Re-engagement triggers** — No timed follow-ups. The engine only reacts to inbound messages, never proactively sends. Need scheduled follow-ups at configurable intervals (e.g., 2hr / 12hr / 23hr within the 24hr SMS window).
+- **Follow-up rotation** — No variant cycling. Needs to send different follow-up messages each time, never the same one twice.
+- **Last-question-aware follow-up** — No context-aware follow-up generation. Follow-ups should reference the last thing discussed.
+
+**Escalation:**
+- **Handoff summary** — No summary generation on escalation. The human taking over has to read the raw conversation.
+
+**Analytics / Visibility:**
+- **Conversation dropoff chart** — No analytics on where leads ghost in the flow.
+- **Lead pipeline view** — No visual funnel/stage view for gym owners to see their lead funnel.
+- **Usage-based billing hooks** — Usage data is tracked but not aggregated or surfaced for billing.
+
+---
+
+### Implementation Roadmap
+
+#### Priority 1 — Core Polish (before real testing)
+
+These are needed to actually test the system end-to-end with real leads:
+
+1. **Make channel config optional on chatbot** — Remove channel as required field, validate only at workflow-binding time
+2. **Response delay** — Add `responseDelaySeconds` field to Chatbot model and engine, apply before `sendReply`
+3. **Initial message** — Add `initialMessage` field; when a new conversation starts via `route_to_chatbot`, send this before waiting for lead input
+4. **Opt-out handling** — Detect STOP/UNSUBSCRIBE in inbound messages, mark conversation as completed, block future messages to that contact, surface in dashboard
+
+#### Priority 2 — Production Readiness
+
+These are needed before deploying to real gym clients:
+
+5. **Bot pause / human takeover** — Add `PAUSED` conversation status, dashboard button to pause per-conversation, auto-resume after configurable inactivity
+6. **Escalation delivery** — Built-in email/SMS notification to gym owner on escalation, with AI-generated conversation summary
+7. **FAQ override layer** — JSON array of `{ patterns: string[], response: string }` checked before AI call; exact matches bypass the model entirely
+8. **Rate limiting per lead** — Cap responses per contact per time window (e.g., max 10 replies per hour)
+
+#### Priority 3 — Follow-up Sequencing
+
+Architecturally significant — requires a scheduler/cron mechanism:
+
+9. **Re-engagement scheduler** — Cron job or delayed-action system that checks for conversations with no reply after configurable intervals, fires follow-up
+10. **Follow-up variants** — Configurable array of follow-up message templates, cycled through per conversation
+11. **Context-aware follow-up** — Generate follow-up via AI using last conversation context instead of generic template
+
+#### Priority 4 — Visibility & Analytics
+
+12. **Production conversation viewer** — Dashboard UI to browse and read real (non-test) conversations per chatbot and per lead
+13. **Conversation history on lead detail** — Show past conversations on a lead's profile page
+14. **Per-workspace usage dashboard** — Aggregated view: messages sent, tokens used, leads touched, estimated cost, broken out by chatbot
+15. **Conversation analytics** — Dropoff chart, response time distribution, escalation rate, completion rate
+16. **Lead pipeline view** — Visual stage funnel for gym owners
+
+#### Priority 5 — Scale & Billing
+
+17. **Usage-based billing hooks** — Aggregate usage per workspace per billing period, expose via API for billing integration
+18. **Handoff summary** — AI-generated conversation summary on escalation
+
+#### Future (unchanged)
+
+- Tool calling / function calling — Bots calling workflow actions mid-conversation
+- Web chat widget — Browser-based chat channel (beyond SMS)
+- Multi-channel — WhatsApp, email, web chat channels
+- Intent detection — Structured intent/goal tracking
 
 ---
 
