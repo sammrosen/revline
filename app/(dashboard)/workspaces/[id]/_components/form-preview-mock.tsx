@@ -3,11 +3,12 @@
 import type { SignupConfig, BookingCopyConfig } from '@/app/_lib/types';
 import { MagicLinkBookingClient } from '@/app/public/[slug]/book/client';
 import { SignupClient } from '@/app/public/[slug]/signup/client';
-import type { ResolvedBranding, ResolvedThemeMapping, ResolvedBookingCopy, ResolvedFeatures } from '@/app/_lib/config';
+import type { ResolvedBranding, ResolvedThemeMapping, ResolvedTypography, ResolvedBookingCopy, ResolvedFeatures } from '@/app/_lib/config';
 import {
   DEFAULT_BRANDING,
   DEFAULT_THEME_MAPPING,
   DEFAULT_HEADER_STYLE,
+  DEFAULT_TYPOGRAPHY,
   DEFAULT_BOOKING_COPY,
   DEFAULT_FEATURES,
   DEFAULT_SIGNUP_COPY,
@@ -45,12 +46,28 @@ interface HeaderStyleConfig {
   size?: 'sm' | 'base' | 'lg' | 'xl';
   bold?: boolean;
   italic?: boolean;
+  textSize?: 'xs' | 'sm' | 'base' | 'lg';
+  textWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+}
+
+interface TextRoleStyle {
+  size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl';
+  weight?: 'normal' | 'medium' | 'semibold' | 'bold';
+}
+
+interface TypographyConfig {
+  sectionHeader?: TextRoleStyle;
+  pageTitle?: TextRoleStyle;
+  body?: TextRoleStyle;
+  label?: TextRoleStyle;
+  caption?: TextRoleStyle;
 }
 
 interface MockPreviewProps {
   branding?: BrandingConfig;
   theme?: ThemeMapping;
   headerStyle?: HeaderStyleConfig;
+  typography?: TypographyConfig;
   copy?: BookingCopyConfig;
   workspaceName: string;
   formType: 'booking' | 'signup';
@@ -65,6 +82,7 @@ export function FormPreviewMock({
   branding,
   theme,
   headerStyle,
+  typography,
   copy,
   workspaceName,
   formType,
@@ -95,6 +113,31 @@ export function FormPreviewMock({
     size: headerStyle?.size || DEFAULT_HEADER_STYLE.size,
     bold: headerStyle?.bold ?? DEFAULT_HEADER_STYLE.bold,
     italic: headerStyle?.italic ?? DEFAULT_HEADER_STYLE.italic,
+    textSize: headerStyle?.textSize || DEFAULT_HEADER_STYLE.textSize,
+    textWeight: headerStyle?.textWeight || DEFAULT_HEADER_STYLE.textWeight,
+  };
+
+  const resolvedTypography: ResolvedTypography = {
+    sectionHeader: {
+      size: typography?.sectionHeader?.size || DEFAULT_TYPOGRAPHY.sectionHeader.size,
+      weight: typography?.sectionHeader?.weight || DEFAULT_TYPOGRAPHY.sectionHeader.weight,
+    },
+    pageTitle: {
+      size: typography?.pageTitle?.size || DEFAULT_TYPOGRAPHY.pageTitle.size,
+      weight: typography?.pageTitle?.weight || DEFAULT_TYPOGRAPHY.pageTitle.weight,
+    },
+    body: {
+      size: typography?.body?.size || DEFAULT_TYPOGRAPHY.body.size,
+      weight: typography?.body?.weight || DEFAULT_TYPOGRAPHY.body.weight,
+    },
+    label: {
+      size: typography?.label?.size || DEFAULT_TYPOGRAPHY.label.size,
+      weight: typography?.label?.weight || DEFAULT_TYPOGRAPHY.label.weight,
+    },
+    caption: {
+      size: typography?.caption?.size || DEFAULT_TYPOGRAPHY.caption.size,
+      weight: typography?.caption?.weight || DEFAULT_TYPOGRAPHY.caption.weight,
+    },
   };
 
   if (formType === 'signup') {
@@ -109,6 +152,7 @@ export function FormPreviewMock({
         branding={resolvedBranding}
         theme={resolvedTheme}
         headerStyle={resolvedHeaderStyle}
+        typography={resolvedTypography}
         club={{
           name: signupConfig?.club?.name || DEFAULT_SIGNUP_CLUB.name,
           address: signupConfig?.club?.address || DEFAULT_SIGNUP_CLUB.address,
@@ -173,6 +217,7 @@ export function FormPreviewMock({
       branding={resolvedBranding}
       theme={resolvedTheme}
       headerStyle={resolvedHeaderStyle}
+      typography={resolvedTypography}
       copy={resolvedCopy}
       features={resolvedFeatures}
       previewMode={true}

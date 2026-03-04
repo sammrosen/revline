@@ -13,7 +13,7 @@
  */
 
 import type { SignupPlan } from '@/app/_lib/types';
-import type { SignupFormState, DerivedBrand } from '../client';
+import type { SignupFormState, DerivedBrand, TextClasses } from '../client';
 import type { ResolvedSignupClub, ResolvedSignupPolicies, ResolvedSignupCopy } from '@/app/_lib/config';
 import { SidebarSummary } from './sidebar-summary';
 
@@ -43,6 +43,7 @@ interface PaymentStepProps {
   onBack: () => void;
   loading: boolean;
   brand: DerivedBrand;
+  typo: TextClasses;
   club: ResolvedSignupClub;
   selectedPlan: SignupPlan;
   policies: ResolvedSignupPolicies;
@@ -56,6 +57,7 @@ export function PaymentStep({
   onBack,
   loading,
   brand,
+  typo,
   club,
   selectedPlan,
   policies,
@@ -75,7 +77,7 @@ export function PaymentStep({
         {/* Payment method card */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="p-6" style={{ backgroundColor: brand.primary }}>
-            <h2 className="text-base font-bold uppercase tracking-wide text-white">
+            <h2 className={`${typo.sectionHeader} uppercase tracking-wide text-white`}>
               Recurring Payment
             </h2>
           </div>
@@ -83,7 +85,7 @@ export function PaymentStep({
           <div className="p-8 space-y-6">
             {/* Payment method */}
             <div>
-              <label className="block text-sm font-medium text-gray-600 mb-2">
+              <label className={`block ${typo.label} text-gray-600 mb-2`}>
                 Payment Method
               </label>
               <select
@@ -101,7 +103,7 @@ export function PaymentStep({
             {/* Cardholder name */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">
+                <label className={`block ${typo.label} text-gray-600 mb-2`}>
                   Cardholder&apos;s First Name *
                 </label>
                 <input
@@ -115,7 +117,7 @@ export function PaymentStep({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">
+                <label className={`block ${typo.label} text-gray-600 mb-2`}>
                   Cardholder&apos;s Last Name *
                 </label>
                 <input
@@ -132,7 +134,7 @@ export function PaymentStep({
             
             {/* Card number */}
             <div>
-              <label className="block text-sm font-medium text-gray-600 mb-2">
+              <label className={`block ${typo.label} text-gray-600 mb-2`}>
                 Credit Card Number *
               </label>
               <input
@@ -150,7 +152,7 @@ export function PaymentStep({
             {/* Expiry and CVV */}
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">
+                <label className={`block ${typo.label} text-gray-600 mb-2`}>
                   Exp. Month *
                 </label>
                 <select
@@ -166,7 +168,7 @@ export function PaymentStep({
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">
+                <label className={`block ${typo.label} text-gray-600 mb-2`}>
                   Exp. Year *
                 </label>
                 <select
@@ -182,7 +184,7 @@ export function PaymentStep({
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">
+                <label className={`block ${typo.label} text-gray-600 mb-2`}>
                   Security Code *
                 </label>
                 <input
@@ -201,7 +203,7 @@ export function PaymentStep({
             {/* Billing ZIP */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">
+                <label className={`block ${typo.label} text-gray-600 mb-2`}>
                   Zip/Postal Code *
                 </label>
                 <input
@@ -240,7 +242,7 @@ export function PaymentStep({
         {/* Terms & Conditions card */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="p-6" style={{ backgroundColor: brand.primary }}>
-            <h2 className="text-base font-bold uppercase tracking-wide text-white">
+            <h2 className={`${typo.sectionHeader} uppercase tracking-wide text-white`}>
               Terms & Conditions
             </h2>
           </div>

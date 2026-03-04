@@ -6,6 +6,7 @@ import {
   DEFAULT_SIGNUP_CONFIG,
   DEFAULT_THEME_MAPPING,
   DEFAULT_HEADER_STYLE,
+  DEFAULT_TYPOGRAPHY,
   DEFAULT_BRANDING,
   EXAMPLE_SIGNUP_PLAN,
   isValidHexColor, 
@@ -83,6 +84,21 @@ interface HeaderStyleConfig {
   size?: 'sm' | 'base' | 'lg' | 'xl';
   bold?: boolean;
   italic?: boolean;
+  textSize?: 'xs' | 'sm' | 'base' | 'lg';
+  textWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+}
+
+interface TextRoleStyle {
+  size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl';
+  weight?: 'normal' | 'medium' | 'semibold' | 'bold';
+}
+
+interface TypographyConfig {
+  sectionHeader?: TextRoleStyle;
+  pageTitle?: TextRoleStyle;
+  body?: TextRoleStyle;
+  label?: TextRoleStyle;
+  caption?: TextRoleStyle;
 }
 
 interface RevlineMeta {
@@ -93,6 +109,7 @@ interface RevlineMeta {
   branding?: BrandingConfig;
   theme?: ThemeMapping;
   headerStyle?: HeaderStyleConfig;
+  typography?: TypographyConfig;
   copy?: CopyConfig;
   features?: FeaturesConfig;
   signup?: SignupConfig;
@@ -492,6 +509,7 @@ export function RevlineConfigEditor({
                       branding={meta.branding}
                       theme={meta.theme}
                       headerStyle={meta.headerStyle}
+                      typography={meta.typography}
                       copy={meta.copy?.booking}
                       workspaceName={workspaceSlug}
                       formType={(previewForm || selectedBuildForm || '').includes('signup') ? 'signup' : 'booking'}
@@ -1054,11 +1072,11 @@ function BuildTab({
         </>
       )}
       
-      {/* Header Style */}
-      <HeaderStyleSection meta={meta} updateMeta={updateMeta} />
-
       {/* Theme Mapping */}
       <ThemeSection meta={meta} updateMeta={updateMeta} />
+
+      {/* Typography (includes header style) */}
+      <TypographySection meta={meta} updateMeta={updateMeta} />
 
       {/* Fallback for unknown form types */}
       {!isBookingForm && !isSignupForm && selectedForm && (
@@ -1068,82 +1086,6 @@ function BuildTab({
           </p>
         </div>
       )}
-    </div>
-  );
-}
-
-// =============================================================================
-// HEADER STYLE SECTION (for Build tab)
-// =============================================================================
-
-function HeaderStyleSection({
-  meta,
-  updateMeta,
-}: {
-  meta: RevlineMeta;
-  updateMeta: (m: RevlineMeta) => void;
-}) {
-  const hs = meta.headerStyle || {};
-
-  const update = (field: keyof HeaderStyleConfig, value: string | boolean) => {
-    updateMeta({
-      ...meta,
-      headerStyle: { ...hs, [field]: value },
-    });
-  };
-
-  return (
-    <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
-      <h4 className="text-sm font-medium text-zinc-300 mb-1">Header Style</h4>
-      <p className="text-xs text-zinc-500 mb-3">How the workspace name renders when no logo is set</p>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs text-zinc-400 mb-1 block">Style</label>
-          <select
-            value={hs.variant || DEFAULT_HEADER_STYLE.variant}
-            onChange={(e) => update('variant', e.target.value)}
-            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none transition-colors"
-          >
-            <option value="pill">Pill Badge</option>
-            <option value="plain">Plain Text</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="text-xs text-zinc-400 mb-1 block">Size</label>
-          <select
-            value={hs.size || DEFAULT_HEADER_STYLE.size}
-            onChange={(e) => update('size', e.target.value)}
-            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none transition-colors"
-          >
-            <option value="sm">Small</option>
-            <option value="base">Base</option>
-            <option value="lg">Large</option>
-            <option value="xl">XL</option>
-          </select>
-        </div>
-
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={hs.bold ?? DEFAULT_HEADER_STYLE.bold}
-            onChange={(e) => update('bold', e.target.checked)}
-            className="rounded border-zinc-600 bg-zinc-900 text-amber-500 focus:ring-amber-500/30"
-          />
-          <span className="text-sm text-zinc-300">Bold</span>
-        </label>
-
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={hs.italic ?? DEFAULT_HEADER_STYLE.italic}
-            onChange={(e) => update('italic', e.target.checked)}
-            className="rounded border-zinc-600 bg-zinc-900 text-amber-500 focus:ring-amber-500/30"
-          />
-          <span className="text-sm text-zinc-300">Italic</span>
-        </label>
-      </div>
     </div>
   );
 }
@@ -1224,6 +1166,215 @@ function ThemeSection({
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// TYPOGRAPHY SECTION (for Build tab)
+// =============================================================================
+
+const TYPO_ROLES: { key: keyof TypographyConfig; label: string; description: string }[] = [
+  { key: 'sectionHeader', label: 'Section Header', description: 'Colored bar headings' },
+  { key: 'pageTitle', label: 'Page Title', description: 'Success & confirmation titles' },
+  { key: 'body', label: 'Body', description: 'General text & descriptions' },
+  { key: 'label', label: 'Label', description: 'Form field labels' },
+  { key: 'caption', label: 'Caption', description: 'Helper text & fine print' },
+];
+
+const SIZE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'xs', label: 'XS' },
+  { value: 'sm', label: 'SM' },
+  { value: 'base', label: 'Base' },
+  { value: 'lg', label: 'LG' },
+  { value: 'xl', label: 'XL' },
+  { value: '2xl', label: '2XL' },
+  { value: '3xl', label: '3XL' },
+];
+
+const WEIGHT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'normal', label: 'Normal' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'semibold', label: 'Semibold' },
+  { value: 'bold', label: 'Bold' },
+];
+
+const FONT_FAMILY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'inter', label: 'Inter' },
+  { value: 'poppins', label: 'Poppins' },
+  { value: 'roboto', label: 'Roboto' },
+  { value: 'system', label: 'System' },
+];
+
+function TypographySection({
+  meta,
+  updateMeta,
+}: {
+  meta: RevlineMeta;
+  updateMeta: (m: RevlineMeta) => void;
+}) {
+  const typo = meta.typography ?? {};
+  const hs = meta.headerStyle || {};
+
+  const updateRole = (role: keyof TypographyConfig, field: keyof TextRoleStyle, value: string) => {
+    updateMeta({
+      ...meta,
+      typography: {
+        ...typo,
+        [role]: { ...(typo[role] || {}), [field]: value },
+      },
+    });
+  };
+
+  const updateFontFamily = (value: string) => {
+    updateMeta({
+      ...meta,
+      branding: { ...(meta.branding || {}), fontFamily: value as BrandingConfig['fontFamily'] },
+    });
+  };
+
+  const updateHeaderStyle = (field: keyof HeaderStyleConfig, value: string | boolean) => {
+    updateMeta({
+      ...meta,
+      headerStyle: { ...hs, [field]: value },
+    });
+  };
+
+  return (
+    <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
+      <h4 className="text-sm font-medium text-zinc-300 mb-1">Typography</h4>
+      <p className="text-xs text-zinc-500 mb-3">Font family and size/weight per text role</p>
+
+      <div className="mb-4">
+        <label className="text-xs text-zinc-400 mb-1 block">Font Family</label>
+        <select
+          value={meta.branding?.fontFamily || 'inter'}
+          onChange={(e) => updateFontFamily(e.target.value)}
+          className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none transition-colors"
+        >
+          {FONT_FAMILY_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Text roles */}
+      <div className="space-y-2">
+        {TYPO_ROLES.map(({ key, label, description }) => {
+          const role = typo[key] || {};
+          const size = role.size ?? DEFAULT_TYPOGRAPHY[key].size;
+          const weight = role.weight ?? DEFAULT_TYPOGRAPHY[key].weight;
+
+          return (
+            <div key={key} className="flex items-center justify-between gap-2 py-1">
+              <div className="min-w-0 flex-1">
+                <span className="text-sm text-zinc-300">{label}</span>
+                <span className="text-xs text-zinc-600 ml-2 hidden sm:inline">{description}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={size}
+                  onChange={(e) => updateRole(key, 'size', e.target.value)}
+                  className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors"
+                >
+                  {SIZE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <select
+                  value={weight}
+                  onChange={(e) => updateRole(key, 'weight', e.target.value)}
+                  className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors"
+                >
+                  {WEIGHT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Header name style — divider */}
+      <div className="border-t border-zinc-800 mt-4 pt-4">
+        <h5 className="text-sm font-medium text-zinc-300 mb-1">Header Name</h5>
+        <p className="text-xs text-zinc-500 mb-3">Workspace name in the top bar when no logo is set</p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-zinc-400 mb-1 block">Style</label>
+            <select
+              value={hs.variant || DEFAULT_HEADER_STYLE.variant}
+              onChange={(e) => updateHeaderStyle('variant', e.target.value)}
+              className="w-full px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors"
+            >
+              <option value="pill">Pill Badge</option>
+              <option value="plain">Plain Text</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-zinc-400 mb-1 block">Size</label>
+            <select
+              value={hs.size || DEFAULT_HEADER_STYLE.size}
+              onChange={(e) => updateHeaderStyle('size', e.target.value)}
+              className="w-full px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors"
+            >
+              <option value="sm">Small</option>
+              <option value="base">Base</option>
+              <option value="lg">Large</option>
+              <option value="xl">XL</option>
+            </select>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={hs.bold ?? DEFAULT_HEADER_STYLE.bold}
+              onChange={(e) => updateHeaderStyle('bold', e.target.checked)}
+              className="rounded border-zinc-600 bg-zinc-900 text-amber-500 focus:ring-amber-500/30"
+            />
+            <span className="text-sm text-zinc-300">Bold</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={hs.italic ?? DEFAULT_HEADER_STYLE.italic}
+              onChange={(e) => updateHeaderStyle('italic', e.target.checked)}
+              className="rounded border-zinc-600 bg-zinc-900 text-amber-500 focus:ring-amber-500/30"
+            />
+            <span className="text-sm text-zinc-300">Italic</span>
+          </label>
+        </div>
+
+        {/* Header right-side text */}
+        <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-zinc-800/50">
+          <div className="min-w-0 flex-1">
+            <span className="text-sm text-zinc-300">Header Text</span>
+            <span className="text-xs text-zinc-600 ml-2 hidden sm:inline">Right-side link/label</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={hs.textSize || DEFAULT_HEADER_STYLE.textSize}
+              onChange={(e) => updateHeaderStyle('textSize', e.target.value)}
+              className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors"
+            >
+              <option value="xs">XS</option>
+              <option value="sm">SM</option>
+              <option value="base">Base</option>
+              <option value="lg">LG</option>
+            </select>
+            <select
+              value={hs.textWeight || DEFAULT_HEADER_STYLE.textWeight}
+              onChange={(e) => updateHeaderStyle('textWeight', e.target.value)}
+              className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors"
+            >
+              {WEIGHT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
     </div>
   );

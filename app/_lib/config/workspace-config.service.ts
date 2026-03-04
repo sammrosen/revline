@@ -22,6 +22,8 @@ import {
   RevlineMeta,
   ThemeMapping,
   HeaderStyle,
+  TypographyConfig,
+  TextRoleStyle,
   SignupCopyConfig,
   SignupClubInfo,
   SignupFeatures,
@@ -32,6 +34,7 @@ import {
   DEFAULT_BRANDING,
   DEFAULT_THEME_MAPPING,
   DEFAULT_HEADER_STYLE,
+  DEFAULT_TYPOGRAPHY,
   DEFAULT_BOOKING_COPY,
   DEFAULT_FEATURES,
   DEFAULT_SIGNUP_CONFIG,
@@ -101,6 +104,27 @@ export interface ResolvedHeaderStyle {
   size: 'sm' | 'base' | 'lg' | 'xl';
   bold: boolean;
   italic: boolean;
+  textSize: 'xs' | 'sm' | 'base' | 'lg';
+  textWeight: 'normal' | 'medium' | 'semibold' | 'bold';
+}
+
+/**
+ * Single resolved text role (no optionals)
+ */
+export interface ResolvedTextRole {
+  size: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl';
+  weight: 'normal' | 'medium' | 'semibold' | 'bold';
+}
+
+/**
+ * Fully resolved typography (no optional fields)
+ */
+export interface ResolvedTypography {
+  sectionHeader: ResolvedTextRole;
+  pageTitle: ResolvedTextRole;
+  body: ResolvedTextRole;
+  label: ResolvedTextRole;
+  caption: ResolvedTextRole;
 }
 
 /**
@@ -111,6 +135,7 @@ export interface ResolvedWorkspaceConfig {
   branding: ResolvedBranding;
   theme: ResolvedThemeMapping;
   headerStyle: ResolvedHeaderStyle;
+  typography: ResolvedTypography;
   features: ResolvedFeatures;
 }
 
@@ -206,6 +231,7 @@ export class WorkspaceConfigService {
       branding: this.resolveBranding(meta?.branding),
       theme: this.resolveThemeMapping(meta?.theme),
       headerStyle: this.resolveHeaderStyle(meta?.headerStyle),
+      typography: this.resolveTypography(meta?.typography),
       features: this.resolveFeatures(meta?.features),
     };
   }
@@ -240,6 +266,7 @@ export class WorkspaceConfigService {
       branding: this.resolveBranding(mergedBranding),
       theme: this.resolveThemeMapping(meta?.theme),
       headerStyle: this.resolveHeaderStyle(meta?.headerStyle),
+      typography: this.resolveTypography(meta?.typography),
       features: this.resolveFeatures(meta?.features),
       copy: this.resolveBookingCopy(mergedCopy),
     };
@@ -277,6 +304,7 @@ export class WorkspaceConfigService {
       branding: this.resolveBranding(mergedBranding),
       theme: this.resolveThemeMapping(meta?.theme),
       headerStyle: this.resolveHeaderStyle(meta?.headerStyle),
+      typography: this.resolveTypography(meta?.typography),
       features: this.resolveFeatures(meta?.features),
       enabled: signupConfig?.enabled ?? false,
       club: this.resolveSignupClub(signupConfig?.club),
@@ -450,6 +478,47 @@ export class WorkspaceConfigService {
     }
     if (typeof overrides.italic === 'boolean') {
       result.italic = overrides.italic;
+    }
+    if (['xs', 'sm', 'base', 'lg'].includes(overrides.textSize || '')) {
+      result.textSize = overrides.textSize as ResolvedHeaderStyle['textSize'];
+    }
+    if (['normal', 'medium', 'semibold', 'bold'].includes(overrides.textWeight || '')) {
+      result.textWeight = overrides.textWeight as ResolvedHeaderStyle['textWeight'];
+    }
+
+    return result;
+  }
+
+  private static readonly VALID_SIZES = new Set(['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl']);
+  private static readonly VALID_WEIGHTS = new Set(['normal', 'medium', 'semibold', 'bold']);
+  private static readonly TYPO_ROLES: (keyof TypographyConfig)[] = ['sectionHeader', 'pageTitle', 'body', 'label', 'caption'];
+
+  /**
+   * Resolve typography by merging per-role overrides with defaults.
+   */
+  private static resolveTypography(overrides?: TypographyConfig): ResolvedTypography {
+    const result = {
+      sectionHeader: { ...DEFAULT_TYPOGRAPHY.sectionHeader },
+      pageTitle: { ...DEFAULT_TYPOGRAPHY.pageTitle },
+      body: { ...DEFAULT_TYPOGRAPHY.body },
+      label: { ...DEFAULT_TYPOGRAPHY.label },
+      caption: { ...DEFAULT_TYPOGRAPHY.caption },
+    };
+
+    if (!overrides) {
+      return result;
+    }
+
+    for (const role of this.TYPO_ROLES) {
+      const roleOverride: TextRoleStyle | undefined = overrides[role];
+      if (!roleOverride) continue;
+
+      if (roleOverride.size && this.VALID_SIZES.has(roleOverride.size)) {
+        result[role].size = roleOverride.size as ResolvedTextRole['size'];
+      }
+      if (roleOverride.weight && this.VALID_WEIGHTS.has(roleOverride.weight)) {
+        result[role].weight = roleOverride.weight as ResolvedTextRole['weight'];
+      }
     }
 
     return result;

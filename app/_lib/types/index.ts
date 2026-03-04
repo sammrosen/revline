@@ -584,6 +584,34 @@ export interface ThemeMapping {
 }
 
 /**
+ * Size + weight for a single text role.
+ * Used by TypographyConfig to control how each tier of text renders.
+ */
+export interface TextRoleStyle {
+  size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl';
+  weight?: 'normal' | 'medium' | 'semibold' | 'bold';
+}
+
+/**
+ * Typography config — maps semantic text roles to size/weight.
+ * Stored on RevlineMeta so it's shared across form types.
+ *
+ * Roles:
+ * - sectionHeader: colored bar headings ("SELECT YOUR TRAINER", "Personal Info")
+ * - pageTitle: success/confirmation page titles
+ * - body: general text, descriptions, plan names
+ * - label: form field labels
+ * - caption: helper text, disclaimers, footer fine print
+ */
+export interface TypographyConfig {
+  sectionHeader?: TextRoleStyle;
+  pageTitle?: TextRoleStyle;
+  body?: TextRoleStyle;
+  label?: TextRoleStyle;
+  caption?: TextRoleStyle;
+}
+
+/**
  * Controls how the workspace name renders in the header when no logo is set.
  * Stored on RevlineMeta so it's shared across form types.
  */
@@ -596,6 +624,10 @@ export interface HeaderStyle {
   bold?: boolean;
   /** Italic text (default: false) */
   italic?: boolean;
+  /** Right-side header text size */
+  textSize?: 'xs' | 'sm' | 'base' | 'lg';
+  /** Right-side header text weight */
+  textWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
 }
 
 export interface RevlineMeta {
@@ -613,6 +645,8 @@ export interface RevlineMeta {
   theme?: ThemeMapping;
   /** Header name/logo style */
   headerStyle?: HeaderStyle;
+  /** Typography — size/weight per text role */
+  typography?: TypographyConfig;
   /** Copy configuration per template */
   copy?: CopyConfig;
   /** Feature flags */

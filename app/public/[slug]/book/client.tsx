@@ -24,9 +24,9 @@ import {
   BookingEmployee,
   TimeSlot,
 } from '@/app/_lib/booking';
-import type { ResolvedBranding, ResolvedThemeMapping, ResolvedBookingCopy, ResolvedFeatures } from '@/app/_lib/config';
+import type { ResolvedBranding, ResolvedThemeMapping, ResolvedTypography, ResolvedBookingCopy, ResolvedFeatures } from '@/app/_lib/config';
 import type { HeaderStyle } from '@/app/_lib/types';
-import { DEFAULT_THEME_MAPPING } from '@/app/_lib/config';
+import { DEFAULT_THEME_MAPPING, DEFAULT_TYPOGRAPHY } from '@/app/_lib/config';
 import { StepIndicator } from '@/app/_lib/forms/components';
 
 // =============================================================================
@@ -78,6 +78,8 @@ interface MagicLinkBookingClientProps {
   theme?: ResolvedThemeMapping;
   /** Header name/logo style */
   headerStyle?: HeaderStyle;
+  /** Typography — resolved size/weight per text role */
+  typography?: ResolvedTypography;
   /** Copy configuration for booking template */
   copy: ResolvedBookingCopy;
   /** Feature flags */
@@ -152,6 +154,15 @@ function deriveBrandColors(branding: ResolvedBranding, theme: ResolvedThemeMappi
   };
 }
 
+import { buildTextClasses, typoClass, type TextClasses } from '@/app/_lib/forms/styles';
+
+const FONT_FAMILY_MAP: Record<string, string> = {
+  inter: "'Inter', sans-serif",
+  poppins: "'Poppins', sans-serif",
+  roboto: "'Roboto', sans-serif",
+  system: "system-ui, -apple-system, sans-serif",
+};
+
 const getInitialDate = () => new Date().toISOString().split('T')[0];
 
 const initialState: MagicLinkBookingState = {
@@ -180,6 +191,7 @@ export function MagicLinkBookingClient({
   branding,
   theme,
   headerStyle,
+  typography,
   copy,
   features,
   previewMode = false,
@@ -201,6 +213,11 @@ export function MagicLinkBookingClient({
   // Derive brand colors from config + theme mapping
   const resolvedTheme = theme ?? DEFAULT_THEME_MAPPING;
   const brand = useMemo(() => deriveBrandColors(branding, resolvedTheme), [branding, resolvedTheme]);
+
+  // Build typography class strings
+  const resolvedTypo = typography ?? DEFAULT_TYPOGRAPHY;
+  const typo = useMemo(() => buildTextClasses(resolvedTypo), [resolvedTypo]);
+  const fontFamily = FONT_FAMILY_MAP[branding.fontFamily] || FONT_FAMILY_MAP.inter;
 
   // Load employees on mount (skip in preview mode)
   useEffect(() => {
@@ -394,7 +411,7 @@ export function MagicLinkBookingClient({
   }, [initialBarcode, capabilities.supportsEmployeeSelection, previewMode, mockSlots]);
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: brand.background }}>
+    <div className="min-h-screen" style={{ backgroundColor: brand.background, fontFamily }}>
       {/* Header */}
       <header className="text-white" style={{ backgroundColor: brand.header }}>
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -420,7 +437,7 @@ export function MagicLinkBookingClient({
               );
             })()}
           </div>
-          <span className="text-sm text-zinc-400">{copy.headline}</span>
+          <span className={`${typoClass(headerStyle?.textSize || 'sm', headerStyle?.textWeight || 'normal')} text-zinc-400`}>{copy.headline}</span>
         </div>
         
         {/* Step indicator */}
@@ -469,6 +486,7 @@ export function MagicLinkBookingClient({
             onDateChange={handleDateChange}
             supportsEmployeeSelection={capabilities.supportsEmployeeSelection || false}
             brand={brand}
+            typo={typo}
           />
         )}
 
@@ -487,6 +505,7 @@ export function MagicLinkBookingClient({
             onSubmit={handleSubmit}
             onBack={handleBack}
             brand={brand}
+            typo={typo}
             copy={copy}
           />
         )}
@@ -497,6 +516,7 @@ export function MagicLinkBookingClient({
             email={state.email}
             onReset={handleReset}
             brand={brand}
+            typo={typo}
             copy={copy}
           />
         )}
@@ -505,9 +525,9 @@ export function MagicLinkBookingClient({
       {/* Footer */}
       {features.showPoweredBy && (
         <footer className="py-6 text-center">
-          <p className="text-xs text-gray-400">{copy.footerText}</p>
+          <p className={`${typo.caption} text-gray-400`}>{copy.footerText}</p>
           {copy.footerEmail && (
-            <a href={`mailto:${copy.footerEmail}`} className="text-xs text-gray-400 hover:text-gray-500">
+            <a href={`mailto:${copy.footerEmail}`} className={`${typo.caption} text-gray-400 hover:text-gray-500`}>
               {copy.footerEmail}
             </a>
           )}
@@ -532,6 +552,7 @@ function SelectStep({
   onDateChange,
   supportsEmployeeSelection,
   brand,
+  typo,
 }: {
   employees: BookingEmployee[];
   selectedEmployee: BookingEmployee | null;
@@ -543,6 +564,7 @@ function SelectStep({
   onDateChange: (date: string) => void;
   supportsEmployeeSelection: boolean;
   brand: DerivedBrand;
+  typo: TextClasses;
 }) {
   // Group slots by date
   const slotsByDate = slots.reduce((acc, slot) => {
@@ -573,7 +595,7 @@ function SelectStep({
       {supportsEmployeeSelection && employees.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="p-6" style={{ backgroundColor: brand.primary }}>
-            <h2 className="text-base font-bold uppercase tracking-wide text-white">
+            <h2 className={`${typo.sectionHeader} uppercase tracking-wide text-white`}>
               Select Your Trainer
             </h2>
           </div>
@@ -609,9 +631,9 @@ function SelectStep({
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         {/* Section header */}
         <div className="p-6" style={{ backgroundColor: brand.primary }}>
-          <h2 className="text-base font-bold uppercase tracking-wide text-white">
-            {loading ? 'Loading availability...' : 'Select a Time'}
-          </h2>
+            <h2 className={`${typo.sectionHeader} uppercase tracking-wide text-white`}>
+              {loading ? 'Loading availability...' : 'Select a Time'}
+            </h2>
         </div>
         
         {/* Date navigation */}
@@ -674,7 +696,7 @@ function SelectStep({
                       <button
                         key={slot.id}
                         onClick={() => onSelectSlot(slot)}
-                        className="px-3 py-3 text-sm font-medium rounded-lg bg-gray-100 hover:bg-gray-200 transition-all hover:shadow-sm"
+                        className={`px-3 py-3 ${typo.body} rounded-lg bg-gray-100 hover:bg-gray-200 transition-all hover:shadow-sm`}
                         style={{ color: brand.text }}
                       >
                         {formatTime(slot.startTime)}
@@ -708,6 +730,7 @@ function SubmitStep({
   onSubmit,
   onBack,
   brand,
+  typo,
   copy,
 }: {
   slot: TimeSlot;
@@ -722,6 +745,7 @@ function SubmitStep({
   onSubmit: () => void;
   onBack: () => void;
   brand: DerivedBrand;
+  typo: TextClasses;
   copy: ResolvedBookingCopy;
 }) {
   const startTime = new Date(slot.startTime);
@@ -729,10 +753,10 @@ function SubmitStep({
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden">
       <div className="p-6" style={{ backgroundColor: brand.primary }}>
-        <h2 className="text-base font-bold uppercase tracking-wide text-white">
+        <h2 className={`${typo.sectionHeader} uppercase tracking-wide text-white`}>
           Confirm Your Session
         </h2>
-        <p className="mt-1 text-white/80 text-sm">
+        <p className={`mt-1 text-white/80 ${typo.body}`}>
           Enter your details to receive a confirmation email.
         </p>
       </div>
@@ -765,7 +789,7 @@ function SubmitStep({
       {/* Form */}
       <div className="p-8 space-y-6">
         <div>
-          <label className="block text-sm font-medium text-gray-600 mb-2">
+          <label className={`block ${typo.label} text-gray-600 mb-2`}>
             Member Barcode *
           </label>
           <input
@@ -780,7 +804,7 @@ function SubmitStep({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-600 mb-2">
+          <label className={`block ${typo.label} text-gray-600 mb-2`}>
             Email Address *
           </label>
           <input
@@ -792,13 +816,13 @@ function SubmitStep({
             style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
             disabled={loading}
           />
-          <p className="text-xs mt-2 text-gray-500">
+          <p className={`${typo.caption} mt-2 text-gray-500`}>
             Must match the email on your membership
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-600 mb-2">
+          <label className={`block ${typo.label} text-gray-600 mb-2`}>
             Last 4 Digits of Phone *
           </label>
           <input
@@ -811,7 +835,7 @@ function SubmitStep({
             style={{ '--tw-ring-color': `${brand.primary}40` } as React.CSSProperties}
             disabled={loading}
           />
-          <p className="text-xs mt-2 text-gray-500">
+          <p className={`${typo.caption} mt-2 text-gray-500`}>
             For verification purposes
           </p>
         </div>
@@ -855,11 +879,13 @@ function PendingStep({
   email,
   onReset,
   brand,
+  typo,
   copy,
 }: {
   email: string;
   onReset: () => void;
   brand: DerivedBrand;
+  typo: TextClasses;
   copy: ResolvedBookingCopy;
 }) {
   return (
@@ -886,7 +912,7 @@ function PendingStep({
           </svg>
         </div>
 
-        <h2 className="text-2xl font-bold mb-3" style={{ color: brand.text }}>
+        <h2 className={`${typo.pageTitle} mb-3`} style={{ color: brand.text }}>
           {copy.successTitle}
         </h2>
 

@@ -22,6 +22,8 @@ import {
   SignupPlan,
   ThemeMapping,
   HeaderStyle,
+  TextRoleStyle,
+  TypographyConfig,
 } from '@/app/_lib/types';
 
 // =============================================================================
@@ -62,6 +64,19 @@ export const DEFAULT_HEADER_STYLE: Required<HeaderStyle> = {
   size: 'sm',
   bold: true,
   italic: false,
+  textSize: 'sm',
+  textWeight: 'normal',
+};
+
+/**
+ * Default typography — size/weight per semantic text role
+ */
+export const DEFAULT_TYPOGRAPHY: Required<Record<keyof TypographyConfig, Required<TextRoleStyle>>> = {
+  sectionHeader: { size: 'base', weight: 'bold' },
+  pageTitle: { size: '2xl', weight: 'bold' },
+  body: { size: 'sm', weight: 'normal' },
+  label: { size: 'sm', weight: 'medium' },
+  caption: { size: 'xs', weight: 'normal' },
 };
 
 // =============================================================================

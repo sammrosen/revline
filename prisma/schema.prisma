@@ -154,6 +154,9 @@ enum IntegrationType {
   ABC_IGNITE
   REVLINE
   RESEND
+  TWILIO
+  ANTHROPIC
+  OPENAI
 }
 
 enum HealthStatus {

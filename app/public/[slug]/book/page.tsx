@@ -123,6 +123,7 @@ export default async function PublicBookingPage({ params, searchParams }: Bookin
         branding={config.branding}
         theme={config.theme}
         headerStyle={config.headerStyle}
+        typography={config.typography}
         copy={config.copy}
         features={config.features}
       />

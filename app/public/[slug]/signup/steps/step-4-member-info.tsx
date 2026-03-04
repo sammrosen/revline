@@ -14,7 +14,7 @@
  */
 
 import type { SignupPlan } from '@/app/_lib/types';
-import type { SignupFormState, DerivedBrand } from '../client';
+import type { SignupFormState, DerivedBrand, TextClasses } from '../client';
 import type { ResolvedSignupClub } from '@/app/_lib/config';
 import { SidebarSummary } from './sidebar-summary';
 
@@ -125,6 +125,7 @@ interface MemberInfoStepProps {
   onBack: () => void;
   loading: boolean;
   brand: DerivedBrand;
+  typo: TextClasses;
   club: ResolvedSignupClub;
   selectedPlan: SignupPlan;
 }
@@ -136,6 +137,7 @@ export function MemberInfoStep({
   onBack,
   loading,
   brand,
+  typo,
   club,
   selectedPlan,
 }: MemberInfoStepProps) {
@@ -145,7 +147,7 @@ export function MemberInfoStep({
       <div className="lg:col-span-2">
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="p-6" style={{ backgroundColor: brand.primary }}>
-            <h2 className="text-base font-bold uppercase tracking-wide text-white">
+            <h2 className={`${typo.sectionHeader} uppercase tracking-wide text-white`}>
               Member Info
             </h2>
           </div>
@@ -154,7 +156,7 @@ export function MemberInfoStep({
             {/* Display info from step 2 (readonly) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-2">
+                <label className={`block ${typo.label} text-gray-500 mb-2`}>
                   First Name
                 </label>
                 <p className="px-4 py-4 bg-gray-50 rounded-lg font-medium" style={{ color: brand.text }}>
@@ -162,7 +164,7 @@ export function MemberInfoStep({
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-2">
+                <label className={`block ${typo.label} text-gray-500 mb-2`}>
                   Last Name
                 </label>
                 <p className="px-4 py-4 bg-gray-50 rounded-lg font-medium" style={{ color: brand.text }}>
@@ -173,7 +175,7 @@ export function MemberInfoStep({
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-2">
+                <label className={`block ${typo.label} text-gray-500 mb-2`}>
                   Email
                 </label>
                 <p className="px-4 py-4 bg-gray-50 rounded-lg text-sm font-medium" style={{ color: brand.primary }}>
@@ -181,7 +183,7 @@ export function MemberInfoStep({
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-2">
+                <label className={`block ${typo.label} text-gray-500 mb-2`}>
                   Mobile Phone
                 </label>
                 <p className="px-4 py-4 bg-gray-50 rounded-lg font-medium" style={{ color: brand.primary }}>
@@ -194,7 +196,7 @@ export function MemberInfoStep({
             <div className="pt-6 border-t" style={{ borderColor: brand.border }}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-600 mb-2">
+                  <label className={`block ${typo.label} text-gray-600 mb-2`}>
                     Mailing Address *
                   </label>
                   <input
@@ -209,7 +211,7 @@ export function MemberInfoStep({
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">
+                  <label className={`block ${typo.label} text-gray-600 mb-2`}>
                     City *
                   </label>
                   <input
@@ -225,7 +227,7 @@ export function MemberInfoStep({
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-2">
+                    <label className={`block ${typo.label} text-gray-600 mb-2`}>
                       State *
                     </label>
                     <select
@@ -244,7 +246,7 @@ export function MemberInfoStep({
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-2">
+                    <label className={`block ${typo.label} text-gray-600 mb-2`}>
                       ZIP Code *
                     </label>
                     <input
@@ -265,7 +267,7 @@ export function MemberInfoStep({
             {/* Birthday */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">
+                <label className={`block ${typo.label} text-gray-600 mb-2`}>
                   Birthday *
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -306,7 +308,7 @@ export function MemberInfoStep({
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">
+                <label className={`block ${typo.label} text-gray-600 mb-2`}>
                   Gender
                 </label>
                 <select
@@ -326,7 +328,7 @@ export function MemberInfoStep({
             {/* Home phone */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">
+                <label className={`block ${typo.label} text-gray-600 mb-2`}>
                   Home Phone (optional)
                 </label>
                 <input

@@ -24,13 +24,14 @@ import type { SignupPlan, HeaderStyle } from '@/app/_lib/types';
 import type { 
   ResolvedBranding, 
   ResolvedThemeMapping,
+  ResolvedTypography,
   ResolvedSignupCopy, 
   ResolvedSignupClub, 
   ResolvedSignupFeatures, 
   ResolvedSignupPolicies,
   ResolvedFeatures,
 } from '@/app/_lib/config';
-import { DEFAULT_THEME_MAPPING } from '@/app/_lib/config';
+import { DEFAULT_THEME_MAPPING, DEFAULT_TYPOGRAPHY } from '@/app/_lib/config';
 
 // Import step components
 import { StepIndicator } from './steps/step-indicator';
@@ -44,9 +45,9 @@ import { ConfirmationStep } from './steps/step-6-confirmation';
 // TYPES
 // =============================================================================
 
-/**
- * Derived brand colors computed from primary color
- */
+import { buildTextClasses, typoClass, type TextClasses } from '@/app/_lib/forms/styles';
+export type { TextClasses };
+
 export interface DerivedBrand {
   primary: string;
   primaryHover: string;
@@ -106,6 +107,7 @@ interface SignupClientProps {
   branding: ResolvedBranding;
   theme?: ResolvedThemeMapping;
   headerStyle?: HeaderStyle;
+  typography?: ResolvedTypography;
   club: ResolvedSignupClub;
   plans: SignupPlan[];
   copy: ResolvedSignupCopy;
@@ -139,6 +141,14 @@ function deriveBrandColors(branding: ResolvedBranding, theme: ResolvedThemeMappi
     error: '#dc2626',
   };
 }
+
+
+const FONT_FAMILY_MAP: Record<string, string> = {
+  inter: "'Inter', sans-serif",
+  poppins: "'Poppins', sans-serif",
+  roboto: "'Roboto', sans-serif",
+  system: "system-ui, -apple-system, sans-serif",
+};
 
 const initialFormState: SignupFormState = {
   // Step 2
@@ -197,6 +207,7 @@ export function SignupClient({
   branding,
   theme,
   headerStyle,
+  typography,
   club,
   plans,
   copy,
@@ -220,6 +231,11 @@ export function SignupClient({
   // Derive brand colors
   const resolvedTheme = theme ?? DEFAULT_THEME_MAPPING;
   const brand = useMemo(() => deriveBrandColors(branding, resolvedTheme), [branding, resolvedTheme]);
+
+  // Build typography class strings
+  const resolvedTypo = typography ?? DEFAULT_TYPOGRAPHY;
+  const typo = useMemo(() => buildTextClasses(resolvedTypo), [resolvedTypo]);
+  const fontFamily = FONT_FAMILY_MAP[branding.fontFamily] || FONT_FAMILY_MAP.inter;
   
   // Get selected plan details
   const selectedPlan = useMemo(() => {
@@ -369,7 +385,7 @@ export function SignupClient({
   }, [goToStep]);
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: brand.background }}>
+    <div className="min-h-screen" style={{ backgroundColor: brand.background, fontFamily }}>
       {/* Header */}
       <header className="text-white" style={{ backgroundColor: brand.header }}>
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -395,13 +411,17 @@ export function SignupClient({
               );
             })()}
           </div>
-          {copy.headerLink ? (
-            <a href={copy.headerLink} className="text-sm text-zinc-400 hover:text-white transition-colors">
-              {copy.headerText || `Join ${workspaceName}`}
-            </a>
-          ) : (
-            <span className="text-sm text-zinc-400">{copy.headerText || `Join ${workspaceName}`}</span>
-          )}
+          {(() => {
+            const htClass = typoClass(headerStyle?.textSize || 'sm', headerStyle?.textWeight || 'normal');
+            const label = copy.headerText || `Join ${workspaceName}`;
+            return copy.headerLink ? (
+              <a href={copy.headerLink} className={`${htClass} text-zinc-400 hover:text-white transition-colors`}>
+                {label}
+              </a>
+            ) : (
+              <span className={`${htClass} text-zinc-400`}>{label}</span>
+            );
+          })()}
         </div>
         
         {/* Step indicator (not on confirmation) */}
@@ -420,7 +440,7 @@ export function SignupClient({
       {currentStep < 6 && (
         <div style={{ backgroundColor: brand.primary }} className="py-3">
           <div className="max-w-6xl mx-auto px-4">
-            <h1 className="text-white font-semibold tracking-wide uppercase text-sm">
+            <h1 className={`text-white ${typo.sectionHeader} tracking-wide uppercase`}>
               {copy.stepTitles[currentStep] || displaySteps.find(s => s.number === currentStep)?.label}
             </h1>
           </div>
@@ -444,6 +464,7 @@ export function SignupClient({
             onNext={handleNext}
             loading={loading}
             brand={brand}
+            typo={typo}
             copy={copy}
             requireSmsConsent={signupFeatures.requireSmsConsent}
           />
@@ -461,6 +482,7 @@ export function SignupClient({
             onBack={handleBack}
             loading={loading}
             brand={brand}
+            typo={typo}
             showPromoCode={signupFeatures.showPromoCode}
           />
         )}
@@ -474,6 +496,7 @@ export function SignupClient({
             onBack={handleBack}
             loading={loading}
             brand={brand}
+            typo={typo}
             club={club}
             selectedPlan={selectedPlan}
           />
@@ -488,6 +511,7 @@ export function SignupClient({
             onBack={handleBack}
             loading={loading}
             brand={brand}
+            typo={typo}
             club={club}
             selectedPlan={selectedPlan}
             policies={policies}
@@ -503,6 +527,7 @@ export function SignupClient({
             club={club}
             onReset={handleReset}
             brand={brand}
+            typo={typo}
             copy={copy}
           />
         )}
