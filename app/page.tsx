@@ -152,6 +152,9 @@ const INTEGRATIONS = {
   manychat:    { name: 'ManyChat',     color: '#000000', logo: '/logos/manychat.png',    bgClass: 'bg-zinc-500/20',    borderClass: 'border-zinc-500/40',    textClass: 'text-zinc-300' },
   abc_ignite:  { name: 'ABC Ignite',   color: '#214377', logo: '/logos/abc-ignite.png',  bgClass: 'bg-blue-900/20',    borderClass: 'border-blue-900/40',    textClass: 'text-blue-300' },
   resend:      { name: 'Resend',       color: '#000000', logo: '/logos/resend.png',      bgClass: 'bg-zinc-500/20',    borderClass: 'border-zinc-500/40',    textClass: 'text-zinc-300' },
+  twilio:      { name: 'Twilio',       color: '#f22f46', logo: '/logos/twilio.png',      bgClass: 'bg-red-500/20',     borderClass: 'border-red-500/40',     textClass: 'text-red-400' },
+  anthropic:   { name: 'Claude',       color: '#d4a27f', logo: '/logos/anthropic.png',   bgClass: 'bg-amber-500/20',   borderClass: 'border-amber-500/40',   textClass: 'text-amber-400' },
+  openai:      { name: 'OpenAI',       color: '#10a37f', logo: '/logos/openai.png',      bgClass: 'bg-emerald-500/20', borderClass: 'border-emerald-500/40', textClass: 'text-emerald-400' },
 } as const;
 
 type IntKey = keyof typeof INTEGRATIONS;
@@ -327,13 +330,21 @@ export default function Home() {
       {/* ============== TOP NAV ============== */}
       <nav className="relative z-10 flex items-center justify-between px-6 py-4 max-w-6xl mx-auto">
         <span className="text-sm font-semibold text-zinc-400 tracking-wide">RevLine</span>
-        <Link
-          href="/login"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-sm text-zinc-300 hover:text-white transition-colors duration-200"
-        >
-          <LockIcon className="w-3.5 h-3.5" />
-          Login
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/docs"
+            className="px-3 py-1.5 text-sm text-zinc-500 hover:text-zinc-200 transition-colors duration-200"
+          >
+            Docs
+          </Link>
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-2 px-5 py-2 bg-white/[0.08] hover:bg-white/[0.14] backdrop-blur-sm border border-white/[0.1] rounded-full text-sm text-zinc-200 hover:text-white transition-all duration-200"
+          >
+            Login
+            <ArrowRightIcon className="w-3.5 h-3.5" />
+          </Link>
+        </div>
       </nav>
 
       {/* ============== HERO SECTION ============== */}
@@ -426,7 +437,7 @@ export default function Home() {
           {/* Stats row */}
           <div className="grid grid-cols-3 gap-4 mt-8 max-w-xl mx-auto">
             <div className="text-center">
-              <p className="text-2xl font-bold text-white">7</p>
+              <p className="text-2xl font-bold text-white">10</p>
               <p className="text-xs text-zinc-500 mt-1">Current Integrations</p>
             </div>
             <div className="text-center">
@@ -434,8 +445,8 @@ export default function Home() {
               <p className="text-xs text-zinc-500 mt-1">Health Check Cycle</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-violet-400">2</p>
-              <p className="text-xs text-zinc-500 mt-1">Automation Layers</p>
+              <p className="text-2xl font-bold text-violet-400">3</p>
+              <p className="text-xs text-zinc-500 mt-1">Automation Interfaces</p>
             </div>
           </div>
         </div>
@@ -569,63 +580,64 @@ export default function Home() {
       <section className="relative px-6 py-24 md:py-32">
         <div className="max-w-6xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
-            {/* Workflow Builder Preview */}
+            {/* Preview Panel */}
             <div className="order-2 lg:order-1">
-              <PreviewPanel title="Workflows" subtitle="acme_fitness">
-                {/* Workflow card 1 */}
-                <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 mb-3">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="text-sm font-medium text-white">Post-Booking Automation</p>
-                      <p className="text-[10px] text-zinc-500 mt-0.5">When booking is confirmed via magic link</p>
+              <PreviewPanel title="System Activity" subtitle="acme_fitness">
+                {/* Three actors, same event log */}
+                <div className="space-y-3">
+                  {/* Form actor */}
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-500/20 text-amber-400">FORM</span>
+                      <span className="text-[10px] text-zinc-500">Booking Form submitted</span>
                     </div>
-                    <div className="w-8 h-4 rounded-full bg-green-500/30 border border-green-500/50 relative">
-                      <div className="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-green-400" />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700">find_member</span>
+                      <span className="text-zinc-600 text-[10px]">&rarr;</span>
+                      <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700">check_eligibility</span>
+                      <span className="text-zinc-600 text-[10px]">&rarr;</span>
+                      <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700">send_magic_link</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className={`inline-flex items-center gap-1.5 px-2 py-1 text-xs rounded ${INTEGRATIONS.revline.bgClass} ${INTEGRATIONS.revline.textClass}`}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={INTEGRATIONS.revline.logo} alt="RevLine" className="w-3 h-3 object-contain" />
-                      TRIGGER
-                    </span>
-                    <code className="text-[10px] text-zinc-400">revline.booking-confirmed</code>
+
+                  {/* Workflow actor */}
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-500/20 text-blue-400">WORKFLOW</span>
+                      <span className="text-[10px] text-zinc-500">stripe.payment_succeeded triggered</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700">update_stage</span>
+                      <span className="text-zinc-600 text-[10px]">&rarr;</span>
+                      <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700">add_to_group</span>
+                      <span className="text-zinc-600 text-[10px]">&rarr;</span>
+                      <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700">send_confirmation</span>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700">create_lead</span>
-                    <span className="text-zinc-600 text-[10px]">&rarr;</span>
-                    <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700">update_stage</span>
-                    <span className="text-zinc-600 text-[10px]">&rarr;</span>
-                    <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700">add_to_group</span>
+
+                  {/* AI Agent actor */}
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-violet-500/20 text-violet-400">AI AGENT</span>
+                      <span className="text-[10px] text-zinc-500">SMS conversation with lead</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700">schedule_appointment</span>
+                      <span className="text-zinc-600 text-[10px]">&rarr;</span>
+                      <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700">move_lead</span>
+                      <span className="text-zinc-600 text-[10px]">&rarr;</span>
+                      <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700">send_reply</span>
+                    </div>
                   </div>
-                  <p className="text-[10px] text-zinc-600 mt-3">12 executions &middot; Last run 3h ago</p>
                 </div>
 
-                {/* Workflow card 2 */}
-                <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="text-sm font-medium text-white">Payment &rarr; Customer Group</p>
-                      <p className="text-[10px] text-zinc-500 mt-0.5">Update stage and add to customers list</p>
-                    </div>
-                    <div className="w-8 h-4 rounded-full bg-green-500/30 border border-green-500/50 relative">
-                      <div className="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-green-400" />
-                    </div>
+                {/* Shared infrastructure callout */}
+                <div className="mt-4 pt-3 border-t border-zinc-800">
+                  <div className="flex items-center gap-3 text-[10px] text-zinc-500">
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Same adapters</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Same event log</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Same encryption</span>
                   </div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className={`inline-flex items-center gap-1.5 px-2 py-1 text-xs rounded ${INTEGRATIONS.stripe.bgClass} ${INTEGRATIONS.stripe.textClass}`}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={INTEGRATIONS.stripe.logo} alt="Stripe" className="w-3 h-3 object-contain" />
-                      TRIGGER
-                    </span>
-                    <code className="text-[10px] text-zinc-400">stripe.payment_succeeded</code>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700">update_stage</span>
-                    <span className="text-zinc-600 text-[10px]">&rarr;</span>
-                    <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700">add_to_group</span>
-                  </div>
-                  <p className="text-[10px] text-zinc-600 mt-3">8 executions &middot; Last run 1d ago</p>
                 </div>
               </PreviewPanel>
             </div>
@@ -634,22 +646,26 @@ export default function Home() {
             <div className="order-1 lg:order-2">
               <SectionBadge>Automate</SectionBadge>
               <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-6">
-                Two Layers of{' '}
+                Three Interfaces,{' '}
                 <span className="bg-linear-to-r from-purple-400 to-violet-400 bg-clip-text text-transparent">
-                  Automation
+                  One System
                 </span>
               </h2>
               <p className="text-zinc-400 mb-6 leading-relaxed">
-                Forms declare baked-in operations that run automatically &mdash; member lookup, eligibility checks, magic link emails. Then workflows you build in the UI react to form events with custom actions.
+                Forms, workflows, and AI agents all drive the same adapter layer &mdash; same encrypted secrets, same event log, same workspace isolation. Different ways in, same way through.
               </p>
               <div className="space-y-4">
                 <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-xl">
-                  <p className="text-sm font-medium text-amber-400 mb-1">Layer 1: Template Operations</p>
-                  <p className="text-sm text-zinc-400">Baked into form definitions. Run automatically when forms execute. Not user-configurable.</p>
+                  <p className="text-sm font-medium text-amber-400 mb-1">Forms</p>
+                  <p className="text-sm text-zinc-400">Declarative, baked-in operations. Member lookup, eligibility checks, magic link emails. Run automatically when forms execute.</p>
                 </div>
                 <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-xl">
-                  <p className="text-sm font-medium text-blue-400 mb-1">Layer 2: User-Built Workflows</p>
-                  <p className="text-sm text-zinc-400">Trigger &rarr; filter &rarr; actions. Configured in the UI. React to form events and external webhooks.</p>
+                  <p className="text-sm font-medium text-blue-400 mb-1">Workflows</p>
+                  <p className="text-sm text-zinc-400">Event-driven, user-configured. Trigger on payments, bookings, and form events. Build custom action chains in the UI.</p>
+                </div>
+                <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-xl">
+                  <p className="text-sm font-medium text-violet-400 mb-1">AI Agents</p>
+                  <p className="text-sm text-zinc-400">Conversational, tool-using. Schedule appointments, move leads, send emails &mdash; through the same adapters your forms and workflows use.</p>
                 </div>
               </div>
             </div>
@@ -815,7 +831,7 @@ export default function Home() {
             </p>
           </div>
           
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             {([
               { key: 'mailerlite' as IntKey, sub: 'Email Marketing' },
               { key: 'stripe' as IntKey,     sub: 'Payments' },
@@ -823,6 +839,9 @@ export default function Home() {
               { key: 'abc_ignite' as IntKey, sub: 'Gym Management' },
               { key: 'manychat' as IntKey,   sub: 'Instagram DMs' },
               { key: 'resend' as IntKey,     sub: 'Transactional Email' },
+              { key: 'twilio' as IntKey,     sub: 'SMS & Voice' },
+              { key: 'anthropic' as IntKey,  sub: 'AI Intelligence' },
+              { key: 'openai' as IntKey,     sub: 'AI Intelligence' },
             ]).map((int) => {
               const s = INTEGRATIONS[int.key];
               return (
