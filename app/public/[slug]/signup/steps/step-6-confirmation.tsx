@@ -11,7 +11,7 @@
  */
 
 import type { SignupPlan } from '@/app/_lib/types';
-import type { SignupFormState, DerivedBrand } from '../client';
+import type { SignupFormState, DerivedBrand, TextClasses } from '../client';
 import type { ResolvedSignupClub, ResolvedSignupCopy } from '@/app/_lib/config';
 
 interface ConfirmationStepProps {
@@ -20,6 +20,7 @@ interface ConfirmationStepProps {
   club: ResolvedSignupClub;
   onReset: () => void;
   brand: DerivedBrand;
+  typo: TextClasses;
   copy: ResolvedSignupCopy;
 }
 
@@ -29,6 +30,7 @@ export function ConfirmationStep({
   club,
   onReset,
   brand,
+  typo,
   copy,
 }: ConfirmationStepProps) {
   return (
@@ -57,7 +59,7 @@ export function ConfirmationStep({
           </div>
 
           {/* Success title */}
-          <h2 className="text-3xl font-bold mb-3" style={{ color: brand.text }}>
+          <h2 className={`${typo.pageTitle} mb-3`} style={{ color: brand.text }}>
             {copy.successTitle}
           </h2>
 

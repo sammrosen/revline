@@ -328,18 +328,22 @@ export interface AbcIgniteMeta {
  * 
  * @example
  * {
- *   "primaryColor": "#8B2346",
+ *   "color1": "#8B2346",
  *   "logo": "https://example.com/logo.png",
  *   "fontFamily": "inter"
  * }
  */
 export interface BrandingConfig {
-  /** Primary brand color (hex format) */
-  primaryColor?: string;
-  /** Secondary/accent color (hex format) */
-  secondaryColor?: string;
-  /** Page background color (hex format) */
-  backgroundColor?: string;
+  /** Palette color 1 — accent: buttons, section headers (hex format) */
+  color1?: string;
+  /** Palette color 2 — accent hover states (hex format) */
+  color2?: string;
+  /** Palette color 3 — page background (hex format) */
+  color3?: string;
+  /** Palette color 4 — card/panel surface (hex format) */
+  color4?: string;
+  /** Palette color 5 — body text (hex format) */
+  color5?: string;
   /** Logo URL (https only for security) */
   logo?: string;
   /** Font family for templates */
@@ -412,6 +416,14 @@ export interface SignupCopyConfig {
   successTitle?: string;
   /** Confirmation page message */
   successMessage?: string;
+  /** Footer text line */
+  footerText?: string;
+  /** Footer contact email */
+  footerEmail?: string;
+  /** Header right-side text (empty = "Join {workspaceName}") */
+  headerText?: string;
+  /** Header right-side link URL (empty = plain text) */
+  headerLink?: string;
 }
 
 /**
@@ -542,7 +554,7 @@ export interface SignupConfig {
  *     "defaultSource": "landing"
  *   },
  *   "branding": {
- *     "primaryColor": "#8B2346",
+ *     "color1": "#8B2346",
  *     "logo": "https://example.com/logo.png"
  *   },
  *   "copy": {
@@ -552,6 +564,72 @@ export interface SignupConfig {
  *   }
  * }
  */
+/**
+ * Maps each DerivedBrand slot to a palette color index (1-5).
+ * Stored on RevlineMeta so it's shared across form types.
+ */
+export interface ThemeMapping {
+  /** Accent — buttons, section headers, step indicator (default: 1) */
+  primary?: number;
+  /** Accent hover states (default: 2) */
+  primaryHover?: number;
+  /** Page background (default: 3) */
+  background?: number;
+  /** Card/panel backgrounds (default: 4) */
+  card?: number;
+  /** Body text and headings (default: 5) */
+  text?: number;
+  /** Top navigation bar background (default: 5) */
+  header?: number;
+}
+
+/**
+ * Size + weight for a single text role.
+ * Used by TypographyConfig to control how each tier of text renders.
+ */
+export interface TextRoleStyle {
+  size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl';
+  weight?: 'normal' | 'medium' | 'semibold' | 'bold';
+}
+
+/**
+ * Typography config — maps semantic text roles to size/weight.
+ * Stored on RevlineMeta so it's shared across form types.
+ *
+ * Roles:
+ * - sectionHeader: colored bar headings ("SELECT YOUR TRAINER", "Personal Info")
+ * - pageTitle: success/confirmation page titles
+ * - body: general text, descriptions, plan names
+ * - label: form field labels
+ * - caption: helper text, disclaimers, footer fine print
+ */
+export interface TypographyConfig {
+  sectionHeader?: TextRoleStyle;
+  pageTitle?: TextRoleStyle;
+  body?: TextRoleStyle;
+  label?: TextRoleStyle;
+  caption?: TextRoleStyle;
+}
+
+/**
+ * Controls how the workspace name renders in the header when no logo is set.
+ * Stored on RevlineMeta so it's shared across form types.
+ */
+export interface HeaderStyle {
+  /** pill = white badge (default), plain = just text on header bg */
+  variant?: 'pill' | 'plain';
+  /** Font size for the name text */
+  size?: 'sm' | 'base' | 'lg' | 'xl';
+  /** Bold text (default: true) */
+  bold?: boolean;
+  /** Italic text (default: false) */
+  italic?: boolean;
+  /** Right-side header text size */
+  textSize?: 'xs' | 'sm' | 'base' | 'lg';
+  /** Right-side header text weight */
+  textWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+}
+
 export interface RevlineMeta {
   /** Enabled forms - each becomes a workflow trigger (formId = trigger operation) */
   forms: Record<string, { 
@@ -563,6 +641,12 @@ export interface RevlineMeta {
   };
   /** Branding configuration for templates */
   branding?: BrandingConfig;
+  /** Theme mapping — assigns palette colors to form elements */
+  theme?: ThemeMapping;
+  /** Header name/logo style */
+  headerStyle?: HeaderStyle;
+  /** Typography — size/weight per text role */
+  typography?: TypographyConfig;
   /** Copy configuration per template */
   copy?: CopyConfig;
   /** Feature flags */

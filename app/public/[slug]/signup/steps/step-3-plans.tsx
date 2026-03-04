@@ -12,7 +12,7 @@
  */
 
 import type { SignupPlan } from '@/app/_lib/types';
-import type { DerivedBrand } from '../client';
+import type { DerivedBrand, TextClasses } from '../client';
 
 interface SelectPlanStepProps {
   plans: SignupPlan[];
@@ -24,6 +24,7 @@ interface SelectPlanStepProps {
   onBack: () => void;
   loading: boolean;
   brand: DerivedBrand;
+  typo: TextClasses;
   showPromoCode: boolean;
 }
 
@@ -37,6 +38,7 @@ export function SelectPlanStep({
   onBack,
   loading,
   brand,
+  typo,
   showPromoCode,
 }: SelectPlanStepProps) {
   return (
@@ -85,7 +87,7 @@ export function SelectPlanStep({
             >
               {/* Plan header */}
               <div className="p-4 text-center bg-zinc-800 text-white">
-                <h3 className="font-semibold text-lg">{plan.name}</h3>
+                <h3 className={`${typo.body} font-semibold`}>{plan.name}</h3>
               </div>
               
               {/* Price */}
@@ -176,7 +178,7 @@ export function SelectPlanStep({
               
               {/* Disclaimer */}
               {plan.disclaimer && (
-                <div className="p-4 text-xs" style={{ color: brand.textMuted }}>
+                <div className={`p-4 ${typo.caption}`} style={{ color: brand.textMuted }}>
                   *{plan.disclaimer}
                 </div>
               )}

@@ -20,6 +20,10 @@ import {
   SignupFeatures,
   SignupPolicies,
   SignupPlan,
+  ThemeMapping,
+  HeaderStyle,
+  TextRoleStyle,
+  TypographyConfig,
 } from '@/app/_lib/types';
 
 // =============================================================================
@@ -31,11 +35,48 @@ import {
  * Neutral blue theme that works well as a fallback
  */
 export const DEFAULT_BRANDING: Required<BrandingConfig> = {
-  primaryColor: '#3B82F6',      // Blue-500
-  secondaryColor: '#1E40AF',    // Blue-800
-  backgroundColor: '#F9FAFB',   // Gray-50
-  logo: '',                     // No logo by default
+  color1: '#3B82F6',      // Blue-500 (accent)
+  color2: '#1E40AF',      // Blue-800 (accent hover)
+  color3: '#F9FAFB',      // Gray-50 (page background)
+  color4: '#FFFFFF',      // White (card surface)
+  color5: '#111827',      // Gray-900 (body text)
+  logo: '',
   fontFamily: 'inter',
+};
+
+/**
+ * Default theme mapping — palette index per DerivedBrand slot
+ */
+export const DEFAULT_THEME_MAPPING: Required<ThemeMapping> = {
+  primary: 1,
+  primaryHover: 2,
+  background: 3,
+  card: 4,
+  text: 5,
+  header: 5,
+};
+
+/**
+ * Default header name/logo style
+ */
+export const DEFAULT_HEADER_STYLE: Required<HeaderStyle> = {
+  variant: 'pill',
+  size: 'sm',
+  bold: true,
+  italic: false,
+  textSize: 'sm',
+  textWeight: 'normal',
+};
+
+/**
+ * Default typography — size/weight per semantic text role
+ */
+export const DEFAULT_TYPOGRAPHY: Required<Record<keyof TypographyConfig, Required<TextRoleStyle>>> = {
+  sectionHeader: { size: 'base', weight: 'bold' },
+  pageTitle: { size: '2xl', weight: 'bold' },
+  body: { size: 'sm', weight: 'normal' },
+  label: { size: 'sm', weight: 'medium' },
+  caption: { size: 'xs', weight: 'normal' },
 };
 
 // =============================================================================
@@ -87,6 +128,10 @@ export const DEFAULT_SIGNUP_COPY: Required<SignupCopyConfig> = {
   submitButton: 'Complete Enrollment',
   successTitle: 'Welcome to the Team!',
   successMessage: 'Your membership is now active. Check your email for confirmation details.',
+  footerText: '',
+  footerEmail: '',
+  headerText: '',
+  headerLink: '',
 };
 
 /**
