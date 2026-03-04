@@ -35,6 +35,90 @@ export async function handleInboundMessage(
   const eventsEmitted: string[] = [];
 
   try {
+    // 0a. Check if contact has opted out (skip in test mode)
+    if (!params.testMode) {
+      const optOut = await prisma.optOutRecord.findUnique({
+        where: {
+          workspaceId_contactAddress: {
+            workspaceId: params.workspaceId,
+            contactAddress: params.contactAddress,
+          },
+        },
+      });
+      if (optOut) {
+        return {
+          success: false,
+          replyText: null,
+          conversationId: '',
+          isNewConversation: false,
+          status: ConversationStatus.COMPLETED,
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          error: 'contact_opted_out',
+          eventsEmitted: [],
+        };
+      }
+    }
+
+    // 0b. Check if inbound message is an opt-out keyword (skip in test mode)
+    if (!params.testMode) {
+      const optOutKeyword = isOptOutMessage(params.messageText);
+      if (optOutKeyword) {
+        // End any active conversation
+        const activeConvo = await prisma.conversation.findFirst({
+          where: {
+            workspaceId: params.workspaceId,
+            chatbotId: params.chatbotId,
+            contactAddress: params.contactAddress,
+            status: ConversationStatus.ACTIVE,
+          },
+          select: { id: true },
+        });
+
+        if (activeConvo) {
+          await prisma.conversation.update({
+            where: { id: activeConvo.id },
+            data: { status: ConversationStatus.COMPLETED, endedAt: new Date() },
+          });
+        }
+
+        // Create opt-out record
+        await prisma.optOutRecord.upsert({
+          where: {
+            workspaceId_contactAddress: {
+              workspaceId: params.workspaceId,
+              contactAddress: params.contactAddress,
+            },
+          },
+          update: { reason: optOutKeyword, source: 'chatbot', chatbotId: params.chatbotId, conversationId: activeConvo?.id || null },
+          create: {
+            workspaceId: params.workspaceId,
+            contactAddress: params.contactAddress,
+            reason: optOutKeyword,
+            source: 'chatbot',
+            chatbotId: params.chatbotId,
+            conversationId: activeConvo?.id || null,
+          },
+        });
+
+        await emitChatbotEvent(params.workspaceId, 'contact_opted_out', {
+          chatbotId: params.chatbotId,
+          conversationId: activeConvo?.id,
+          contactAddress: params.contactAddress,
+          keyword: optOutKeyword,
+        });
+
+        return {
+          success: true,
+          replyText: null,
+          conversationId: activeConvo?.id || '',
+          isNewConversation: false,
+          status: ConversationStatus.COMPLETED,
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          eventsEmitted: ['contact_opted_out'],
+        };
+      }
+    }
+
     // 1. Load chatbot config
     const chatbot = await loadChatbot(params.workspaceId, params.chatbotId);
     if (!chatbot) {
@@ -134,6 +218,43 @@ export async function handleInboundMessage(
         leadId: params.leadId,
       });
       eventsEmitted.push('conversation_started');
+
+      // 7b. Send initial message if configured
+      if (chatbot.initialMessage) {
+        let lead: { email: string; source: string | null; stage: string; properties: unknown } | null = null;
+        let workspaceName = '';
+
+        if (params.leadId) {
+          const leadRecord = await prisma.lead.findUnique({
+            where: { id: params.leadId },
+            select: { email: true, source: true, stage: true, properties: true },
+          });
+          if (leadRecord) lead = leadRecord;
+        }
+
+        const workspace = await prisma.workspace.findUnique({
+          where: { id: params.workspaceId },
+          select: { name: true },
+        });
+        workspaceName = workspace?.name || '';
+
+        const initialText = interpolateLeadVariables(chatbot.initialMessage, lead, workspaceName);
+
+        await prisma.conversationMessage.create({
+          data: {
+            conversationId: conversation.id,
+            role: 'ASSISTANT',
+            content: initialText,
+          },
+        });
+
+        if (!params.testMode) {
+          if (chatbot.responseDelaySeconds > 0) {
+            await new Promise((resolve) => setTimeout(resolve, chatbot.responseDelaySeconds * 1000));
+          }
+          await sendReply(params.workspaceId, chatbot, params.channelAddress, params.contactAddress, initialText);
+        }
+      }
     }
 
     // 8. Load conversation history
@@ -143,8 +264,22 @@ export async function handleInboundMessage(
       select: { role: true, content: true },
     });
 
-    // 9. Build AI messages (use prompt override in test mode if provided)
-    const systemPrompt = params.systemPromptOverride || chatbot.systemPrompt;
+    // 9. Load reference files and build augmented system prompt
+    const basePrompt = params.systemPromptOverride || chatbot.systemPrompt;
+    const refFiles = await prisma.chatbotFile.findMany({
+      where: { chatbotId: chatbot.id },
+      select: { filename: true, textContent: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    let systemPrompt = basePrompt;
+    if (refFiles.length > 0) {
+      const refBlock = refFiles
+        .map((f) => `## ${f.filename}\n${f.textContent}`)
+        .join('\n\n');
+      systemPrompt = `${basePrompt}\n\n--- Reference Documents ---\n\n${refBlock}`;
+    }
+
     const aiMessages: ChatMessage[] = [
       { role: 'developer', content: systemPrompt },
       ...history.map((msg) => ({
@@ -238,8 +373,15 @@ export async function handleInboundMessage(
       eventsEmitted.push('conversation_completed');
     }
 
-    // 14. Send reply via channel adapter (skip in test mode)
+    // 14. Apply response delay then send reply via channel adapter
+    const delaySkipped = params.testMode && chatbot.responseDelaySeconds > 0
+      ? chatbot.responseDelaySeconds
+      : undefined;
+
     if (replyText && !params.testMode) {
+      if (chatbot.responseDelaySeconds > 0) {
+        await new Promise((resolve) => setTimeout(resolve, chatbot.responseDelaySeconds * 1000));
+      }
       await sendReply(
         params.workspaceId,
         chatbot,
@@ -281,6 +423,7 @@ export async function handleInboundMessage(
       usage: completion.usage,
       eventsEmitted,
       latencyMs,
+      responseDelaySkipped: delaySkipped,
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown engine error';
@@ -319,12 +462,14 @@ async function loadChatbot(
     channelIntegration: chatbot.channelIntegration,
     aiIntegration: chatbot.aiIntegration,
     systemPrompt: chatbot.systemPrompt,
+    initialMessage: chatbot.initialMessage,
     modelOverride: chatbot.modelOverride,
     temperatureOverride: chatbot.temperatureOverride,
     maxTokensOverride: chatbot.maxTokensOverride,
     maxMessagesPerConversation: chatbot.maxMessagesPerConversation,
     maxTokensPerConversation: chatbot.maxTokensPerConversation,
     conversationTimeoutMinutes: chatbot.conversationTimeoutMinutes,
+    responseDelaySeconds: chatbot.responseDelaySeconds,
     fallbackMessage: chatbot.fallbackMessage,
     allowedEvents: (chatbot.allowedEvents as string[]) || [],
     active: chatbot.active,
@@ -448,6 +593,18 @@ async function sendReply(
   toAddress: string,
   body: string
 ): Promise<void> {
+  if (!chatbot.channelIntegration) {
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'chatbot_send_skipped',
+      workspaceId,
+      provider: 'chatbot',
+      success: true,
+      metadata: { chatbotId: chatbot.id, reason: 'no_channel_configured' },
+    });
+    return;
+  }
+
   const channel = chatbot.channelIntegration.toUpperCase();
 
   if (channel === 'TWILIO') {
@@ -493,6 +650,50 @@ async function emitChatbotEvent(
     { adapter: 'chatbot', operation: eventType },
     payload
   );
+}
+
+const OPT_OUT_KEYWORDS = ['STOP', 'UNSUBSCRIBE', 'CANCEL', 'QUIT', 'OPT OUT', 'END', 'STOP ALL'];
+
+function isOptOutMessage(text: string): string | false {
+  const normalized = text.trim().toUpperCase();
+  const matched = OPT_OUT_KEYWORDS.find((kw) => normalized === kw);
+  return matched || false;
+}
+
+/**
+ * Interpolate lead variables in a template string.
+ * Supports: {{firstName}}, {{lastName}}, {{email}}, {{phone}}, {{stage}},
+ * {{source}}, {{workspaceName}}, and {{properties.KEY}} for custom metadata.
+ */
+function interpolateLeadVariables(
+  template: string,
+  lead: { email: string; source: string | null; stage: string; properties: unknown } | null,
+  workspaceName: string
+): string {
+  const props = (lead?.properties && typeof lead.properties === 'object') ? lead.properties as Record<string, unknown> : {};
+
+  const firstName = String(props.firstName || props.first_name || lead?.email?.split('@')[0] || '');
+  const lastName = String(props.lastName || props.last_name || '');
+  const phone = String(props.phone || props.phoneNumber || props.phone_number || '');
+
+  const vars: Record<string, string> = {
+    firstName,
+    lastName,
+    email: lead?.email || '',
+    phone,
+    stage: lead?.stage || '',
+    source: lead?.source || '',
+    workspaceName,
+  };
+
+  return template.replace(/\{\{([\w.]+)\}\}/g, (_match, key: string) => {
+    if (key.startsWith('properties.')) {
+      const propKey = key.slice('properties.'.length);
+      const val = props[propKey];
+      return val != null ? String(val) : '';
+    }
+    return vars[key] ?? '';
+  });
 }
 
 function errorResponse(error: string, _correlationId: string): ChatbotResponse {

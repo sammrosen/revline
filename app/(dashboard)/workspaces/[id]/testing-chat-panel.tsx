@@ -49,6 +49,7 @@ interface ChatMessageData {
   promptTokens?: number;
   completionTokens?: number;
   latencyMs?: number;
+  responseDelaySkipped?: number;
   costEstimate?: CostEstimate;
   eventsEmitted?: string[];
   error?: string;
@@ -85,6 +86,7 @@ interface TestChatResponse {
   error?: string;
   eventsEmitted: string[];
   latencyMs?: number;
+  responseDelaySkipped?: number;
   costEstimate: CostEstimate;
   model: string;
 }
@@ -262,6 +264,7 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
         promptTokens: data.usage?.promptTokens,
         completionTokens: data.usage?.completionTokens,
         latencyMs: data.latencyMs,
+        responseDelaySkipped: data.responseDelaySkipped,
         costEstimate: data.costEstimate,
         eventsEmitted: data.eventsEmitted,
         error: data.error,
@@ -327,6 +330,7 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
         promptTokens: data.usage?.promptTokens,
         completionTokens: data.usage?.completionTokens,
         latencyMs: data.latencyMs,
+        responseDelaySkipped: data.responseDelaySkipped,
         costEstimate: data.costEstimate,
         eventsEmitted: data.eventsEmitted,
         error: data.error,
@@ -662,6 +666,12 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
                       <span className="text-[10px] text-zinc-500 flex items-center gap-0.5">
                         <Clock className="w-2.5 h-2.5" />
                         {msg.latencyMs}ms
+                      </span>
+                    )}
+                    {msg.responseDelaySkipped !== undefined && msg.responseDelaySkipped > 0 && (
+                      <span className="text-[10px] text-blue-400 flex items-center gap-0.5">
+                        <Clock className="w-2.5 h-2.5" />
+                        delay: {msg.responseDelaySkipped}s (skipped)
                       </span>
                     )}
                     {msg.eventsEmitted && msg.eventsEmitted.length > 0 && (

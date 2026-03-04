@@ -75,6 +75,7 @@ export async function POST(
     channelIntegration,
     aiIntegration,
     systemPrompt,
+    initialMessage,
     modelOverride,
     temperatureOverride,
     maxTokensOverride,
@@ -86,30 +87,17 @@ export async function POST(
     active,
   } = body;
 
-  if (!name || !channelType || !channelIntegration || !aiIntegration || !systemPrompt) {
+  if (!name || !aiIntegration || !systemPrompt) {
     return NextResponse.json(
-      { error: 'Missing required fields: name, channelType, channelIntegration, aiIntegration, systemPrompt' },
+      { error: 'Missing required fields: name, aiIntegration, systemPrompt' },
       { status: 400 }
     );
   }
 
-  // Validate that referenced integrations exist for this workspace
-  const [channelInt, aiInt] = await Promise.all([
-    prisma.workspaceIntegration.findFirst({
-      where: { workspaceId, integration: channelIntegration as IntegrationType },
-    }),
-    prisma.workspaceIntegration.findFirst({
-      where: { workspaceId, integration: aiIntegration as IntegrationType },
-    }),
-  ]);
-
-  if (!channelInt) {
-    return NextResponse.json(
-      { error: `Channel integration ${channelIntegration} not configured for this workspace` },
-      { status: 400 }
-    );
-  }
-
+  // Validate AI integration exists
+  const aiInt = await prisma.workspaceIntegration.findFirst({
+    where: { workspaceId, integration: aiIntegration as IntegrationType },
+  });
   if (!aiInt) {
     return NextResponse.json(
       { error: `AI integration ${aiIntegration} not configured for this workspace` },
@@ -117,15 +105,29 @@ export async function POST(
     );
   }
 
+  // Validate channel integration if provided
+  if (channelIntegration) {
+    const channelInt = await prisma.workspaceIntegration.findFirst({
+      where: { workspaceId, integration: channelIntegration as IntegrationType },
+    });
+    if (!channelInt) {
+      return NextResponse.json(
+        { error: `Channel integration ${channelIntegration} not configured for this workspace` },
+        { status: 400 }
+      );
+    }
+  }
+
   const chatbot = await prisma.chatbot.create({
     data: {
       workspaceId,
       name,
       description: description || null,
-      channelType,
-      channelIntegration,
+      channelType: channelType || null,
+      channelIntegration: channelIntegration || null,
       aiIntegration,
       systemPrompt,
+      initialMessage: initialMessage || null,
       modelOverride: modelOverride || null,
       temperatureOverride: temperatureOverride ?? null,
       maxTokensOverride: maxTokensOverride ?? null,

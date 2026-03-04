@@ -43,6 +43,8 @@ export interface ChatbotResponse {
   eventsEmitted: string[];
   /** AI response latency in milliseconds (only in test mode) */
   latencyMs?: number;
+  /** Response delay that would have been applied (only in test mode, seconds) */
+  responseDelaySkipped?: number;
 }
 
 export interface ConversationWithMessages {
@@ -72,16 +74,18 @@ export interface ConversationWithMessages {
 export interface ChatbotConfig {
   id: string;
   name: string;
-  channelType: string;
-  channelIntegration: string;
+  channelType: string | null;
+  channelIntegration: string | null;
   aiIntegration: string;
   systemPrompt: string;
+  initialMessage: string | null;
   modelOverride: string | null;
   temperatureOverride: number | null;
   maxTokensOverride: number | null;
   maxMessagesPerConversation: number;
   maxTokensPerConversation: number;
   conversationTimeoutMinutes: number;
+  responseDelaySeconds: number;
   fallbackMessage: string | null;
   allowedEvents: string[];
   active: boolean;

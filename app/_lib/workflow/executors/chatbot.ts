@@ -7,6 +7,7 @@
 
 import { handleInboundMessage } from '@/app/_lib/chatbot';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
+import { prisma } from '@/app/_lib/db';
 import { WorkflowContext, ActionResult, ActionExecutor } from '../types';
 
 /**
@@ -25,6 +26,20 @@ const routeToChatbot: ActionExecutor = {
     const chatbotId = params.chatbotId as string | undefined;
     if (!chatbotId) {
       return { success: false, error: 'Missing chatbotId parameter' };
+    }
+
+    const chatbot = await prisma.chatbot.findFirst({
+      where: { id: chatbotId, workspaceId: ctx.workspaceId },
+      select: { channelType: true, channelIntegration: true },
+    });
+    if (!chatbot) {
+      return { success: false, error: 'Chatbot not found' };
+    }
+    if (!chatbot.channelType || !chatbot.channelIntegration) {
+      return {
+        success: false,
+        error: 'Chatbot has no channel configured. Add a channel integration before using in workflows.',
+      };
     }
 
     const from = ctx.trigger.payload.from as string | undefined;

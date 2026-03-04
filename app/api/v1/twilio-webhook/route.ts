@@ -185,6 +185,27 @@ export async function POST(request: NextRequest) {
       success: true,
     });
 
+    // Check for opt-out before any chatbot/workflow processing
+    const optedOut = await prisma.optOutRecord.findUnique({
+      where: {
+        workspaceId_contactAddress: {
+          workspaceId: client.id,
+          contactAddress: payload.from,
+        },
+      },
+    });
+    if (optedOut) {
+      logStructured({
+        correlationId: registration.correlationId,
+        event: 'twilio_opted_out_contact',
+        workspaceId: client.id,
+        provider: 'twilio',
+        metadata: { from: payload.from, optOutReason: optedOut.reason },
+      });
+      await WebhookProcessor.markProcessed(registration.id);
+      return twimlResponse(200);
+    }
+
     // Check for active chatbot conversation before workflow trigger.
     // Subsequent messages in an active conversation go directly to the engine.
     const activeConversation = await prisma.conversation.findFirst({

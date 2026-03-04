@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Bot,
   ArrowLeft,
@@ -11,6 +11,9 @@ import {
   FileText,
   Settings,
   Loader2,
+  Upload,
+  Trash2,
+  Paperclip,
 } from 'lucide-react';
 
 interface ChatbotData {
@@ -19,14 +22,17 @@ interface ChatbotData {
   description: string;
   channelType: string;
   channelIntegration: string;
+  channelEnabled: boolean;
   aiIntegration: string;
   systemPrompt: string;
+  initialMessage: string;
   modelOverride: string;
   temperatureOverride: number | null;
   maxTokensOverride: number | null;
   maxMessagesPerConversation: number;
   maxTokensPerConversation: number;
   conversationTimeoutMinutes: number;
+  responseDelaySeconds: number;
   fallbackMessage: string;
   allowedEvents: string[];
   active: boolean;
@@ -35,6 +41,15 @@ interface ChatbotData {
 interface Integration {
   id: string;
   integration: string;
+}
+
+interface ChatbotFileData {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  charCount: number;
+  createdAt: string;
 }
 
 interface ChatbotEditorProps {
@@ -54,10 +69,21 @@ const CHANNEL_INTEGRATIONS: Record<string, string[]> = {
 
 const AI_INTEGRATIONS = ['OPENAI', 'ANTHROPIC'];
 
+const BASE_VARIABLES: { key: string; label: string }[] = [
+  { key: 'firstName', label: 'First Name' },
+  { key: 'lastName', label: 'Last Name' },
+  { key: 'email', label: 'Email' },
+  { key: 'phone', label: 'Phone' },
+  { key: 'stage', label: 'Lead Stage' },
+  { key: 'source', label: 'Lead Source' },
+  { key: 'workspaceName', label: 'Workspace Name' },
+];
+
 const AVAILABLE_EVENTS = [
   { value: 'conversation_started', label: 'Conversation Started' },
   { value: 'escalation_requested', label: 'Escalation Requested' },
   { value: 'conversation_completed', label: 'Conversation Completed' },
+  { value: 'contact_opted_out', label: 'Contact Opted Out' },
   { value: 'bot_event', label: 'Custom Bot Event' },
 ];
 
@@ -66,14 +92,17 @@ const DEFAULT_DATA: ChatbotData = {
   description: '',
   channelType: 'SMS',
   channelIntegration: 'TWILIO',
+  channelEnabled: false,
   aiIntegration: 'OPENAI',
   systemPrompt: '',
+  initialMessage: '',
   modelOverride: '',
   temperatureOverride: null,
   maxTokensOverride: null,
   maxMessagesPerConversation: 50,
   maxTokensPerConversation: 100000,
   conversationTimeoutMinutes: 1440,
+  responseDelaySeconds: 0,
   fallbackMessage: '',
   allowedEvents: ['conversation_started', 'escalation_requested', 'conversation_completed'],
   active: true,
@@ -85,8 +114,23 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [leadPropertySchema, setLeadPropertySchema] = useState<{ key: string; label: string }[]>([]);
+  const [files, setFiles] = useState<ChatbotFileData[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const initialMessageRef = useRef<HTMLTextAreaElement>(null);
+  const initialMessageWrapperRef = useRef<HTMLDivElement>(null);
+  const [autocomplete, setAutocomplete] = useState<{
+    open: boolean;
+    filter: string;
+    index: number;
+    triggerStart: number;
+  }>({ open: false, filter: '', index: 0, triggerStart: 0 });
 
-  const fetchIntegrations = useCallback(async () => {
+  const fetchWorkspaceData = useCallback(async () => {
     try {
       const res = await fetch(`/api/v1/workspaces/${workspaceId}`);
       if (res.ok) {
@@ -99,11 +143,42 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
             }))
           );
         }
+        if (Array.isArray(workspace.leadPropertySchema)) {
+          setLeadPropertySchema(
+            workspace.leadPropertySchema.map((p: { key: string; label: string }) => ({
+              key: p.key,
+              label: p.label,
+            }))
+          );
+        }
       }
     } catch (err) {
-      console.error('Failed to fetch integrations:', err);
+      console.error('Failed to fetch workspace:', err);
     }
   }, [workspaceId]);
+
+  const fetchModels = useCallback(async (provider: string) => {
+    const integration = integrations.find((i) => i.integration === provider);
+    if (!integration) {
+      setAvailableModels([]);
+      return;
+    }
+    const endpoint = provider === 'OPENAI' ? 'openai-models' : 'anthropic-models';
+    setFetchingModels(true);
+    try {
+      const res = await fetch(`/api/v1/integrations/${integration.id}/${endpoint}`);
+      if (res.ok) {
+        const { data: models } = await res.json();
+        setAvailableModels(models.map((m: { id: string }) => m.id));
+      } else {
+        setAvailableModels([]);
+      }
+    } catch {
+      setAvailableModels([]);
+    } finally {
+      setFetchingModels(false);
+    }
+  }, [integrations]);
 
   const fetchChatbot = useCallback(async () => {
     if (!chatbotId) return;
@@ -115,16 +190,19 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
           id: bot.id,
           name: bot.name,
           description: bot.description || '',
-          channelType: bot.channelType,
-          channelIntegration: bot.channelIntegration,
+          channelType: bot.channelType || 'SMS',
+          channelIntegration: bot.channelIntegration || 'TWILIO',
+          channelEnabled: !!bot.channelType && !!bot.channelIntegration,
           aiIntegration: bot.aiIntegration,
           systemPrompt: bot.systemPrompt,
+          initialMessage: bot.initialMessage || '',
           modelOverride: bot.modelOverride || '',
           temperatureOverride: bot.temperatureOverride,
           maxTokensOverride: bot.maxTokensOverride,
           maxMessagesPerConversation: bot.maxMessagesPerConversation,
           maxTokensPerConversation: bot.maxTokensPerConversation,
           conversationTimeoutMinutes: bot.conversationTimeoutMinutes,
+          responseDelaySeconds: bot.responseDelaySeconds ?? 0,
           fallbackMessage: bot.fallbackMessage || '',
           allowedEvents: bot.allowedEvents || [],
           active: bot.active,
@@ -138,10 +216,167 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
     }
   }, [workspaceId, chatbotId]);
 
+  const fetchFiles = useCallback(async () => {
+    if (!chatbotId) return;
+    try {
+      const res = await fetch(`/api/v1/workspaces/${workspaceId}/chatbots/${chatbotId}/files`);
+      if (res.ok) {
+        const { data: fileList } = await res.json();
+        setFiles(fileList || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch files:', err);
+    }
+  }, [workspaceId, chatbotId]);
+
+  const handleFileUpload = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0 || !chatbotId) return;
+    setFileError(null);
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', fileList[0]);
+      const res = await fetch(
+        `/api/v1/workspaces/${workspaceId}/chatbots/${chatbotId}/files`,
+        { method: 'POST', body: formData }
+      );
+      if (!res.ok) {
+        const errData = await res.json();
+        setFileError(errData.error || 'Upload failed');
+        return;
+      }
+      await fetchFiles();
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFileDelete = async (fileId: string) => {
+    if (!chatbotId) return;
+    try {
+      const res = await fetch(
+        `/api/v1/workspaces/${workspaceId}/chatbots/${chatbotId}/files/${fileId}`,
+        { method: 'DELETE' }
+      );
+      if (res.ok) {
+        setFiles((prev) => prev.filter((f) => f.id !== fileId));
+      }
+    } catch (err) {
+      console.error('Failed to delete file:', err);
+    }
+  };
+
   useEffect(() => {
-    fetchIntegrations();
+    fetchWorkspaceData();
     fetchChatbot();
-  }, [fetchIntegrations, fetchChatbot]);
+    fetchFiles();
+  }, [fetchWorkspaceData, fetchChatbot, fetchFiles]);
+
+  useEffect(() => {
+    if (integrations.length === 0) return;
+    const configuredAI = AI_INTEGRATIONS.filter((ai) =>
+      integrations.some((i) => i.integration === ai)
+    );
+    if (configuredAI.length > 0 && !configuredAI.includes(data.aiIntegration)) {
+      setData((prev) => ({ ...prev, aiIntegration: configuredAI[0], modelOverride: '' }));
+    }
+    if (data.aiIntegration) {
+      fetchModels(data.aiIntegration);
+    }
+  }, [integrations, data.aiIntegration, fetchModels]);
+
+  const insertVariable = (variable: string) => {
+    const textarea = initialMessageRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = data.initialMessage;
+    const tag = `{{${variable}}}`;
+    const newText = text.slice(0, start) + tag + text.slice(end);
+    setData({ ...data, initialMessage: newText });
+    setAutocomplete({ open: false, filter: '', index: 0, triggerStart: 0 });
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + tag.length, start + tag.length);
+    });
+  };
+
+  const completeAutocomplete = (variableKey: string) => {
+    const textarea = initialMessageRef.current;
+    if (!textarea) return;
+    const text = data.initialMessage;
+    const before = text.slice(0, autocomplete.triggerStart);
+    const after = text.slice(textarea.selectionStart);
+    const tag = `{{${variableKey}}}`;
+    const newText = before + tag + after;
+    setData({ ...data, initialMessage: newText });
+    setAutocomplete({ open: false, filter: '', index: 0, triggerStart: 0 });
+    const cursorPos = before.length + tag.length;
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(cursorPos, cursorPos);
+    });
+  };
+
+  const allVariables: { key: string; label: string }[] = [
+    ...BASE_VARIABLES,
+    ...leadPropertySchema.map((p) => ({
+      key: `properties.${p.key}`,
+      label: p.label,
+    })),
+  ];
+
+  const filteredVars = autocomplete.open
+    ? allVariables.filter((v) =>
+        v.key.toLowerCase().includes(autocomplete.filter.toLowerCase()) ||
+        v.label.toLowerCase().includes(autocomplete.filter.toLowerCase())
+      )
+    : [];
+
+  const handleInitialMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    const cursor = e.target.selectionStart;
+    setData({ ...data, initialMessage: value });
+
+    const textBefore = value.slice(0, cursor);
+    const triggerMatch = textBefore.match(/\{\{([^{}]*)$/);
+    if (triggerMatch) {
+      const filterText = triggerMatch[1];
+      const triggerStart = cursor - filterText.length - 2;
+      setAutocomplete({ open: true, filter: filterText, index: 0, triggerStart });
+    } else {
+      if (autocomplete.open) {
+        setAutocomplete({ open: false, filter: '', index: 0, triggerStart: 0 });
+      }
+    }
+  };
+
+  const handleInitialMessageKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!autocomplete.open || filteredVars.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setAutocomplete((prev) => ({
+        ...prev,
+        index: (prev.index + 1) % filteredVars.length,
+      }));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setAutocomplete((prev) => ({
+        ...prev,
+        index: (prev.index - 1 + filteredVars.length) % filteredVars.length,
+      }));
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      completeAutocomplete(filteredVars[autocomplete.index].key);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setAutocomplete({ open: false, filter: '', index: 0, triggerStart: 0 });
+    }
+  };
 
   const handleSave = async () => {
     if (!data.name.trim()) {
@@ -159,7 +394,11 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
     try {
       const payload = {
         ...data,
+        channelType: data.channelEnabled ? data.channelType : null,
+        channelIntegration: data.channelEnabled ? data.channelIntegration : null,
+        channelEnabled: undefined,
         modelOverride: data.modelOverride || null,
+        initialMessage: data.initialMessage || null,
         description: data.description || null,
         fallbackMessage: data.fallbackMessage || null,
       };
@@ -191,10 +430,6 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
   const hasChannelIntegration = integrations.some(
     (i) => i.integration === data.channelIntegration
   );
-  const hasAIIntegration = integrations.some(
-    (i) => i.integration === data.aiIntegration
-  );
-
   const availableChannelIntegrations = CHANNEL_INTEGRATIONS[data.channelType] || [];
   const availableAIIntegrations = AI_INTEGRATIONS.filter((ai) =>
     integrations.some((i) => i.integration === ai)
@@ -281,45 +516,64 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
         {/* Channel Configuration */}
         <Section icon={MessageCircle} title="Channel Configuration">
           <div className="space-y-3">
-            <Field label="Channel Type" required>
-              <select
-                value={data.channelType}
-                onChange={(e) => {
-                  const channelType = e.target.value;
-                  const available = CHANNEL_INTEGRATIONS[channelType] || [];
-                  setData({
-                    ...data,
-                    channelType,
-                    channelIntegration: available[0] || '',
-                  });
-                }}
-                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
-              >
-                {CHANNEL_TYPES.map((ct) => (
-                  <option key={ct.value} value={ct.value}>
-                    {ct.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Channel Integration" required>
-              <select
-                value={data.channelIntegration}
-                onChange={(e) => setData({ ...data, channelIntegration: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
-              >
-                {availableChannelIntegrations.map((ci) => (
-                  <option key={ci} value={ci}>
-                    {ci}
-                  </option>
-                ))}
-              </select>
-              {!hasChannelIntegration && data.channelIntegration && (
-                <p className="text-xs text-amber-400 mt-1">
-                  {data.channelIntegration} is not configured for this workspace. Add it in Integrations first.
-                </p>
-              )}
-            </Field>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={data.channelEnabled}
+                onChange={(e) => setData({ ...data, channelEnabled: e.target.checked })}
+                className="rounded border-zinc-700 bg-zinc-800 text-violet-500 focus:ring-violet-500"
+              />
+              <span className="text-zinc-300">Enable channel for production messaging</span>
+            </label>
+            {!data.channelEnabled && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded text-xs text-blue-400">
+                <MessageCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                No channel configured — this bot can only be used in the test playground. Add a channel to use in workflows.
+              </div>
+            )}
+            {data.channelEnabled && (
+              <>
+                <Field label="Channel Type" required>
+                  <select
+                    value={data.channelType}
+                    onChange={(e) => {
+                      const channelType = e.target.value;
+                      const available = CHANNEL_INTEGRATIONS[channelType] || [];
+                      setData({
+                        ...data,
+                        channelType,
+                        channelIntegration: available[0] || '',
+                      });
+                    }}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+                  >
+                    {CHANNEL_TYPES.map((ct) => (
+                      <option key={ct.value} value={ct.value}>
+                        {ct.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Channel Integration" required>
+                  <select
+                    value={data.channelIntegration}
+                    onChange={(e) => setData({ ...data, channelIntegration: e.target.value })}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+                  >
+                    {availableChannelIntegrations.map((ci) => (
+                      <option key={ci} value={ci}>
+                        {ci}
+                      </option>
+                    ))}
+                  </select>
+                  {!hasChannelIntegration && data.channelIntegration && (
+                    <p className="text-xs text-amber-400 mt-1">
+                      {data.channelIntegration} is not configured for this workspace. Add it in Integrations first.
+                    </p>
+                  )}
+                </Field>
+              </>
+            )}
           </div>
         </Section>
 
@@ -327,36 +581,46 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
         <Section icon={Sparkles} title="AI Configuration">
           <div className="space-y-3">
             <Field label="AI Provider" required>
+              {availableAIIntegrations.length > 0 ? (
+                <select
+                  value={data.aiIntegration}
+                  onChange={(e) => setData({ ...data, aiIntegration: e.target.value, modelOverride: '' })}
+                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+                >
+                  {availableAIIntegrations.map((ai) => (
+                    <option key={ai} value={ai}>
+                      {ai}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <>
+                  <select
+                    disabled
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-zinc-500 focus:outline-none cursor-not-allowed"
+                  >
+                    <option>No AI integrations configured</option>
+                  </select>
+                  <p className="text-xs text-amber-400 mt-1">
+                    Add an OpenAI or Anthropic integration in the Integrations tab first.
+                  </p>
+                </>
+              )}
+            </Field>
+            <Field label="Model" hint={fetchingModels ? 'Loading models...' : 'Select a model or leave as default'}>
               <select
-                value={data.aiIntegration}
-                onChange={(e) => setData({ ...data, aiIntegration: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+                value={data.modelOverride}
+                onChange={(e) => setData({ ...data, modelOverride: e.target.value })}
+                disabled={fetchingModels}
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none disabled:text-zinc-500"
               >
-                {AI_INTEGRATIONS.map((ai) => (
-                  <option key={ai} value={ai}>
-                    {ai}
+                <option value="">Integration default</option>
+                {availableModels.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
                   </option>
                 ))}
               </select>
-              {!hasAIIntegration && (
-                <p className="text-xs text-amber-400 mt-1">
-                  {data.aiIntegration} is not configured for this workspace. Add it in Integrations first.
-                </p>
-              )}
-              {availableAIIntegrations.length > 0 && !availableAIIntegrations.includes(data.aiIntegration) && (
-                <p className="text-xs text-zinc-500 mt-1">
-                  Available: {availableAIIntegrations.join(', ')}
-                </p>
-              )}
-            </Field>
-            <Field label="Model Override" hint="Leave blank to use integration default">
-              <input
-                type="text"
-                value={data.modelOverride}
-                onChange={(e) => setData({ ...data, modelOverride: e.target.value })}
-                placeholder={data.aiIntegration === 'ANTHROPIC' ? 'e.g., claude-sonnet-4-6' : 'e.g., gpt-4.1-mini'}
-                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder:text-zinc-600 focus:border-violet-500 focus:outline-none"
-              />
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Temperature" hint="0 = deterministic, higher = creative">
@@ -411,10 +675,144 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
           </div>
         </Section>
 
+        {/* Reference Files */}
+        {chatbotId && (
+          <Section icon={Paperclip} title={`Reference Files (${files.length}/5)`}>
+            <div className="space-y-3">
+              <p className="text-xs text-zinc-500">
+                Upload documents for the bot to reference on every message. Supports PDF, TXT, CSV, DOCX (max 2MB each).
+              </p>
+
+              {files.length > 0 && (
+                <div className="space-y-2">
+                  {files.map((f) => (
+                    <div
+                      key={f.id}
+                      className="flex items-center justify-between px-3 py-2 bg-zinc-800 border border-zinc-700 rounded"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="w-4 h-4 text-violet-400 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm text-white truncate">{f.filename}</p>
+                          <p className="text-[10px] text-zinc-500">
+                            {formatFileSize(f.sizeBytes)} &middot; {f.charCount.toLocaleString()} chars extracted
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleFileDelete(f.id)}
+                        className="p-1 text-zinc-500 hover:text-red-400 transition-colors shrink-0"
+                        title="Remove file"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {fileError && (
+                <p className="text-xs text-red-400">{fileError}</p>
+              )}
+
+              {files.length < 5 && (
+                <label
+                  className={`flex flex-col items-center gap-2 px-4 py-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                    uploading
+                      ? 'border-zinc-700 bg-zinc-800/50 cursor-wait'
+                      : 'border-zinc-700 hover:border-violet-500/50 hover:bg-violet-500/5'
+                  }`}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.txt,.csv,.docx,application/pdf,text/plain,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    onChange={(e) => handleFileUpload(e.target.files)}
+                    disabled={uploading}
+                    className="hidden"
+                  />
+                  {uploading ? (
+                    <Loader2 className="w-5 h-5 text-zinc-500 animate-spin" />
+                  ) : (
+                    <Upload className="w-5 h-5 text-zinc-500" />
+                  )}
+                  <span className="text-xs text-zinc-500">
+                    {uploading ? 'Extracting text...' : 'Click to upload a reference file'}
+                  </span>
+                </label>
+              )}
+            </div>
+          </Section>
+        )}
+
+        {/* Initial Message */}
+        <Section icon={MessageCircle} title="Initial Message">
+          <div className="space-y-2">
+            <div ref={initialMessageWrapperRef} className="relative">
+              <textarea
+                ref={initialMessageRef}
+                value={data.initialMessage}
+                onChange={handleInitialMessageChange}
+                onKeyDown={handleInitialMessageKeyDown}
+                onBlur={() => setTimeout(() => setAutocomplete((prev) => ({ ...prev, open: false })), 150)}
+                placeholder="Hey {{firstName}}! Thanks for your interest in {{workspaceName}}. What questions can I help with?"
+                rows={3}
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder:text-zinc-600 focus:border-violet-500 focus:outline-none resize-y font-mono"
+              />
+              {autocomplete.open && filteredVars.length > 0 && (
+                <div className="absolute z-50 left-0 right-0 mt-1 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden">
+                  {filteredVars.map((v, i) => (
+                    <button
+                      key={v.key}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        completeAutocomplete(v.key);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-sm font-mono flex items-center justify-between transition-colors ${
+                        i === autocomplete.index
+                          ? 'bg-violet-600/30 text-violet-300'
+                          : 'text-zinc-300 hover:bg-zinc-800'
+                      }`}
+                    >
+                      <span>{`{{${v.key}}}`}</span>
+                      <span className="text-[10px] text-zinc-500 font-sans">
+                        {v.label}
+                      </span>
+                    </button>
+                  ))}
+                  <div className="px-3 py-1.5 border-t border-zinc-800 text-[10px] text-zinc-600 flex gap-3">
+                    <span><kbd className="px-1 bg-zinc-800 rounded">↑↓</kbd> navigate</span>
+                    <span><kbd className="px-1 bg-zinc-800 rounded">Enter</kbd> select</span>
+                    <span><kbd className="px-1 bg-zinc-800 rounded">Esc</kbd> dismiss</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-zinc-600">
+              Sent automatically when a new conversation starts. Leave blank to skip. Type <code className="text-violet-400">{'{{'}</code> for variables:
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {allVariables.map((v) => (
+                <button
+                  key={v.key}
+                  type="button"
+                  onClick={() => insertVariable(v.key)}
+                  className="text-[10px] px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-violet-400 hover:bg-violet-500/20 hover:border-violet-500/40 transition-colors cursor-pointer"
+                  title={v.label}
+                >
+                  {`{{${v.key}}}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Section>
+
         {/* Guardrails */}
         <Section icon={Shield} title="Guardrails">
           <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <Field label="Max Messages" hint="Per conversation">
                 <input
                   type="number"
@@ -454,6 +852,21 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
                     })
                   }
                   min={5}
+                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+                />
+              </Field>
+              <Field label="Reply Delay" hint="Seconds before responding">
+                <input
+                  type="number"
+                  value={data.responseDelaySeconds}
+                  onChange={(e) =>
+                    setData({
+                      ...data,
+                      responseDelaySeconds: parseInt(e.target.value, 10) || 0,
+                    })
+                  }
+                  min={0}
+                  max={30}
                   className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
                 />
               </Field>
@@ -503,13 +916,19 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4">
           <h3 className="text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Summary</h3>
           <div className="grid grid-cols-2 gap-2 text-xs">
-            <SummaryRow label="Channel" value={`${data.channelType} via ${data.channelIntegration}`} />
+            <SummaryRow label="Channel" value={data.channelEnabled ? `${data.channelType} via ${data.channelIntegration}` : 'Not configured (test only)'} />
             <SummaryRow label="AI Provider" value={data.aiIntegration} />
             <SummaryRow label="Model" value={data.modelOverride || '(integration default)'} />
+            <SummaryRow label="Ref Files" value={`${files.length} file${files.length !== 1 ? 's' : ''}`} />
             <SummaryRow label="Max Messages" value={String(data.maxMessagesPerConversation)} />
             <SummaryRow label="Timeout" value={`${data.conversationTimeoutMinutes}min`} />
             <SummaryRow label="Status" value={data.active ? 'Active' : 'Inactive'} />
           </div>
+          <ContextBudget
+            systemPromptChars={data.systemPrompt.length}
+            initialMessageChars={data.initialMessage.length}
+            fileChars={files.reduce((sum, f) => sum + f.charCount, 0)}
+          />
         </div>
       </div>
     </div>
@@ -564,6 +983,53 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between py-1">
       <span className="text-zinc-500">{label}</span>
       <span className="text-zinc-300 font-mono">{value}</span>
+    </div>
+  );
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const CONTEXT_WINDOW = 128_000;
+
+function ContextBudget({
+  systemPromptChars,
+  initialMessageChars,
+  fileChars,
+}: {
+  systemPromptChars: number;
+  initialMessageChars: number;
+  fileChars: number;
+}) {
+  const totalChars = systemPromptChars + initialMessageChars + fileChars;
+  const estimatedTokens = Math.ceil(totalChars / 4);
+  const pct = Math.min((estimatedTokens / CONTEXT_WINDOW) * 100, 100);
+
+  const color =
+    pct > 75 ? 'bg-red-500' : pct > 50 ? 'bg-amber-500' : 'bg-violet-500';
+
+  if (totalChars === 0) return null;
+
+  return (
+    <div className="mt-3 pt-3 border-t border-zinc-800">
+      <div className="flex items-center justify-between text-[10px] text-zinc-500 mb-1">
+        <span>Context budget (prompt + files)</span>
+        <span>~{estimatedTokens.toLocaleString()} / {(CONTEXT_WINDOW).toLocaleString()} tokens</span>
+      </div>
+      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${color}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {pct > 75 && (
+        <p className="text-[10px] text-amber-400 mt-1">
+          High context usage — consider trimming reference files to leave room for conversation history.
+        </p>
+      )}
     </div>
   );
 }

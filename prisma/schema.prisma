@@ -103,6 +103,7 @@ model Workspace {
   pendingBookings    PendingBooking[]
   chatbots           Chatbot[]
   conversations      Conversation[]
+  optOutRecords      OptOutRecord[]
 
   @@index([organizationId])
   @@map("workspaces")
@@ -494,15 +495,16 @@ model Chatbot {
   name        String
   description String?
 
-  // Channel config -- which messaging integration to reply through
-  channelType        String @map("channel_type")        // "SMS" (extensible: "WHATSAPP", "WEB_CHAT")
-  channelIntegration String @map("channel_integration")  // IntegrationType value: "TWILIO"
+  // Channel config -- optional; only required for production SMS delivery
+  channelType        String? @map("channel_type")        // "SMS" (extensible: "WHATSAPP", "WEB_CHAT")
+  channelIntegration String? @map("channel_integration")  // IntegrationType value: "TWILIO"
 
   // AI config -- which AI integration to use
   aiIntegration String @map("ai_integration") // IntegrationType value: "OPENAI" or "ANTHROPIC"
 
   // Prompt & behavior
   systemPrompt        String  @map("system_prompt") @db.Text
+  initialMessage      String? @map("initial_message") @db.Text
   modelOverride       String? @map("model_override")
   temperatureOverride Float?  @map("temperature_override")
   maxTokensOverride   Int?    @map("max_tokens_override")
@@ -511,6 +513,7 @@ model Chatbot {
   maxMessagesPerConversation Int     @default(50)   @map("max_messages_per_conversation")
   maxTokensPerConversation   Int     @default(100000) @map("max_tokens_per_conversation")
   conversationTimeoutMinutes Int     @default(1440) @map("conversation_timeout_minutes")
+  responseDelaySeconds       Int     @default(0)    @map("response_delay_seconds")
   fallbackMessage            String? @map("fallback_message")
 
   // Allowed event emissions (JSON array of event type strings the bot can emit)
@@ -522,9 +525,25 @@ model Chatbot {
 
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   conversations Conversation[]
+  files         ChatbotFile[]
 
   @@index([workspaceId, active])
   @@map("chatbots")
+}
+
+model ChatbotFile {
+  id          String   @id @default(uuid())
+  chatbotId   String   @map("chatbot_id")
+  filename    String
+  mimeType    String   @map("mime_type")
+  sizeBytes   Int      @map("size_bytes")
+  textContent String   @map("text_content") @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  chatbot Chatbot @relation(fields: [chatbotId], references: [id], onDelete: Cascade)
+
+  @@index([chatbotId])
+  @@map("chatbot_files")
 }
 
 model Conversation {
@@ -590,4 +609,21 @@ enum MessageRole {
   USER
   ASSISTANT
   SYSTEM
+}
+
+model OptOutRecord {
+  id             String  @id @default(uuid())
+  workspaceId    String  @map("workspace_id")
+  contactAddress String  @map("contact_address")
+  reason         String  // Keyword that triggered opt-out: "STOP", "UNSUBSCRIBE", etc.
+  source         String  @default("chatbot") // "chatbot", "manual", "twilio_webhook"
+  chatbotId      String? @map("chatbot_id")
+  conversationId String? @map("conversation_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, contactAddress])
+  @@index([workspaceId])
+  @@map("opt_out_records")
 }

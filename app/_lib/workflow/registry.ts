@@ -667,6 +667,17 @@ export const CHATBOT_ADAPTER: AdapterDefinition = {
         leadId: z.string().optional(),
       }),
     },
+    contact_opted_out: {
+      name: 'contact_opted_out',
+      label: 'Contact Opted Out',
+      description: 'Fires when a contact sends STOP/UNSUBSCRIBE and opts out of messaging',
+      payloadSchema: z.object({
+        chatbotId: z.string(),
+        contactAddress: z.string(),
+        keyword: z.string(),
+        conversationId: z.string().optional(),
+      }),
+    },
     bot_event: {
       name: 'bot_event',
       label: 'Bot Event',

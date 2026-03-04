@@ -88,7 +88,8 @@ export async function PATCH(
     'name', 'description', 'channelType', 'channelIntegration',
     'aiIntegration', 'systemPrompt', 'modelOverride', 'temperatureOverride',
     'maxTokensOverride', 'maxMessagesPerConversation', 'maxTokensPerConversation',
-    'conversationTimeoutMinutes', 'fallbackMessage', 'allowedEvents', 'active',
+    'conversationTimeoutMinutes', 'responseDelaySeconds', 'fallbackMessage',
+    'allowedEvents', 'active', 'initialMessage',
   ];
 
   for (const field of allowedFields) {
@@ -97,8 +98,8 @@ export async function PATCH(
     }
   }
 
-  // Validate integration references if changed
-  if (updateData.channelIntegration) {
+  // Validate integration references if changed (allow null to clear)
+  if (updateData.channelIntegration && updateData.channelIntegration !== null) {
     const channelInt = await prisma.workspaceIntegration.findFirst({
       where: { workspaceId, integration: updateData.channelIntegration as IntegrationType },
     });

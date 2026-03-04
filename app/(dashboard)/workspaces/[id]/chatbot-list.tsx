@@ -8,8 +8,8 @@ interface ChatbotSummary {
   id: string;
   name: string;
   description: string | null;
-  channelType: string;
-  channelIntegration: string;
+  channelType: string | null;
+  channelIntegration: string | null;
   aiIntegration: string;
   active: boolean;
   conversationCount: number;
@@ -177,7 +177,9 @@ export function ChatbotList({ workspaceId }: ChatbotListProps) {
               <div className="flex items-center gap-3 text-[11px] text-zinc-500">
                 <span className="flex items-center gap-1">
                   <MessageCircle className="w-3 h-3" />
-                  {bot.channelType} via {bot.channelIntegration}
+                  {bot.channelType && bot.channelIntegration
+                    ? `${bot.channelType} via ${bot.channelIntegration}`
+                    : 'Test only'}
                 </span>
                 <span className="flex items-center gap-1">
                   <Sparkles className="w-3 h-3" />
