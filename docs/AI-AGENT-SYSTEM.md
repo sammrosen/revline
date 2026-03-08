@@ -1,8 +1,8 @@
 # AI Agent System
 
-> **Last Updated:** March 4, 2026
-> **Status:** Core System Complete, Feature Expansion In Progress
-> **Phases:** Twilio Adapter, OpenAI Adapter, Anthropic Adapter, Agent Engine, Test Suite
+> **Last Updated:** March 8, 2026
+> **Status:** Core System Complete, P1 Features Complete, Unified Test Panel Live
+> **Phases:** Twilio Adapter, OpenAI Adapter, Anthropic Adapter, Agent Engine, Test Suite, P1 Features, Standards Enforcement, Unified Test Panel
 
 ## Executive Summary
 
@@ -448,15 +448,192 @@ Architecturally significant — requires a scheduler/cron mechanism:
 
 ---
 
+---
+
+## 3/8/2026 — Branch Changelog (adapter/sms)
+
+Everything built since the 3/4 audit, in chronological order.
+
+### 1. Full Rename: Chatbot → Agent
+
+All user-facing and codebase references renamed from "chatbot" to "agent" across the entire system:
+
+- **Prisma schema:** Models renamed (`Chatbot` → `Agent`, field `chatbotId` → `agentId`), database tables remapped
+- **TypeScript types:** `ChatbotConfig` → `AgentConfig`, `ChatbotResponse` → `AgentResponse`, etc.
+- **File/directory names:** `app/_lib/chatbot/` → `app/_lib/agent/`
+- **API routes:** `/chatbots/` → `/agents/`
+- **Workflow identifiers:** `CHATBOT_ADAPTER` → `AGENT_ADAPTER`, trigger/action names updated
+- **Event strings:** `EventSystem.CHATBOT` → `EventSystem.AGENT`
+- **UI components:** Tab labels, editor titles, sidebar nav
+- **Documentation:** All docs updated
+
+### 2. P1 Features — Core Polish
+
+All P1 roadmap items from the 3/4 audit implemented:
+
+**Response delay** (`responseDelaySeconds` on Agent model):
+- Configurable 0-60 second delay before bot replies
+- Engine applies delay before `sendReply()`, skipped in test mode
+- Returned as `responseDelaySkipped` in test responses for visibility
+
+**Initial message** (`initialMessage` on Agent model):
+- Dedicated first-message field with lead variable interpolation (`{{name}}`, `{{email}}`, etc.)
+- Sent when `initiateConversation()` creates a new conversation
+- UI provides variable autocomplete dropdown in the editor
+
+**Opt-out handling:**
+- `OptOutRecord` model in Prisma (workspaceId, contactAddress, reason, source, agentId, conversationId)
+- Engine detects STOP/UNSUBSCRIBE/CANCEL keywords via `isOptOutMessage()`
+- Creates opt-out record, marks conversation COMPLETED, blocks future messages
+- Trigger `contact_opted_out` fires into workflow system
+
+**FAQ override layer** (`faqOverrides` JSON on Agent model):
+- Array of `{ patterns: string[], response: string }` entries
+- Checked before AI call via `matchFaq()` — pattern matches bypass AI entirely
+- Configurable in agent editor UI
+
+**Rate limiting per lead** (`rateLimitPerHour` on Agent model):
+- Counts messages from a contact in the last hour
+- Returns rate limit error when exceeded
+- Event `agent_rate_limited` emitted
+
+**Reference file context:**
+- `AgentFile` model stores uploaded reference documents
+- `file-extract.ts` extracts text from TXT, CSV, PDF (via `pdf-parse`), DOCX (via `mammoth`)
+- Extracted text prepended to system prompt on every AI call
+- File upload/delete API routes, max 50K chars per file
+- Upload UI in agent editor
+
+**Channel config made optional:**
+- Channel fields (`channelType`, `channelIntegration`) nullable on Agent model
+- Agents can be created and tested without any channel configured
+- Channel only validated when used in production workflows
+
+### 3. Proactive Outreach Architecture
+
+New `initiateConversation()` function in the engine for agent-initiated contact:
+
+- **Channel-agnostic "from" address:** `channelAddress` field on Agent model stores the outbound address (phone number, email, etc.)
+- **Contact address resolution:** `CHANNEL_ADAPTER_REGISTRY` entries include `contactField` (e.g., `phone` for Twilio) to look up the lead's address from their properties
+- **Dual-mode executor:** `route_to_agent` workflow action supports two modes:
+  - **Reactive:** Trigger has `body` + `from` (inbound SMS) → `handleInboundMessage()`
+  - **Proactive:** Trigger has no `body` (e.g., `new_member` event) → `initiateConversation()` with agent's initial message
+- `getContactFieldForChannel()` helper in adapter registry
+
+### 4. Standards Enforcement Audit
+
+Full audit against `docs/STANDARDS.md` with systematic fixes:
+
+**Adapter registry pattern** (`adapter-registry.ts`):
+- `AI_ADAPTER_REGISTRY` and `CHANNEL_ADAPTER_REGISTRY` centralize all provider resolution
+- Engine uses `resolveAI()` / `resolveChannel()` — zero hardcoded provider logic
+- New providers added via registry entries, not engine changes
+
+**Structured logging:**
+- All `console.error` in agent code replaced with `logStructured()` from `app/_lib/reliability`
+- Events: `agent_rate_limited`, `agent_ai_failure`, `agent_escalation_notification_failed`, `agent_turn_complete`, `agent_engine_error`, `agent_send_skipped`, etc.
+
+**API standardization:**
+- All 8 agent API routes rewritten to use Zod input validation + `ApiResponse` helpers
+- `test-action/route.ts` rewritten from raw `NextResponse.json` to `ApiResponse` + Zod + `logStructured`
+- `test-action-direct/route.ts` same treatment
+
+**Workspace isolation hardening:**
+- Added `workspaceId` to `conversation.updateMany` in DELETE agent route
+- All conversation queries double-scoped (agentId + workspaceId)
+
+**Error handling:**
+- `file-extract.ts` wrapped PDF/DOCX extraction in try/catch with structured errors
+- `conversations/route.ts` query params validated with Zod (`limit`, `offset`, `status`)
+
+### 5. Workflow Tester (Unified Triggers + Actions)
+
+Replaced the basic "Trigger Simulator" in the chat test panel with a comprehensive Workflow Tester:
+
+**Triggers mode:**
+- Dropdown of all registered triggers (ABC Ignite, RevLine, Agent, etc.)
+- Dynamic form fields rendered from `testFields` definitions in the registry
+- ABC Ignite `new_member` trigger has full test fields with defaults (email, name, phone, barcode, member status, join status)
+- "Fill Defaults" button resets all fields to pre-configured test data
+- Calls `POST /test-action` which fires `emitTrigger()` and returns workflow execution results
+
+**Actions mode:**
+- Dropdown of all registered actions with `testFields` (RevLine create_lead, update_lead_stage, emit_event, etc.)
+- Dynamic form rendering matching trigger mode
+- Calls `POST /test-action-direct` which runs a single action executor directly
+
+**Registry enhancements:**
+- `testFields` added to ABC Ignite `new_member`, all RevLine actions, Agent `route_to_agent`, Twilio `send_sms`, Resend `send_email`
+- New `getActionsForUI()` function mirrors `getTriggersForUI()`
+
+### 6. Test Flow — isTest Threading
+
+Fixed workflow triggers failing in test mode because agent required a channel:
+
+- Added `isTest?: boolean` to `WorkflowContext` type
+- Added `options?: { isTest?: boolean }` parameter to `emitTrigger()`
+- Both `test-action` and `test-action-direct` routes set `isTest: true`
+- Agent executor passes `testMode: ctx.isTest` to both `handleInboundMessage` and `initiateConversation`
+- Reactive mode channel check skipped when `ctx.isTest` is true
+- Test-triggered conversations stored with `isTest: true` in DB, visible in chat panel history
+
+### 7. Unified Test Chat Panel
+
+Made the chat panel a true messenger that can continue any conversation:
+
+- Added `conversationId?: string` to `InboundMessageParams`
+- `findOrCreateConversation()` checks for `conversationId` first (direct lookup by ID), falls through to address-based lookup if not provided
+- `TestChatSchema` accepts optional `conversationId` (UUID)
+- `sendMessage()` in UI includes `conversationId` when set (loaded from history)
+- Chat panel auto-refreshes history and opens the drawer after firing workflow triggers/actions
+
+**Result:** Load a workflow-initiated conversation from history → type a message → the engine continues that exact conversation. Direct chat still works as before (no `conversationId` = address-based lookup).
+
+### 8. New Files Added Since 3/4
+
+| File | Purpose |
+|------|---------|
+| `app/_lib/agent/adapter-registry.ts` | AI + channel adapter registries |
+| `app/_lib/agent/schemas.ts` | Zod validation schemas for all agent APIs |
+| `app/_lib/agent/escalation.ts` | Escalation email notifications |
+| `app/_lib/agent/file-extract.ts` | PDF/DOCX/TXT text extraction |
+| `app/api/v1/workspaces/[id]/agents/[agentId]/conversations/[conversationId]/route.ts` | Pause/resume conversation |
+| `app/api/v1/workspaces/[id]/agents/[agentId]/files/route.ts` | Upload/list agent files |
+| `app/api/v1/workspaces/[id]/agents/[agentId]/files/[fileId]/route.ts` | Delete agent file |
+| `app/api/v1/workspaces/[id]/test-action-direct/route.ts` | Direct action executor for testing |
+
+### 9. Updated Roadmap Status
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Channel config optional | **Done** | Nullable fields, validated at workflow time |
+| Response delay | **Done** | `responseDelaySeconds`, skipped in test mode |
+| Initial message | **Done** | Lead variable interpolation, sent on proactive outreach |
+| Opt-out handling | **Done** | STOP detection, OptOutRecord, workflow trigger |
+| FAQ override layer | **Done** | Pattern matching before AI, configurable in editor |
+| Rate limiting per lead | **Done** | `rateLimitPerHour`, per-contact throttling |
+| Reference file context | **Done** | Upload + extract + prepend to system prompt |
+| Bot pause / human takeover | **Partial** | `PAUSED` status + `pausedAt`/`pausedBy` fields exist, API route for pause/resume, `autoResumeMinutes` on agent. Dashboard conversation viewer not yet built. |
+| Escalation delivery | **Partial** | Email notification to workspace owners via `escalation.ts`. Conversation summary not yet generated. |
+| Proactive outreach | **Done** | `initiateConversation()`, dual-mode executor, channel-agnostic contact resolution |
+| Workflow tester | **Done** | Unified triggers + actions in chat panel, dynamic test fields |
+| Unified test chat | **Done** | `conversationId` threading, continue any conversation |
+
+**Remaining P2 items:** Production conversation viewer UI, handoff summary generation, conversation analytics/dropoff charts, usage dashboard, billing hooks, follow-up sequencing (scheduler needed).
+
+---
+
 ## Standards Compliance
 
-Audited against `docs/STANDARDS.md` and `docs/workflows/PRE-PUSH.md`:
+Audited against `docs/STANDARDS.md` and `docs/workflows/PRE-PUSH.md` (re-audited 3/8/2026):
 
-- **Abstraction First:** All external calls through adapter layer
-- **Workspace Isolation:** All queries scoped by workspaceId
-- **Event-Driven Debugging:** Events emitted for all state changes
-- **Fail-Safe Defaults:** Fallback messages on AI failure, graceful error handling
-- **TypeScript:** No `any` types, explicit interfaces
-- **Authentication:** All routes verify session + workspace access
-- **No secrets in logs:** Verified across all files
-- **Input validation:** Request bodies validated before processing
+- **Abstraction First:** All AI/channel calls through adapter registry — `resolveAI()`, `resolveChannel()`. Zero hardcoded provider logic in engine.
+- **Workspace Isolation:** All queries double-scoped (workspaceId + agentId). DELETE route includes workspaceId in updateMany.
+- **Event-Driven Debugging:** All errors use `logStructured()`. No `console.error` in agent system code.
+- **Fail-Safe Defaults:** Fallback messages on AI failure, graceful error handling, structured try/catch in file extraction.
+- **Input Validation:** All API routes use Zod schemas. Query params validated. `TestChatSchema`, `CreateAgentSchema`, `UpdateAgentSchema`, `TestActionSchema`, `TestActionDirectSchema`, `ConversationListQuery`.
+- **API Response:** All routes use `ApiResponse` helpers with security headers. No raw `NextResponse.json`.
+- **TypeScript:** 0 errors. No `any` types. Explicit interfaces for all public APIs.
+- **ESLint:** 0 errors. 33 pre-existing warnings (all outside agent system).
+- **Authentication:** All routes verify session + workspace access via `getUserIdFromHeaders()` + `getWorkspaceAccess()`.
+- **No secrets in logs:** Verified across all agent files.
