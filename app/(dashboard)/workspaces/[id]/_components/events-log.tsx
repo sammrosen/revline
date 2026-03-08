@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Loader2, ChevronDown, Filter } from 'lucide-react';
 
 // =============================================================================
@@ -15,6 +15,17 @@ interface EventItem {
   errorMessage: string | null;
   createdAt: string;
   leadId?: string | null;
+}
+
+interface GroupedEvent {
+  key: string;
+  system: string;
+  eventType: string;
+  success: boolean;
+  errorMessage: string | null;
+  count: number;
+  latestAt: string;
+  earliestAt: string;
 }
 
 const EVENT_SYSTEMS = [
@@ -45,6 +56,53 @@ function formatDate(date: string | Date | null) {
     minute: '2-digit',
     hour12: true,
   }).format(new Date(date));
+}
+
+const TARGET_ROWS = 50;
+const MAX_RAW_EVENTS = 500;
+
+function groupConsecutiveEvents(events: EventItem[]): GroupedEvent[] {
+  if (events.length === 0) return [];
+
+  const groups: GroupedEvent[] = [];
+  let current: GroupedEvent = {
+    key: events[0].id,
+    system: events[0].system,
+    eventType: events[0].eventType,
+    success: events[0].success,
+    errorMessage: events[0].errorMessage,
+    count: 1,
+    latestAt: events[0].createdAt,
+    earliestAt: events[0].createdAt,
+  };
+
+  for (let i = 1; i < events.length; i++) {
+    const event = events[i];
+    if (
+      event.system === current.system &&
+      event.eventType === current.eventType &&
+      event.success === current.success &&
+      event.errorMessage === current.errorMessage
+    ) {
+      current.count++;
+      current.earliestAt = event.createdAt;
+    } else {
+      groups.push(current);
+      current = {
+        key: event.id,
+        system: event.system,
+        eventType: event.eventType,
+        success: event.success,
+        errorMessage: event.errorMessage,
+        count: 1,
+        latestAt: event.createdAt,
+        earliestAt: event.createdAt,
+      };
+    }
+  }
+  groups.push(current);
+
+  return groups;
 }
 
 // =============================================================================
@@ -101,10 +159,25 @@ export function EventsLog({ workspaceId }: EventsLogProps) {
     }
   }, [workspaceId, systemFilter]);
 
+  const grouped = useMemo(() => groupConsecutiveEvents(events), [events]);
+
   // Fetch on mount and when filter changes
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
+
+  // Auto-fetch until we have enough grouped rows to fill the page
+  useEffect(() => {
+    if (
+      !loading &&
+      !loadingMore &&
+      nextCursor &&
+      grouped.length < TARGET_ROWS &&
+      events.length < MAX_RAW_EVENTS
+    ) {
+      fetchEvents(nextCursor, true);
+    }
+  }, [loading, loadingMore, nextCursor, grouped.length, events.length, fetchEvents]);
 
   const handleLoadMore = () => {
     if (nextCursor && !loadingMore) {
@@ -120,7 +193,7 @@ export function EventsLog({ workspaceId }: EventsLogProps) {
           Events
           {!loading && (
             <span className="text-zinc-500 font-normal text-sm ml-2">
-              {events.length} of {total.toLocaleString()}
+              {grouped.length} of {total.toLocaleString()}
             </span>
           )}
         </h2>
@@ -170,38 +243,51 @@ export function EventsLog({ workspaceId }: EventsLogProps) {
                     <Loader2 className="w-5 h-5 text-zinc-500 animate-spin mx-auto" />
                   </td>
                 </tr>
-              ) : events.length === 0 ? (
+              ) : grouped.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
                     {systemFilter ? `No events for ${formatSystemLabel(systemFilter)}` : 'No events yet'}
                   </td>
                 </tr>
               ) : (
-                events.map((event) => (
+                grouped.map((group) => (
                   <tr
-                    key={event.id}
+                    key={group.key}
                     className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50"
                   >
                     <td className="px-4 py-2 text-zinc-400 whitespace-nowrap">
-                      {formatDate(event.createdAt)}
+                      {group.count > 1 ? (
+                        <span>{formatDate(group.earliestAt)} — {formatDate(group.latestAt)}</span>
+                      ) : (
+                        formatDate(group.latestAt)
+                      )}
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
                       <span className={`font-mono text-xs px-1.5 py-0.5 rounded ${
-                        getSystemColor(event.system)
+                        getSystemColor(group.system)
                       }`}>
-                        {event.system}
+                        {group.system}
                       </span>
                     </td>
-                    <td className="px-4 py-2 whitespace-nowrap">{event.eventType}</td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5">
+                        {group.eventType}
+                        {group.count > 1 && (
+                          <span className="text-[10px] font-medium text-zinc-400 bg-zinc-800 border border-zinc-700 rounded-full px-1.5 py-px">
+                            ×{group.count}
+                          </span>
+                        )}
+                      </span>
+                    </td>
                     <td className="px-4 py-2">
-                      {event.success ? (
+                      {group.success ? (
                         <span className="text-green-400">✓</span>
                       ) : (
                         <span className="text-red-400">✗</span>
                       )}
                     </td>
                     <td className="px-4 py-2 text-red-400 text-xs truncate max-w-xs">
-                      {event.errorMessage || '—'}
+                      {group.errorMessage || '—'}
                     </td>
                   </tr>
                 ))
@@ -224,7 +310,7 @@ export function EventsLog({ workspaceId }: EventsLogProps) {
                   Loading...
                 </>
               ) : (
-                `Load More (${events.length} of ${total.toLocaleString()})`
+                `Load More (${grouped.length} of ${total.toLocaleString()})`
               )}
             </button>
           </div>

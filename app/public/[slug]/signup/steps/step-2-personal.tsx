@@ -9,7 +9,7 @@
  * - SMS consent checkbox
  */
 
-import type { SignupFormState, DerivedBrand } from '../client';
+import type { SignupFormState, DerivedBrand, TextClasses } from '../client';
 import type { ResolvedSignupCopy } from '@/app/_lib/config';
 
 interface PersonalInfoStepProps {
@@ -18,6 +18,7 @@ interface PersonalInfoStepProps {
   onNext: () => void;
   loading: boolean;
   brand: DerivedBrand;
+  typo: TextClasses;
   copy: ResolvedSignupCopy;
   requireSmsConsent: boolean;
 }
@@ -28,6 +29,7 @@ export function PersonalInfoStep({
   onNext,
   loading,
   brand,
+  typo,
   copy,
   requireSmsConsent,
 }: PersonalInfoStepProps) {
@@ -35,7 +37,7 @@ export function PersonalInfoStep({
     <div className="max-w-2xl mx-auto">
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="p-6" style={{ backgroundColor: brand.primary }}>
-          <h2 className="text-base font-bold uppercase tracking-wide text-white">
+          <h2 className={`${typo.sectionHeader} uppercase tracking-wide text-white`}>
             Personal Info
           </h2>
         </div>
@@ -44,7 +46,7 @@ export function PersonalInfoStep({
           {/* Name row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-600 mb-2">
+              <label className={`block ${typo.label} text-gray-600 mb-2`}>
                 First Name *
               </label>
               <input
@@ -58,7 +60,7 @@ export function PersonalInfoStep({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-600 mb-2">
+              <label className={`block ${typo.label} text-gray-600 mb-2`}>
                 Last Name *
               </label>
               <input
@@ -76,7 +78,7 @@ export function PersonalInfoStep({
           {/* Contact row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-600 mb-2">
+              <label className={`block ${typo.label} text-gray-600 mb-2`}>
                 Email *
               </label>
               <input
@@ -90,7 +92,7 @@ export function PersonalInfoStep({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-600 mb-2">
+              <label className={`block ${typo.label} text-gray-600 mb-2`}>
                 Mobile Phone *
               </label>
               <input

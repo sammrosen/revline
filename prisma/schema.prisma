@@ -158,8 +158,8 @@ enum IntegrationType {
   REVLINE
   RESEND
   TWILIO
-  OPENAI
   ANTHROPIC
+  OPENAI
 }
 
 enum HealthStatus {

@@ -12,6 +12,10 @@
 export {
   WorkspaceConfigService,
   type ResolvedBranding,
+  type ResolvedThemeMapping,
+  type ResolvedHeaderStyle,
+  type ResolvedTextRole,
+  type ResolvedTypography,
   type ResolvedBookingCopy,
   type ResolvedFeatures,
   type ResolvedWorkspaceConfig,
@@ -25,6 +29,9 @@ export {
 
 export {
   DEFAULT_BRANDING,
+  DEFAULT_THEME_MAPPING,
+  DEFAULT_HEADER_STYLE,
+  DEFAULT_TYPOGRAPHY,
   DEFAULT_BOOKING_COPY,
   DEFAULT_FEATURES,
   DEFAULT_SIGNUP_CONFIG,
