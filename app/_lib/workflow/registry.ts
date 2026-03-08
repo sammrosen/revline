@@ -210,6 +210,11 @@ export const REVLINE_ADAPTER: AdapterDefinition = {
         properties: z.record(z.string(), z.unknown()).optional().describe('Explicit property values to set (e.g., { barcode: "ABC123" })'),
         captureProperties: z.boolean().optional().describe('Auto-extract properties from trigger payload matching workspace schema'),
       }),
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email' as const, required: true },
+        { name: 'name', label: 'Name', type: 'text' as const, required: false },
+        { name: 'source', label: 'Source', type: 'text' as const, required: false, placeholder: 'test-suite' },
+      ],
     },
     update_lead_properties: {
       name: 'update_lead_properties',
@@ -220,6 +225,10 @@ export const REVLINE_ADAPTER: AdapterDefinition = {
         properties: z.record(z.string(), z.unknown()).optional().describe('Explicit property values to set'),
         fromPayload: z.boolean().optional().describe('Auto-extract properties from trigger payload'),
       }),
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email' as const, required: true },
+        { name: 'properties', label: 'Properties (JSON)', type: 'text' as const, required: false, placeholder: '{"key": "value"}' },
+      ],
     },
     update_lead_stage: {
       name: 'update_lead_stage',
@@ -229,6 +238,15 @@ export const REVLINE_ADAPTER: AdapterDefinition = {
       paramsSchema: z.object({
         stage: LeadStageSchema.describe('New stage for the lead'),
       }),
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email' as const, required: true },
+        { name: 'stage', label: 'Stage', type: 'select' as const, required: true, default: 'CAPTURED', options: [
+          { value: 'CAPTURED', label: 'Captured' },
+          { value: 'BOOKED', label: 'Booked' },
+          { value: 'PAID', label: 'Paid' },
+          { value: 'DEAD', label: 'Dead' },
+        ]},
+      ],
     },
     emit_event: {
       name: 'emit_event',
@@ -239,6 +257,14 @@ export const REVLINE_ADAPTER: AdapterDefinition = {
         eventType: z.string().describe('Event type name'),
         success: z.boolean().default(true).describe('Whether the event is a success'),
       }),
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email' as const, required: true },
+        { name: 'eventType', label: 'Event Type', type: 'text' as const, required: true, placeholder: 'custom_event' },
+        { name: 'success', label: 'Success', type: 'select' as const, required: false, default: 'true', options: [
+          { value: 'true', label: 'Yes' },
+          { value: 'false', label: 'No' },
+        ]},
+      ],
     },
   },
 };
@@ -344,13 +370,26 @@ export const ABC_IGNITE_ADAPTER: AdapterDefinition = {
         member_status: z.string().optional(),
         home_club: z.string().optional(),
         gender: z.string().optional(),
-        // New fields for conversion tracking
         join_status: z.string().optional().describe('"Member" or "Prospect"'),
         is_converted_prospect: z.string().optional().describe('"true" if member was originally a prospect'),
         membership_type: z.string().optional().describe('Agreement membership type (e.g., "Monthly Premier")'),
         converted_date: z.string().optional().describe('ISO date when prospect was converted to member'),
         agreement_entry_source: z.string().optional().describe('How the agreement was created (e.g., "Web", "DataTrak EAE")'),
       }),
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email' as const, required: true, default: 'test@example.com' },
+        { name: 'name', label: 'Name', type: 'text' as const, required: false, default: 'Test Member' },
+        { name: 'first_name', label: 'First Name', type: 'text' as const, required: false, default: 'Test' },
+        { name: 'last_name', label: 'Last Name', type: 'text' as const, required: false, default: 'Member' },
+        { name: 'phone', label: 'Phone', type: 'text' as const, required: false, default: '+15551234567' },
+        { name: 'barcode', label: 'Barcode', type: 'text' as const, required: false, default: '12345' },
+        { name: 'member_id', label: 'Member ID', type: 'text' as const, required: false },
+        { name: 'member_status', label: 'Member Status', type: 'text' as const, required: false, default: 'Active' },
+        { name: 'join_status', label: 'Join Status', type: 'select' as const, required: false, default: 'Member', options: [
+          { value: 'Member', label: 'Member' },
+          { value: 'Prospect', label: 'Prospect' },
+        ]},
+      ],
     },
   },
   actions: {
@@ -517,6 +556,11 @@ export const RESEND_ADAPTER: AdapterDefinition = {
       paramRequirements: {
         template: 'meta.templates', // params.template must be a key in meta.templates
       },
+      testFields: [
+        { name: 'email', label: 'To Email', type: 'email' as const, required: true },
+        { name: 'subject', label: 'Subject', type: 'text' as const, required: false, placeholder: 'Test email subject' },
+        { name: 'body', label: 'Body HTML', type: 'text' as const, required: false, placeholder: '<p>Hello {{lead.name}}!</p>' },
+      ],
     },
   },
 };
@@ -561,6 +605,11 @@ export const TWILIO_ADAPTER: AdapterDefinition = {
         body: z.string().describe('Message text (supports {{lead.*}}, {{payload.*}} template vars)'),
         phoneNumber: z.string().optional().describe('Phone number key from Twilio config (uses default if not provided)'),
       }),
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email' as const, required: true },
+        { name: 'to', label: 'To Phone', type: 'text' as const, required: false, placeholder: '+15551234567' },
+        { name: 'body', label: 'Message Body', type: 'text' as const, required: true, placeholder: 'Hello {{lead.name}}!' },
+      ],
     },
   },
 };
@@ -624,21 +673,21 @@ export const ANTHROPIC_ADAPTER: AdapterDefinition = {
 };
 
 /**
- * Chatbot Adapter (Internal)
+ * Agent Adapter (Internal)
  * Handles autonomous conversational loops between leads and AI.
- * Channel-agnostic and AI-agnostic -- configuration lives on the Chatbot model.
+ * Channel-agnostic and AI-agnostic -- configuration lives on the Agent model.
  */
-export const CHATBOT_ADAPTER: AdapterDefinition = {
-  id: 'chatbot',
-  name: 'Chatbot',
+export const AGENT_ADAPTER: AdapterDefinition = {
+  id: 'agent',
+  name: 'Agent',
   requiresIntegration: false,
   triggers: {
     conversation_started: {
       name: 'conversation_started',
       label: 'Conversation Started',
-      description: 'Fires when a new chatbot conversation is created',
+      description: 'Fires when a new agent conversation is created',
       payloadSchema: z.object({
-        chatbotId: z.string(),
+        agentId: z.string(),
         conversationId: z.string(),
         contactAddress: z.string(),
         channel: z.string(),
@@ -650,7 +699,7 @@ export const CHATBOT_ADAPTER: AdapterDefinition = {
       label: 'Escalation Requested',
       description: 'Fires when the bot cannot handle a request and needs human intervention',
       payloadSchema: z.object({
-        chatbotId: z.string(),
+        agentId: z.string(),
         conversationId: z.string(),
         reason: z.string().optional(),
         leadId: z.string().optional(),
@@ -661,7 +710,7 @@ export const CHATBOT_ADAPTER: AdapterDefinition = {
       label: 'Conversation Completed',
       description: 'Fires when a conversation ends (limit hit, timeout, or goal completed)',
       payloadSchema: z.object({
-        chatbotId: z.string(),
+        agentId: z.string(),
         conversationId: z.string(),
         reason: z.string().optional(),
         leadId: z.string().optional(),
@@ -672,7 +721,7 @@ export const CHATBOT_ADAPTER: AdapterDefinition = {
       label: 'Contact Opted Out',
       description: 'Fires when a contact sends STOP/UNSUBSCRIBE and opts out of messaging',
       payloadSchema: z.object({
-        chatbotId: z.string(),
+        agentId: z.string(),
         contactAddress: z.string(),
         keyword: z.string(),
         conversationId: z.string().optional(),
@@ -683,7 +732,7 @@ export const CHATBOT_ADAPTER: AdapterDefinition = {
       label: 'Bot Event',
       description: 'Generic event emitted by the bot via allowedEvents config',
       payloadSchema: z.object({
-        chatbotId: z.string(),
+        agentId: z.string(),
         conversationId: z.string(),
         eventType: z.string(),
         data: z.record(z.string(), z.unknown()).optional(),
@@ -692,14 +741,20 @@ export const CHATBOT_ADAPTER: AdapterDefinition = {
     },
   },
   actions: {
-    route_to_chatbot: {
-      name: 'route_to_chatbot',
-      label: 'Route to Chatbot',
-      description: 'Activate a chatbot for this lead/channel. The chatbot handles the reply autonomously.',
+    route_to_agent: {
+      name: 'route_to_agent',
+      label: 'Route to Agent',
+      description: 'Activate an agent for this lead/channel. The agent handles the reply autonomously.',
       payloadSchema: CommonPayloadSchema,
       paramsSchema: z.object({
-        chatbotId: z.string().describe('ID of the chatbot to route to'),
+        agentId: z.string().describe('ID of the agent to route to'),
+        messageText: z.string().optional().describe('Override message for proactive outreach (supports lead variables)'),
       }),
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email' as const, required: true },
+        { name: 'agentId', label: 'Agent ID', type: 'text' as const, required: true, placeholder: 'Agent ID to route to' },
+        { name: 'messageText', label: 'Message', type: 'text' as const, required: false, placeholder: 'Override initial message (optional)' },
+      ],
     },
   },
 };
@@ -722,7 +777,7 @@ export const ADAPTER_REGISTRY: Record<string, AdapterDefinition> = {
   twilio: TWILIO_ADAPTER,
   openai: OPENAI_ADAPTER,
   anthropic: ANTHROPIC_ADAPTER,
-  chatbot: CHATBOT_ADAPTER,
+  agent: AGENT_ADAPTER,
 };
 
 // =============================================================================
@@ -817,7 +872,7 @@ export function getActionsForUI(): Array<{
   adapterId: string;
   adapterName: string;
   requiresIntegration: boolean;
-  actions: Array<{ name: string; label: string; description?: string }>;
+  actions: Array<{ name: string; label: string; description?: string; testFields?: OperationDefinition['testFields'] }>;
 }> {
   return Object.values(ADAPTER_REGISTRY)
     .filter((adapter) => Object.keys(adapter.actions).length > 0)
@@ -829,6 +884,7 @@ export function getActionsForUI(): Array<{
         name: a.name,
         label: a.label,
         description: a.description,
+        testFields: a.testFields,
       })),
     }));
 }

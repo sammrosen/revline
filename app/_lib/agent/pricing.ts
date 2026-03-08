@@ -65,13 +65,4 @@ export function getKnownModels(): string[] {
   return Object.keys(MODEL_PRICING);
 }
 
-export function getDefaultModel(aiIntegration: string): string {
-  switch (aiIntegration.toUpperCase()) {
-    case 'OPENAI':
-      return 'gpt-4.1-mini';
-    case 'ANTHROPIC':
-      return 'claude-sonnet-4-6';
-    default:
-      return 'unknown';
-  }
-}
+export { getDefaultModelForProvider as getDefaultModel } from './adapter-registry';

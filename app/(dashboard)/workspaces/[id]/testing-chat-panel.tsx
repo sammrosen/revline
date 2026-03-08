@@ -17,13 +17,16 @@ import {
   Activity,
   History,
   Sparkles,
+  Play,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface Chatbot {
+interface Agent {
   id: string;
   name: string;
   systemPrompt: string;
@@ -91,6 +94,48 @@ interface TestChatResponse {
   model: string;
 }
 
+interface RegistryTestField {
+  name: string;
+  label: string;
+  type: 'email' | 'text' | 'number' | 'select' | 'datetime';
+  required: boolean;
+  default?: string | number;
+  placeholder?: string;
+  options?: Array<{ value: string; label: string }>;
+}
+
+interface RegistryOption {
+  key: string;
+  label: string;
+  description?: string;
+  testFields: RegistryTestField[];
+}
+
+interface TriggerResult {
+  trigger: string;
+  workflowsFound: number;
+  workflowsExecuted: number;
+  allSucceeded: boolean;
+  duration: number;
+  executions: Array<{
+    workflowName: string;
+    status: string;
+    results: Array<{
+      action: string;
+      success: boolean;
+      error?: string;
+    }>;
+  }>;
+}
+
+interface ActionResult {
+  action: string;
+  success: boolean;
+  data?: Record<string, unknown>;
+  error?: string;
+  duration: number;
+}
+
 // ---------------------------------------------------------------------------
 // Quick-send presets
 // ---------------------------------------------------------------------------
@@ -111,9 +156,9 @@ interface TestingChatPanelProps {
 }
 
 export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
-  // Chatbot selection
-  const [chatbots, setChatbots] = useState<Chatbot[]>([]);
-  const [selectedChatbotId, setSelectedChatbotId] = useState<string>('');
+  // Agent selection
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>('');
   const [loadingBots, setLoadingBots] = useState(true);
 
   // Chat state
@@ -136,31 +181,36 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
   const [testConversations, setTestConversations] = useState<ConversationSummary[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  // Trigger simulator
-  const [triggerOpen, setTriggerOpen] = useState(false);
-  const [triggerFrom, setTriggerFrom] = useState('');
-  const [triggerTo, setTriggerTo] = useState('');
-  const [triggerBody, setTriggerBody] = useState('Hello');
+  // Workflow tester
+  const [testerOpen, setTesterOpen] = useState(false);
+  const [testerMode, setTesterMode] = useState<'triggers' | 'actions'>('triggers');
+  const [registryTriggers, setRegistryTriggers] = useState<RegistryOption[]>([]);
+  const [registryActions, setRegistryActions] = useState<RegistryOption[]>([]);
+  const [selectedTesterKey, setSelectedTesterKey] = useState('');
+  const [testerFieldValues, setTesterFieldValues] = useState<Record<string, string | number>>({});
+  const [testerLoading, setTesterLoading] = useState(false);
+  const [testerResult, setTesterResult] = useState<TriggerResult | ActionResult | null>(null);
+  const [testerError, setTesterError] = useState<string | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const selectedChatbot = chatbots.find((b) => b.id === selectedChatbotId);
+  const selectedAgent = agents.find((b) => b.id === selectedAgentId);
 
   // -------------------------------------------------------------------------
-  // Fetch chatbots
+  // Fetch agents
   // -------------------------------------------------------------------------
 
-  const fetchChatbots = useCallback(async () => {
+  const fetchAgents = useCallback(async () => {
     setLoadingBots(true);
     try {
-      const res = await fetch(`/api/v1/workspaces/${workspaceId}/chatbots`);
+      const res = await fetch(`/api/v1/workspaces/${workspaceId}/agents`);
       const json = await res.json();
       if (res.ok && json.data) {
-        const activeBots = (json.data as Chatbot[]).filter((b) => b.active);
-        setChatbots(activeBots);
-        if (activeBots.length > 0 && !selectedChatbotId) {
-          setSelectedChatbotId(activeBots[0].id);
+        const activeBots = (json.data as Agent[]).filter((b) => b.active);
+        setAgents(activeBots);
+        if (activeBots.length > 0 && !selectedAgentId) {
+          setSelectedAgentId(activeBots[0].id);
         }
       }
     } catch {
@@ -168,21 +218,87 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
     } finally {
       setLoadingBots(false);
     }
-  }, [workspaceId, selectedChatbotId]);
+  }, [workspaceId, selectedAgentId]);
 
   useEffect(() => {
-    fetchChatbots();
-  }, [fetchChatbots]);
+    fetchAgents();
+  }, [fetchAgents]);
 
-  // When chatbot changes, load its prompt and reset conversation
+  // -------------------------------------------------------------------------
+  // Fetch workflow registry (triggers + actions)
+  // -------------------------------------------------------------------------
+
   useEffect(() => {
-    if (selectedChatbot) {
-      setOriginalPrompt(selectedChatbot.systemPrompt);
-      setPromptOverride(selectedChatbot.systemPrompt);
+    async function loadRegistry() {
+      try {
+        const res = await fetch(`/api/v1/workflow-registry?workspaceId=${encodeURIComponent(workspaceId)}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        const data = json.data;
+
+        const triggers: RegistryOption[] = (data?.triggers || []).flatMap(
+          (adapter: { adapterId: string; adapterName: string; triggers: Array<{ name: string; label: string; description?: string; testFields?: RegistryTestField[] }> }) =>
+            adapter.triggers.map((t) => ({
+              key: `${adapter.adapterId}.${t.name}`,
+              label: `${adapter.adapterName}: ${t.label}`,
+              description: t.description,
+              testFields: t.testFields || [],
+            }))
+        );
+        setRegistryTriggers(triggers);
+
+        const actions: RegistryOption[] = (data?.actions || []).flatMap(
+          (adapter: { adapterId: string; adapterName: string; actions: Array<{ name: string; label: string; description?: string; testFields?: RegistryTestField[] }> }) =>
+            adapter.actions
+              .filter((a) => a.testFields && a.testFields.length > 0)
+              .map((a) => ({
+                key: `${adapter.adapterId}.${a.name}`,
+                label: `${adapter.adapterName}: ${a.label}`,
+                description: a.description,
+                testFields: a.testFields || [],
+              }))
+        );
+        setRegistryActions(actions);
+      } catch {
+        // silently fail
+      }
+    }
+    loadRegistry();
+  }, [workspaceId]);
+
+  // When tester selection changes, reset field values to defaults
+  useEffect(() => {
+    const options = testerMode === 'triggers' ? registryTriggers : registryActions;
+    const selected = options.find((o) => o.key === selectedTesterKey);
+    if (selected) {
+      const defaults: Record<string, string | number> = {};
+      selected.testFields.forEach((f) => {
+        if (f.default !== undefined) defaults[f.name] = f.default;
+        else defaults[f.name] = '';
+      });
+      setTesterFieldValues(defaults);
+    }
+    setTesterResult(null);
+    setTesterError(null);
+  }, [selectedTesterKey, testerMode, registryTriggers, registryActions]);
+
+  // Auto-select first option when registry loads or mode changes
+  useEffect(() => {
+    const options = testerMode === 'triggers' ? registryTriggers : registryActions;
+    if (options.length > 0 && !options.find((o) => o.key === selectedTesterKey)) {
+      setSelectedTesterKey(options[0].key);
+    }
+  }, [testerMode, registryTriggers, registryActions, selectedTesterKey]);
+
+  // When agent changes, load its prompt and reset conversation
+  useEffect(() => {
+    if (selectedAgent) {
+      setOriginalPrompt(selectedAgent.systemPrompt);
+      setPromptOverride(selectedAgent.systemPrompt);
     }
     resetConversation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedChatbotId]);
+  }, [selectedAgentId]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -203,10 +319,10 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
   }
 
   async function clearAllTestConversations() {
-    if (!selectedChatbotId) return;
+    if (!selectedAgentId) return;
     try {
       await fetch(
-        `/api/v1/workspaces/${workspaceId}/chatbots/${selectedChatbotId}/test-chat`,
+        `/api/v1/workspaces/${workspaceId}/agents/${selectedAgentId}/test-chat`,
         { method: 'DELETE' }
       );
       setTestConversations([]);
@@ -221,7 +337,7 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
   // -------------------------------------------------------------------------
 
   async function sendMessage(text: string) {
-    if (!text.trim() || !selectedChatbotId || sending) return;
+    if (!text.trim() || !selectedAgentId || sending) return;
 
     const userMsg: ChatMessageData = {
       role: 'user',
@@ -236,13 +352,14 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
       const isOverridden = promptOverride !== originalPrompt;
 
       const res = await fetch(
-        `/api/v1/workspaces/${workspaceId}/chatbots/${selectedChatbotId}/test-chat`,
+        `/api/v1/workspaces/${workspaceId}/agents/${selectedAgentId}/test-chat`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messageText: text.trim(),
             ...(isOverridden ? { systemPromptOverride: promptOverride } : {}),
+            ...(conversationId ? { conversationId } : {}),
           }),
         }
       );
@@ -286,71 +403,55 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
   }
 
   // -------------------------------------------------------------------------
-  // Trigger simulation
+  // Workflow tester execution
   // -------------------------------------------------------------------------
 
-  async function simulateTrigger() {
-    if (!selectedChatbotId || sending) return;
-    setSending(true);
+  async function fireTester() {
+    if (testerLoading) return;
+    setTesterLoading(true);
+    setTesterResult(null);
+    setTesterError(null);
 
     try {
-      const isOverridden = promptOverride !== originalPrompt;
-
-      const res = await fetch(
-        `/api/v1/workspaces/${workspaceId}/chatbots/${selectedChatbotId}/test-trigger`,
-        {
+      if (testerMode === 'triggers') {
+        const res = await fetch(`/api/v1/workspaces/${workspaceId}/test-action`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            from: triggerFrom || undefined,
-            to: triggerTo || undefined,
-            messageBody: triggerBody || 'Hello',
-            ...(isOverridden ? { systemPromptOverride: promptOverride } : {}),
+            trigger: selectedTesterKey,
+            ...testerFieldValues,
           }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          setTesterError(json.error || json.message || 'Trigger execution failed');
+        } else {
+          setTesterResult((json.data || json) as TriggerResult);
         }
-      );
-
-      const json = await res.json();
-      const data = json.data as TestChatResponse;
-
-      if (data.conversationId) {
-        setConversationId(data.conversationId);
+      } else {
+        const res = await fetch(`/api/v1/workspaces/${workspaceId}/test-action-direct`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: selectedTesterKey,
+            ...testerFieldValues,
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          setTesterError(json.error || json.message || 'Action execution failed');
+        } else {
+          setTesterResult(json.data as ActionResult);
+        }
       }
-      setConversationStatus(data.status);
-
-      const triggerMsg: ChatMessageData = {
-        role: 'user',
-        content: `[Trigger simulated] ${triggerBody || 'Hello'}`,
-        timestamp: new Date(),
-      };
-
-      const botMsg: ChatMessageData = {
-        role: 'assistant',
-        content: data.replyText || (data.error ? `[Error: ${data.error}]` : '[No response]'),
-        promptTokens: data.usage?.promptTokens,
-        completionTokens: data.usage?.completionTokens,
-        latencyMs: data.latencyMs,
-        responseDelaySkipped: data.responseDelaySkipped,
-        costEstimate: data.costEstimate,
-        eventsEmitted: data.eventsEmitted,
-        error: data.error,
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, triggerMsg, botMsg]);
-      setTotalMessages((prev) => prev + 2);
-      setTotalTokens((prev) => prev + (data.usage?.totalTokens || 0));
-      setTotalCost((prev) => prev + (data.costEstimate?.totalCost || 0));
     } catch (err) {
-      const errorMsg: ChatMessageData = {
-        role: 'assistant',
-        content: `[Trigger failed: ${err instanceof Error ? err.message : 'Unknown error'}]`,
-        error: 'Trigger failed',
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      setTesterError(err instanceof Error ? err.message : 'Request failed');
     } finally {
-      setSending(false);
+      setTesterLoading(false);
+      if (selectedAgentId) {
+        fetchHistory();
+        setHistoryOpen(true);
+      }
     }
   }
 
@@ -359,15 +460,15 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
   // -------------------------------------------------------------------------
 
   async function fetchHistory() {
-    if (!selectedChatbotId) return;
+    if (!selectedAgentId) return;
     setLoadingHistory(true);
     try {
       const res = await fetch(
-        `/api/v1/workspaces/${workspaceId}/chatbots/${selectedChatbotId}/test-chat?limit=20`
+        `/api/v1/workspaces/${workspaceId}/agents/${selectedAgentId}/test-chat?limit=20`
       );
       const json = await res.json();
       if (res.ok) {
-        setTestConversations(json.data || []);
+        setTestConversations(json.data?.conversations || []);
       }
     } catch {
       // ignore
@@ -404,8 +505,8 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
     return `$${cost.toFixed(4)}`;
   }
 
-  const maxMsgs = selectedChatbot?.maxMessagesPerConversation || 50;
-  const maxTkns = selectedChatbot?.maxTokensPerConversation || 100000;
+  const maxMsgs = selectedAgent?.maxMessagesPerConversation || 50;
+  const maxTkns = selectedAgent?.maxTokensPerConversation || 100000;
   const msgPercent = Math.min((totalMessages / maxMsgs) * 100, 100);
   const tknPercent = Math.min((totalTokens / maxTkns) * 100, 100);
 
@@ -421,12 +522,12 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
     );
   }
 
-  if (chatbots.length === 0) {
+  if (agents.length === 0) {
     return (
       <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 text-center">
         <Bot className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
-        <p className="text-zinc-400 text-sm">No active chatbots configured.</p>
-        <p className="text-zinc-500 text-xs mt-1">Create a chatbot in the Chatbots tab to start testing.</p>
+        <p className="text-zinc-400 text-sm">No active agents configured.</p>
+        <p className="text-zinc-500 text-xs mt-1">Create an agent in the Agents tab to start testing.</p>
       </div>
     );
   }
@@ -437,15 +538,15 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
 
   return (
     <div className="space-y-3">
-      {/* Top bar: Chatbot selector + actions */}
+      {/* Top bar: Agent selector + actions */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="flex-1 min-w-[200px]">
           <select
-            value={selectedChatbotId}
-            onChange={(e) => setSelectedChatbotId(e.target.value)}
+            value={selectedAgentId}
+            onChange={(e) => setSelectedAgentId(e.target.value)}
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white appearance-none focus:outline-none focus:border-violet-500"
           >
-            {chatbots.map((b) => (
+            {agents.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name} ({b.aiIntegration})
               </option>
@@ -756,56 +857,221 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
         </div>
       </div>
 
-      {/* Trigger simulator (collapsible) */}
+      {/* Workflow Tester (collapsible) */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
         <button
           type="button"
-          onClick={() => setTriggerOpen(!triggerOpen)}
+          onClick={() => setTesterOpen(!testerOpen)}
           className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-300 transition-colors"
         >
           <span className="flex items-center gap-1.5">
             <Zap className="w-3.5 h-3.5" />
-            Trigger Simulator
+            Workflow Tester
           </span>
-          {triggerOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          {testerOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
         </button>
-        {triggerOpen && (
-          <div className="border-t border-zinc-800 p-3 space-y-2">
-            <p className="text-[10px] text-zinc-500">
-              Simulate a workflow trigger (e.g. route_to_chatbot action) hitting this bot.
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                value={triggerFrom}
-                onChange={(e) => setTriggerFrom(e.target.value)}
-                placeholder="From (contact address)"
-                className="bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500"
-              />
-              <input
-                type="text"
-                value={triggerTo}
-                onChange={(e) => setTriggerTo(e.target.value)}
-                placeholder="To (bot address)"
-                className="bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500"
-              />
+        {testerOpen && (
+          <div className="border-t border-zinc-800 p-3 space-y-3">
+            {/* Mode toggle */}
+            <div className="flex border border-zinc-700 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setTesterMode('triggers')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                  testerMode === 'triggers'
+                    ? 'bg-amber-500/20 text-amber-400'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                <Zap className="w-3 h-3" />
+                Triggers
+              </button>
+              <button
+                type="button"
+                onClick={() => setTesterMode('actions')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                  testerMode === 'actions'
+                    ? 'bg-blue-500/20 text-blue-400'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                <Play className="w-3 h-3" />
+                Actions
+              </button>
             </div>
-            <input
-              type="text"
-              value={triggerBody}
-              onChange={(e) => setTriggerBody(e.target.value)}
-              placeholder="Message body"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500"
-            />
-            <button
-              type="button"
-              onClick={simulateTrigger}
-              disabled={sending}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-amber-600/20 text-amber-400 border border-amber-500/30 hover:bg-amber-600/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Zap className="w-3.5 h-3.5" />
-              {sending ? 'Simulating...' : 'Simulate Inbound Trigger'}
-            </button>
+
+            {/* Dropdown */}
+            {(() => {
+              const options = testerMode === 'triggers' ? registryTriggers : registryActions;
+              if (options.length === 0) {
+                return (
+                  <p className="text-[10px] text-zinc-500">
+                    {testerMode === 'triggers'
+                      ? 'No triggers registered. Configure workflows to see available triggers.'
+                      : 'No testable actions registered.'}
+                  </p>
+                );
+              }
+
+              const selected = options.find((o) => o.key === selectedTesterKey);
+              const fields = selected?.testFields || [];
+
+              return (
+                <>
+                  <select
+                    value={selectedTesterKey}
+                    onChange={(e) => setSelectedTesterKey(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500"
+                  >
+                    {options.map((opt) => (
+                      <option key={opt.key} value={opt.key}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  {selected?.description && (
+                    <p className="text-[10px] text-zinc-500">{selected.description}</p>
+                  )}
+
+                  {/* Dynamic test fields */}
+                  {fields.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-medium text-zinc-400">Test Fields</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const defaults: Record<string, string | number> = {};
+                            fields.forEach((f) => {
+                              if (f.default !== undefined) defaults[f.name] = f.default;
+                              else defaults[f.name] = '';
+                            });
+                            setTesterFieldValues(defaults);
+                          }}
+                          className="text-[10px] text-violet-400 hover:text-violet-300 transition-colors"
+                        >
+                          Fill Defaults
+                        </button>
+                      </div>
+                      {fields.map((field) => (
+                        <div key={field.name}>
+                          <label className="block text-[10px] text-zinc-500 mb-0.5">
+                            {field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}
+                          </label>
+                          {field.type === 'select' && field.options ? (
+                            <select
+                              value={testerFieldValues[field.name] ?? field.default ?? ''}
+                              onChange={(e) => setTesterFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
+                              className="w-full bg-zinc-950 border border-zinc-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500"
+                            >
+                              {field.options.map((opt) => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
+                              value={testerFieldValues[field.name] ?? field.default ?? ''}
+                              onChange={(e) => setTesterFieldValues((prev) => ({
+                                ...prev,
+                                [field.name]: field.type === 'number' ? Number(e.target.value) : e.target.value,
+                              }))}
+                              placeholder={field.placeholder || (field.default ? String(field.default) : '')}
+                              className="w-full bg-zinc-950 border border-zinc-700 rounded px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500"
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Execute button */}
+                  <button
+                    type="button"
+                    onClick={fireTester}
+                    disabled={testerLoading}
+                    className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      testerMode === 'triggers'
+                        ? 'bg-amber-600/20 text-amber-400 border border-amber-500/30 hover:bg-amber-600/30'
+                        : 'bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30'
+                    }`}
+                  >
+                    {testerMode === 'triggers' ? <Zap className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                    {testerLoading
+                      ? 'Executing...'
+                      : testerMode === 'triggers'
+                        ? 'Fire Trigger'
+                        : 'Execute Action'}
+                  </button>
+
+                  {/* Results */}
+                  {testerError && (
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                      <p className="text-xs text-red-400 flex items-center gap-1.5">
+                        <XCircle className="w-3.5 h-3.5 shrink-0" />
+                        {testerError}
+                      </p>
+                    </div>
+                  )}
+
+                  {testerResult && testerMode === 'triggers' && 'workflowsFound' in testerResult && (
+                    <div className="bg-zinc-950 border border-zinc-700 rounded-lg p-2.5 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-400">
+                          {testerResult.workflowsFound} workflow{testerResult.workflowsFound !== 1 ? 's' : ''} found,{' '}
+                          {testerResult.workflowsExecuted} executed
+                        </span>
+                        <span className={`font-medium ${testerResult.allSucceeded ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {testerResult.allSucceeded ? 'All passed' : 'Has failures'}
+                        </span>
+                      </div>
+                      {testerResult.executions.map((exec, i) => (
+                        <div key={i} className="border-t border-zinc-800 pt-2">
+                          <p className="text-[10px] font-medium text-zinc-300">{exec.workflowName}</p>
+                          {exec.results.map((r, j) => (
+                            <div key={j} className="flex items-center gap-1.5 mt-1">
+                              {r.success
+                                ? <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                : <XCircle className="w-3 h-3 text-red-400" />}
+                              <span className="text-[10px] text-zinc-400">{r.action}</span>
+                              {r.error && <span className="text-[10px] text-red-400 ml-1">- {r.error}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                      <p className="text-[10px] text-zinc-600">{testerResult.duration}ms</p>
+                    </div>
+                  )}
+
+                  {testerResult && testerMode === 'actions' && 'action' in testerResult && (
+                    <div className={`rounded-lg px-3 py-2 ${
+                      testerResult.success
+                        ? 'bg-emerald-500/10 border border-emerald-500/20'
+                        : 'bg-red-500/10 border border-red-500/20'
+                    }`}>
+                      <div className="flex items-center gap-1.5 text-xs">
+                        {testerResult.success
+                          ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          : <XCircle className="w-3.5 h-3.5 text-red-400" />}
+                        <span className={testerResult.success ? 'text-emerald-400' : 'text-red-400'}>
+                          {testerResult.action} — {testerResult.success ? 'Success' : 'Failed'}
+                        </span>
+                      </div>
+                      {testerResult.error && (
+                        <p className="text-[10px] text-red-400 mt-1">{testerResult.error}</p>
+                      )}
+                      {testerResult.data && Object.keys(testerResult.data).length > 0 && (
+                        <pre className="text-[10px] text-zinc-500 mt-1 overflow-x-auto max-h-24 overflow-y-auto">
+                          {JSON.stringify(testerResult.data, null, 2)}
+                        </pre>
+                      )}
+                      <p className="text-[10px] text-zinc-600 mt-1">{testerResult.duration}ms</p>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
       </div>

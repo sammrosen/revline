@@ -1,7 +1,7 @@
 /**
- * Chatbot Engine Type Definitions
+ * Agent Engine Type Definitions
  *
- * Types for the chatbot conversational loop, inbound message handling,
+ * Types for the agent conversational loop, inbound message handling,
  * and responses. Channel-agnostic and AI-agnostic by design.
  */
 
@@ -11,7 +11,7 @@ export { ConversationStatus, MessageRole };
 
 export interface InboundMessageParams {
   workspaceId: string;
-  chatbotId: string;
+  agentId: string;
   contactAddress: string;
   channelAddress: string;
   channel: string;
@@ -19,9 +19,11 @@ export interface InboundMessageParams {
   leadId?: string;
   testMode?: boolean;
   systemPromptOverride?: string;
+  /** When provided, continue this specific conversation instead of lookup by address */
+  conversationId?: string;
 }
 
-export interface ChatbotResponse {
+export interface AgentResponse {
   success: boolean;
   /** The AI-generated reply text (null if engine couldn't reply) */
   replyText: string | null;
@@ -45,12 +47,16 @@ export interface ChatbotResponse {
   latencyMs?: number;
   /** Response delay that would have been applied (only in test mode, seconds) */
   responseDelaySkipped?: number;
+  /** True if the response came from an FAQ override rather than AI */
+  faqMatch?: boolean;
+  /** True if the message was rate-limited (no reply sent) */
+  rateLimited?: boolean;
 }
 
 export interface ConversationWithMessages {
   id: string;
   workspaceId: string;
-  chatbotId: string;
+  agentId: string;
   leadId: string | null;
   channel: string;
   contactAddress: string;
@@ -71,11 +77,12 @@ export interface ConversationWithMessages {
   }>;
 }
 
-export interface ChatbotConfig {
+export interface AgentConfig {
   id: string;
   name: string;
   channelType: string | null;
   channelIntegration: string | null;
+  channelAddress: string | null;
   aiIntegration: string;
   systemPrompt: string;
   initialMessage: string | null;
@@ -86,7 +93,20 @@ export interface ChatbotConfig {
   maxTokensPerConversation: number;
   conversationTimeoutMinutes: number;
   responseDelaySeconds: number;
+  autoResumeMinutes: number;
+  rateLimitPerHour: number;
   fallbackMessage: string | null;
+  escalationPattern: string | null;
+  faqOverrides: Array<{ patterns: string[]; response: string }> | null;
   allowedEvents: string[];
   active: boolean;
+}
+
+export interface InitiateConversationParams {
+  workspaceId: string;
+  agentId: string;
+  leadId: string;
+  /** Override for agent's initialMessage (supports lead variables) */
+  messageText?: string;
+  testMode?: boolean;
 }

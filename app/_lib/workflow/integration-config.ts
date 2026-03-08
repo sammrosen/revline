@@ -124,14 +124,14 @@ export const INTEGRATION_CONFIG: Record<string, IntegrationStyle> = {
     icon: Sparkles,
     logo: '/logos/anthropic.png',
   },
-  chatbot: {
-    name: 'Chatbot',
+  agent: {
+    name: 'Agent',
     color: '#8B5CF6',
     bgClass: 'bg-violet-500/20',
     borderClass: 'border-violet-500/40',
     textClass: 'text-violet-400',
     icon: Bot,
-    logo: '/logos/chatbot.png',
+    logo: '/logos/agent.png',
   },
   capture: {
     name: 'Capture',
@@ -174,7 +174,7 @@ export const OPERATION_LABELS: Record<string, string> = {
   subscription_canceled: 'Subscription Canceled',
   email_captured: 'Email Captured',
   dm_received: 'DM Received',
-  // Chatbot triggers
+  // Agent triggers
   conversation_started: 'Conversation Started',
   escalation_requested: 'Escalation Requested',
   conversation_completed: 'Conversation Completed',
@@ -187,7 +187,7 @@ export const OPERATION_LABELS: Record<string, string> = {
   update_lead_stage: 'Update Lead Stage',
   emit_event: 'Emit Event',
   trigger_flow: 'Trigger Flow',
-  route_to_chatbot: 'Route to Chatbot',
+  route_to_agent: 'Route to Agent',
 };
 
 /**

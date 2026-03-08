@@ -101,7 +101,7 @@ model Workspace {
   webhookEvents      WebhookEvent[]
   idempotencyKeys    IdempotencyKey[]
   pendingBookings    PendingBooking[]
-  chatbots           Chatbot[]
+  agents             Agent[]
   conversations      Conversation[]
   optOutRecords      OptOutRecord[]
 
@@ -227,7 +227,7 @@ enum EventSystem {
   TWILIO
   OPENAI
   ANTHROPIC
-  CHATBOT
+  AGENT
   CRON
   WORKFLOW
 }
@@ -486,10 +486,10 @@ enum PendingBookingStatus {
 }
 
 // =============================================================================
-// CHATBOT ENGINE
+// AGENT ENGINE
 // =============================================================================
 
-model Chatbot {
+model Agent {
   id          String  @id @default(uuid())
   workspaceId String  @map("workspace_id")
   name        String
@@ -498,6 +498,7 @@ model Chatbot {
   // Channel config -- optional; only required for production SMS delivery
   channelType        String? @map("channel_type")        // "SMS" (extensible: "WHATSAPP", "WEB_CHAT")
   channelIntegration String? @map("channel_integration")  // IntegrationType value: "TWILIO"
+  channelAddress     String? @map("channel_address")      // Agent's address on the channel (e.g., Twilio phone number)
 
   // AI config -- which AI integration to use
   aiIntegration String @map("ai_integration") // IntegrationType value: "OPENAI" or "ANTHROPIC"
@@ -514,7 +515,11 @@ model Chatbot {
   maxTokensPerConversation   Int     @default(100000) @map("max_tokens_per_conversation")
   conversationTimeoutMinutes Int     @default(1440) @map("conversation_timeout_minutes")
   responseDelaySeconds       Int     @default(0)    @map("response_delay_seconds")
+  autoResumeMinutes          Int     @default(60)   @map("auto_resume_minutes")
+  rateLimitPerHour           Int     @default(10)   @map("rate_limit_per_hour")
   fallbackMessage            String? @map("fallback_message")
+  escalationPattern          String? @map("escalation_pattern")
+  faqOverrides               Json?   @map("faq_overrides")
 
   // Allowed event emissions (JSON array of event type strings the bot can emit)
   allowedEvents Json @default("[]") @map("allowed_events")
@@ -525,31 +530,31 @@ model Chatbot {
 
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   conversations Conversation[]
-  files         ChatbotFile[]
+  files         AgentFile[]
 
   @@index([workspaceId, active])
-  @@map("chatbots")
+  @@map("agents")
 }
 
-model ChatbotFile {
+model AgentFile {
   id          String   @id @default(uuid())
-  chatbotId   String   @map("chatbot_id")
+  agentId     String   @map("agent_id")
   filename    String
   mimeType    String   @map("mime_type")
   sizeBytes   Int      @map("size_bytes")
   textContent String   @map("text_content") @db.Text
   createdAt   DateTime @default(now()) @map("created_at")
 
-  chatbot Chatbot @relation(fields: [chatbotId], references: [id], onDelete: Cascade)
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
-  @@index([chatbotId])
-  @@map("chatbot_files")
+  @@index([agentId])
+  @@map("agent_files")
 }
 
 model Conversation {
   id          String @id @default(uuid())
   workspaceId String @map("workspace_id")
-  chatbotId   String @map("chatbot_id")
+  agentId     String @map("agent_id")
   leadId      String? @map("lead_id")
 
   // Channel context (how to reply)
@@ -564,23 +569,27 @@ model Conversation {
   metadata Json? // Flexible: detected intents, goal progress, etc.
   isTest   Boolean @default(false) @map("is_test")
 
+  pausedAt  DateTime? @map("paused_at")
+  pausedBy  String?   @map("paused_by")
+
   startedAt     DateTime  @default(now()) @map("started_at")
   lastMessageAt DateTime? @map("last_message_at")
   endedAt       DateTime? @map("ended_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  chatbot   Chatbot   @relation(fields: [chatbotId], references: [id], onDelete: Cascade)
+  agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
   lead      Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
   messages  ConversationMessage[]
 
   @@index([workspaceId, status])
-  @@index([chatbotId, status])
+  @@index([agentId, status])
   @@index([contactAddress, channelAddress, status])
   @@map("conversations")
 }
 
 enum ConversationStatus {
   ACTIVE
+  PAUSED
   COMPLETED
   ESCALATED
   TIMED_OUT
@@ -616,8 +625,8 @@ model OptOutRecord {
   workspaceId    String  @map("workspace_id")
   contactAddress String  @map("contact_address")
   reason         String  // Keyword that triggered opt-out: "STOP", "UNSUBSCRIBE", etc.
-  source         String  @default("chatbot") // "chatbot", "manual", "twilio_webhook"
-  chatbotId      String? @map("chatbot_id")
+  source         String  @default("agent") // "agent", "manual", "twilio_webhook"
+  agentId        String? @map("agent_id")
   conversationId String? @map("conversation_id")
   createdAt      DateTime @default(now()) @map("created_at")
 

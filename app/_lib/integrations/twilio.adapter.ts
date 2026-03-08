@@ -126,7 +126,7 @@ export class TwilioAdapter extends BaseIntegrationAdapter<TwilioMeta> {
 
   /**
    * Reverse-lookup: find the config key for a given E.164 phone number.
-   * Used by the chatbot engine to resolve which "from" key to pass to sendSms.
+   * Used by the agent engine to resolve which "from" key to pass to sendSms.
    */
   getPhoneKeyByNumber(number: string): string | undefined {
     if (!this.meta?.phoneNumbers) return undefined;

@@ -44,7 +44,7 @@ const INTEGRATION_NODE_WIDTH = 180; // Width of integration nodes (matches max-w
 const GAP_NODE_WIDTH = 120; // Width of async gap node (matches max-w-[120px])
 
 // Built-in adapters that don't require external integration
-const BUILTIN_ADAPTERS = ['revline', 'capture'];
+const BUILTIN_ADAPTERS = ['revline', 'capture', 'agent'];
 
 /** Ensure edge colors are visible on dark backgrounds */
 function getVisibleEdgeColor(hex: string): string {

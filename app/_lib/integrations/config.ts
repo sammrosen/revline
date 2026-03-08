@@ -367,7 +367,7 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
     ],
     tips: [
       'Add your API Key, then use "Fetch Models" to see available models in your account',
-      'gpt-4.1-mini is recommended for most chatbot use cases (fast, cheap, capable)',
+      'gpt-4.1-mini is recommended for most agent use cases (fast, cheap, capable)',
       'gpt-4.1 is the flagship model for complex reasoning tasks',
       'gpt-4.1-nano is the fastest and cheapest option for simple tasks',
     ],
@@ -402,7 +402,7 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
     ],
     tips: [
       'Add your API Key, then use "Fetch Models" to see available models in your account',
-      'claude-sonnet-4-6 is recommended for most chatbot use cases (balanced speed & quality)',
+      'claude-sonnet-4-6 is recommended for most agent use cases (balanced speed & quality)',
       'claude-opus-4-6 is the most capable model for complex reasoning',
       'claude-haiku-4-5-20251001 is the fastest and cheapest option for simple tasks',
       'max_tokens is required on every Anthropic API call — set a sensible default here',

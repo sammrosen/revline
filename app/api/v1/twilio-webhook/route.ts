@@ -29,7 +29,7 @@ import {
 } from '@/app/_lib/reliability';
 import { prisma } from '@/app/_lib/db';
 import { ConversationStatus } from '@prisma/client';
-import { handleInboundMessage } from '@/app/_lib/chatbot';
+import { handleInboundMessage } from '@/app/_lib/agent';
 
 const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
       success: true,
     });
 
-    // Check for opt-out before any chatbot/workflow processing
+    // Check for opt-out before any agent/workflow processing
     const optedOut = await prisma.optOutRecord.findUnique({
       where: {
         workspaceId_contactAddress: {
@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
       return twimlResponse(200);
     }
 
-    // Check for active chatbot conversation before workflow trigger.
+    // Check for active agent conversation before workflow trigger.
     // Subsequent messages in an active conversation go directly to the engine.
     const activeConversation = await prisma.conversation.findFirst({
       where: {
@@ -215,25 +215,25 @@ export async function POST(request: NextRequest) {
         channelAddress: payload.to,
         status: ConversationStatus.ACTIVE,
       },
-      select: { id: true, chatbotId: true },
+      select: { id: true, agentId: true },
     });
 
     if (activeConversation) {
       logStructured({
         correlationId: registration.correlationId,
-        event: 'twilio_chatbot_route_direct',
+        event: 'twilio_agent_route_direct',
         workspaceId: client.id,
         provider: 'twilio',
         metadata: {
           conversationId: activeConversation.id,
-          chatbotId: activeConversation.chatbotId,
+          agentId: activeConversation.agentId,
           from: payload.from,
         },
       });
 
-      const chatbotResult = await handleInboundMessage({
+      const agentResult = await handleInboundMessage({
         workspaceId: client.id,
-        chatbotId: activeConversation.chatbotId,
+        agentId: activeConversation.agentId,
         contactAddress: payload.from,
         channelAddress: payload.to,
         channel: 'SMS',
@@ -247,16 +247,16 @@ export async function POST(request: NextRequest) {
         event: 'twilio_webhook_processed',
         workspaceId: client.id,
         provider: 'twilio',
-        success: chatbotResult.success,
+        success: agentResult.success,
         metadata: {
           messageSid: payload.messageSid,
           from: payload.from,
-          routedToChatbot: true,
+          routedToAgent: true,
           conversationId: activeConversation.id,
         },
       });
     } else {
-      // No active conversation -- fire workflow trigger (may include route_to_chatbot action)
+      // No active conversation -- fire workflow trigger (may include route_to_agent action)
       let warning: string | undefined;
       const triggerResult = await emitTrigger(
         client.id,

@@ -14,14 +14,17 @@ import {
   Upload,
   Trash2,
   Paperclip,
+  Plus,
+  HelpCircle,
 } from 'lucide-react';
 
-interface ChatbotData {
+interface AgentData {
   id?: string;
   name: string;
   description: string;
   channelType: string;
   channelIntegration: string;
+  channelAddress: string;
   channelEnabled: boolean;
   aiIntegration: string;
   systemPrompt: string;
@@ -33,7 +36,11 @@ interface ChatbotData {
   maxTokensPerConversation: number;
   conversationTimeoutMinutes: number;
   responseDelaySeconds: number;
+  autoResumeMinutes: number;
+  rateLimitPerHour: number;
   fallbackMessage: string;
+  escalationPattern: string;
+  faqOverrides: Array<{ patterns: string; response: string }>;
   allowedEvents: string[];
   active: boolean;
 }
@@ -41,9 +48,10 @@ interface ChatbotData {
 interface Integration {
   id: string;
   integration: string;
+  meta: Record<string, unknown> | null;
 }
 
-interface ChatbotFileData {
+interface AgentFileData {
   id: string;
   filename: string;
   mimeType: string;
@@ -52,9 +60,9 @@ interface ChatbotFileData {
   createdAt: string;
 }
 
-interface ChatbotEditorProps {
+interface AgentEditorProps {
   workspaceId: string;
-  chatbotId?: string;
+  agentId?: string;
   onClose: () => void;
   onSave: () => void;
 }
@@ -87,11 +95,12 @@ const AVAILABLE_EVENTS = [
   { value: 'bot_event', label: 'Custom Bot Event' },
 ];
 
-const DEFAULT_DATA: ChatbotData = {
+const DEFAULT_DATA: AgentData = {
   name: '',
   description: '',
   channelType: 'SMS',
   channelIntegration: 'TWILIO',
+  channelAddress: '',
   channelEnabled: false,
   aiIntegration: 'OPENAI',
   systemPrompt: '',
@@ -103,21 +112,25 @@ const DEFAULT_DATA: ChatbotData = {
   maxTokensPerConversation: 100000,
   conversationTimeoutMinutes: 1440,
   responseDelaySeconds: 0,
+  autoResumeMinutes: 60,
+  rateLimitPerHour: 10,
   fallbackMessage: '',
+  escalationPattern: '[ESCALATE]',
+  faqOverrides: [],
   allowedEvents: ['conversation_started', 'escalation_requested', 'conversation_completed'],
   active: true,
 };
 
-export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: ChatbotEditorProps) {
-  const [data, setData] = useState<ChatbotData>(DEFAULT_DATA);
-  const [loading, setLoading] = useState(!!chatbotId);
+export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEditorProps) {
+  const [data, setData] = useState<AgentData>(DEFAULT_DATA);
+  const [loading, setLoading] = useState(!!agentId);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [fetchingModels, setFetchingModels] = useState(false);
   const [leadPropertySchema, setLeadPropertySchema] = useState<{ key: string; label: string }[]>([]);
-  const [files, setFiles] = useState<ChatbotFileData[]>([]);
+  const [files, setFiles] = useState<AgentFileData[]>([]);
   const [uploading, setUploading] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -137,9 +150,10 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
         const workspace = await res.json();
         if (workspace.integrations) {
           setIntegrations(
-            workspace.integrations.map((i: { id: string; integration: string }) => ({
+            workspace.integrations.map((i: { id: string; integration: string; meta: Record<string, unknown> | null }) => ({
               id: i.id,
               integration: i.integration,
+              meta: i.meta,
             }))
           );
         }
@@ -180,10 +194,10 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
     }
   }, [integrations]);
 
-  const fetchChatbot = useCallback(async () => {
-    if (!chatbotId) return;
+  const fetchAgent = useCallback(async () => {
+    if (!agentId) return;
     try {
-      const res = await fetch(`/api/v1/workspaces/${workspaceId}/chatbots/${chatbotId}`);
+      const res = await fetch(`/api/v1/workspaces/${workspaceId}/agents/${agentId}`);
       if (res.ok) {
         const { data: bot } = await res.json();
         setData({
@@ -192,6 +206,7 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
           description: bot.description || '',
           channelType: bot.channelType || 'SMS',
           channelIntegration: bot.channelIntegration || 'TWILIO',
+          channelAddress: bot.channelAddress || '',
           channelEnabled: !!bot.channelType && !!bot.channelIntegration,
           aiIntegration: bot.aiIntegration,
           systemPrompt: bot.systemPrompt,
@@ -203,23 +218,30 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
           maxTokensPerConversation: bot.maxTokensPerConversation,
           conversationTimeoutMinutes: bot.conversationTimeoutMinutes,
           responseDelaySeconds: bot.responseDelaySeconds ?? 0,
+          autoResumeMinutes: bot.autoResumeMinutes ?? 60,
+          rateLimitPerHour: bot.rateLimitPerHour ?? 10,
           fallbackMessage: bot.fallbackMessage || '',
+          escalationPattern: bot.escalationPattern || '[ESCALATE]',
+          faqOverrides: (bot.faqOverrides || []).map((f: { patterns: string[]; response: string }) => ({
+            patterns: f.patterns.join(', '),
+            response: f.response,
+          })),
           allowedEvents: bot.allowedEvents || [],
           active: bot.active,
         });
       }
     } catch (err) {
-      console.error('Failed to fetch chatbot:', err);
-      setError('Failed to load chatbot');
+      console.error('Failed to fetch agent:', err);
+      setError('Failed to load agent');
     } finally {
       setLoading(false);
     }
-  }, [workspaceId, chatbotId]);
+  }, [workspaceId, agentId]);
 
   const fetchFiles = useCallback(async () => {
-    if (!chatbotId) return;
+    if (!agentId) return;
     try {
-      const res = await fetch(`/api/v1/workspaces/${workspaceId}/chatbots/${chatbotId}/files`);
+      const res = await fetch(`/api/v1/workspaces/${workspaceId}/agents/${agentId}/files`);
       if (res.ok) {
         const { data: fileList } = await res.json();
         setFiles(fileList || []);
@@ -227,17 +249,17 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
     } catch (err) {
       console.error('Failed to fetch files:', err);
     }
-  }, [workspaceId, chatbotId]);
+  }, [workspaceId, agentId]);
 
   const handleFileUpload = async (fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0 || !chatbotId) return;
+    if (!fileList || fileList.length === 0 || !agentId) return;
     setFileError(null);
     setUploading(true);
     try {
       const formData = new FormData();
       formData.append('file', fileList[0]);
       const res = await fetch(
-        `/api/v1/workspaces/${workspaceId}/chatbots/${chatbotId}/files`,
+        `/api/v1/workspaces/${workspaceId}/agents/${agentId}/files`,
         { method: 'POST', body: formData }
       );
       if (!res.ok) {
@@ -255,10 +277,10 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
   };
 
   const handleFileDelete = async (fileId: string) => {
-    if (!chatbotId) return;
+    if (!agentId) return;
     try {
       const res = await fetch(
-        `/api/v1/workspaces/${workspaceId}/chatbots/${chatbotId}/files/${fileId}`,
+        `/api/v1/workspaces/${workspaceId}/agents/${agentId}/files/${fileId}`,
         { method: 'DELETE' }
       );
       if (res.ok) {
@@ -271,9 +293,9 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
 
   useEffect(() => {
     fetchWorkspaceData();
-    fetchChatbot();
+    fetchAgent();
     fetchFiles();
-  }, [fetchWorkspaceData, fetchChatbot, fetchFiles]);
+  }, [fetchWorkspaceData, fetchAgent, fetchFiles]);
 
   useEffect(() => {
     if (integrations.length === 0) return;
@@ -396,19 +418,27 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
         ...data,
         channelType: data.channelEnabled ? data.channelType : null,
         channelIntegration: data.channelEnabled ? data.channelIntegration : null,
+        channelAddress: data.channelEnabled ? (data.channelAddress || null) : null,
         channelEnabled: undefined,
         modelOverride: data.modelOverride || null,
         initialMessage: data.initialMessage || null,
         description: data.description || null,
         fallbackMessage: data.fallbackMessage || null,
+        escalationPattern: data.escalationPattern || null,
+        faqOverrides: data.faqOverrides
+          .filter((f) => f.patterns.trim() && f.response.trim())
+          .map((f) => ({
+            patterns: f.patterns.split(',').map((p) => p.trim()).filter(Boolean),
+            response: f.response,
+          })),
       };
 
-      const url = chatbotId
-        ? `/api/v1/workspaces/${workspaceId}/chatbots/${chatbotId}`
-        : `/api/v1/workspaces/${workspaceId}/chatbots`;
+      const url = agentId
+        ? `/api/v1/workspaces/${workspaceId}/agents/${agentId}`
+        : `/api/v1/workspaces/${workspaceId}/agents`;
 
       const res = await fetch(url, {
-        method: chatbotId ? 'PATCH' : 'POST',
+        method: agentId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
@@ -456,7 +486,7 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
           </button>
           <Bot className="w-5 h-5 text-violet-400" />
           <h2 className="text-lg font-semibold text-white">
-            {chatbotId ? 'Edit Chatbot' : 'New Chatbot'}
+            {agentId ? 'Edit Agent' : 'New Agent'}
           </h2>
         </div>
         <div className="flex items-center gap-2">
@@ -572,6 +602,40 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
                     </p>
                   )}
                 </Field>
+                {hasChannelIntegration && (() => {
+                  const channelInt = integrations.find((i) => i.integration === data.channelIntegration);
+                  const meta = channelInt?.meta as Record<string, unknown> | null;
+                  const phoneNumbers = meta && typeof meta === 'object' && 'phoneNumbers' in meta
+                    ? (meta.phoneNumbers as Record<string, { number: string; label: string }>)
+                    : null;
+
+                  if (!phoneNumbers || Object.keys(phoneNumbers).length === 0) {
+                    return (
+                      <Field label="Send From" hint="Agent's address on this channel">
+                        <p className="text-xs text-zinc-500 bg-zinc-800/50 border border-zinc-700 rounded p-2">
+                          No addresses available. Configure phone numbers in the {data.channelIntegration} integration first.
+                        </p>
+                      </Field>
+                    );
+                  }
+
+                  return (
+                    <Field label="Send From" required hint="Agent's address on this channel">
+                      <select
+                        value={data.channelAddress}
+                        onChange={(e) => setData({ ...data, channelAddress: e.target.value })}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+                      >
+                        <option value="">Select address...</option>
+                        {Object.entries(phoneNumbers).map(([key, entry]) => (
+                          <option key={key} value={entry.number}>
+                            {entry.label} ({entry.number})
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  );
+                })()}
               </>
             )}
           </div>
@@ -676,7 +740,7 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
         </Section>
 
         {/* Reference Files */}
-        {chatbotId && (
+        {agentId && (
           <Section icon={Paperclip} title={`Reference Files (${files.length}/5)`}>
             <div className="space-y-3">
               <p className="text-xs text-zinc-500">
@@ -745,6 +809,73 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
             </div>
           </Section>
         )}
+
+        {/* FAQ Overrides */}
+        <Section icon={HelpCircle} title={`FAQ Overrides (${data.faqOverrides.length})`}>
+          <div className="space-y-3">
+            <p className="text-xs text-zinc-500">
+              Hardcoded answers that bypass AI entirely. If an inbound message contains any pattern keyword, the bot replies with the static response (no tokens used).
+            </p>
+            {data.faqOverrides.map((faq, idx) => (
+              <div key={idx} className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Rule {idx + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = [...data.faqOverrides];
+                      updated.splice(idx, 1);
+                      setData({ ...data, faqOverrides: updated });
+                    }}
+                    className="text-zinc-500 hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <Field label="Patterns" hint="Comma-separated keywords">
+                  <input
+                    type="text"
+                    value={faq.patterns}
+                    onChange={(e) => {
+                      const updated = [...data.faqOverrides];
+                      updated[idx] = { ...updated[idx], patterns: e.target.value };
+                      setData({ ...data, faqOverrides: updated });
+                    }}
+                    placeholder="hours, what time, when are you open"
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder:text-zinc-600 focus:border-violet-500 focus:outline-none"
+                  />
+                </Field>
+                <Field label="Response">
+                  <textarea
+                    value={faq.response}
+                    onChange={(e) => {
+                      const updated = [...data.faqOverrides];
+                      updated[idx] = { ...updated[idx], response: e.target.value };
+                      setData({ ...data, faqOverrides: updated });
+                    }}
+                    placeholder="We're open Mon-Fri 5am-9pm, Sat-Sun 7am-5pm."
+                    rows={2}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder:text-zinc-600 focus:border-violet-500 focus:outline-none resize-none"
+                  />
+                </Field>
+              </div>
+            ))}
+            {data.faqOverrides.length < 20 && (
+              <button
+                type="button"
+                onClick={() =>
+                  setData({
+                    ...data,
+                    faqOverrides: [...data.faqOverrides, { patterns: '', response: '' }],
+                  })
+                }
+                className="flex items-center gap-2 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add FAQ rule
+              </button>
+            )}
+          </div>
+        </Section>
 
         {/* Initial Message */}
         <Section icon={MessageCircle} title="Initial Message">
@@ -870,6 +1001,45 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
                   className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
                 />
               </Field>
+              <Field label="Auto-Resume" hint="Minutes before bot resumes after pause (0 = manual)">
+                <input
+                  type="number"
+                  value={data.autoResumeMinutes}
+                  onChange={(e) =>
+                    setData({
+                      ...data,
+                      autoResumeMinutes: parseInt(e.target.value, 10) || 0,
+                    })
+                  }
+                  min={0}
+                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+                />
+              </Field>
+              <Field label="Rate Limit" hint="Max bot replies per lead per hour (0 = unlimited)">
+                <input
+                  type="number"
+                  value={data.rateLimitPerHour}
+                  onChange={(e) =>
+                    setData({
+                      ...data,
+                      rateLimitPerHour: parseInt(e.target.value, 10) || 0,
+                    })
+                  }
+                  min={0}
+                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+                />
+              </Field>
+              <Field label="Escalation Keyword" hint="AI says this to trigger escalation">
+                <input
+                  type="text"
+                  value={data.escalationPattern}
+                  onChange={(e) =>
+                    setData({ ...data, escalationPattern: e.target.value })
+                  }
+                  placeholder="[ESCALATE]"
+                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder:text-zinc-600 focus:border-violet-500 focus:outline-none"
+                />
+              </Field>
             </div>
             <Field label="Fallback Message" hint="Sent when AI fails or limits are hit">
               <input
@@ -917,9 +1087,14 @@ export function ChatbotEditor({ workspaceId, chatbotId, onClose, onSave }: Chatb
           <h3 className="text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Summary</h3>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <SummaryRow label="Channel" value={data.channelEnabled ? `${data.channelType} via ${data.channelIntegration}` : 'Not configured (test only)'} />
+            {data.channelEnabled && data.channelAddress && (
+              <SummaryRow label="Send From" value={data.channelAddress} />
+            )}
             <SummaryRow label="AI Provider" value={data.aiIntegration} />
             <SummaryRow label="Model" value={data.modelOverride || '(integration default)'} />
             <SummaryRow label="Ref Files" value={`${files.length} file${files.length !== 1 ? 's' : ''}`} />
+            <SummaryRow label="FAQ Rules" value={`${data.faqOverrides.filter((f) => f.patterns.trim() && f.response.trim()).length}`} />
+            <SummaryRow label="Rate Limit" value={data.rateLimitPerHour > 0 ? `${data.rateLimitPerHour}/hr` : 'Unlimited'} />
             <SummaryRow label="Max Messages" value={String(data.maxMessagesPerConversation)} />
             <SummaryRow label="Timeout" value={`${data.conversationTimeoutMinutes}min`} />
             <SummaryRow label="Status" value={data.active ? 'Active' : 'Inactive'} />

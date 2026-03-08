@@ -384,7 +384,7 @@ export function TwilioConfigEditor({
       <div>
         <h4 className="text-sm font-medium text-zinc-300 mb-2">Webhook Configuration</h4>
         <p className="text-xs text-zinc-500 mb-4">
-          Receive inbound SMS messages to trigger workflows and enable chatbot conversations.
+          Receive inbound SMS messages to trigger workflows and enable agent conversations.
         </p>
 
         <div className="space-y-4">

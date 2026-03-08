@@ -87,6 +87,17 @@ export default async function WorkspaceDetailPage({
     ? resendMeta.templates
     : {};
 
+  // Get agents for workflow editor
+  const agents = await prisma.agent.findMany({
+    where: { workspaceId: workspace.id, active: true },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
+  const agentOptions: Record<string, string> = {};
+  for (const a of agents) {
+    agentOptions[a.id] = a.name;
+  }
+
   // Get Stripe products if configured
   // Support both 'productMap' (official) and 'products' (legacy) field names
   const stripeIntegration = workspace.integrations.find(
@@ -139,6 +150,7 @@ export default async function WorkspaceDetailPage({
           mailerliteGroups={mailerliteGroups}
           resendTemplates={resendTemplates}
           stripeProducts={stripeProducts}
+          agents={agentOptions}
           timezone={workspace.timezone}
           domainConfig={{
             customDomain: workspace.customDomain ?? null,

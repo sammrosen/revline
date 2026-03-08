@@ -1,14 +1,14 @@
-# AI Chatbot System
+# AI Agent System
 
 > **Last Updated:** March 4, 2026
 > **Status:** Core System Complete, Feature Expansion In Progress
-> **Phases:** Twilio Adapter, OpenAI Adapter, Anthropic Adapter, Chatbot Engine, Test Suite
+> **Phases:** Twilio Adapter, OpenAI Adapter, Anthropic Adapter, Agent Engine, Test Suite
 
 ## Executive Summary
 
-The AI chatbot system enables autonomous conversational AI agents within RevLine workspaces. Each workspace can create multiple chatbots that respond to leads via SMS (Twilio) using AI (OpenAI or Anthropic). The system is **channel-agnostic** and **AI-agnostic** by design -- the chatbot engine doesn't know or care which messaging provider or AI model it's using. Everything is configured per-bot.
+The AI agent system enables autonomous conversational AI agents within RevLine workspaces. Each workspace can create multiple agents that respond to leads via SMS (Twilio) using AI (OpenAI or Anthropic). The system is **channel-agnostic** and **AI-agnostic** by design -- the agent engine doesn't know or care which messaging provider or AI model it's using. Everything is configured per-bot.
 
-The system integrates bidirectionally with the workflow engine: workflows can activate bots (`route_to_chatbot` action), and bots emit events that trigger other workflows (`conversation_started`, `escalation_requested`, etc.).
+The system integrates bidirectionally with the workflow engine: workflows can activate bots (`route_to_agent` action), and bots emit events that trigger other workflows (`conversation_started`, `escalation_requested`, etc.).
 
 ---
 
@@ -18,8 +18,8 @@ The system integrates bidirectionally with the workflow engine: workflows can ac
 flowchart TD
     SMS["Inbound SMS\n(Twilio Webhook)"] -->|"first message"| WF["Workflow Engine"]
     SMS -->|"active conversation"| Engine
-    WF -->|"route_to_chatbot"| Engine["Chatbot Engine"]
-    Engine -->|"reads config"| Bot["Chatbot Record\n(prompt, AI, limits)"]
+    WF -->|"route_to_agent"| Engine["Agent Engine"]
+    Engine -->|"reads config"| Bot["Agent Record\n(prompt, AI, limits)"]
     Engine -->|"loads/stores"| DB["Conversation + Messages\n(Postgres)"]
     Engine -->|"chatCompletion()"| AI{"AI Adapter\n(OpenAI or Anthropic)"}
     AI -->|"response + tokens"| Engine
@@ -30,8 +30,8 @@ flowchart TD
 
 ### Message Flow
 
-1. **First message from a new contact:** Twilio webhook fires `sms_received` trigger into the workflow engine. A workflow with a `route_to_chatbot` action creates the conversation and generates the first AI response.
-2. **Subsequent messages in an active conversation:** Twilio webhook detects an active conversation for the contact+number combo and routes directly to the chatbot engine, bypassing workflow overhead.
+1. **First message from a new contact:** Twilio webhook fires `sms_received` trigger into the workflow engine. A workflow with a `route_to_agent` action creates the conversation and generates the first AI response.
+2. **Subsequent messages in an active conversation:** Twilio webhook detects an active conversation for the contact+number combo and routes directly to the agent engine, bypassing workflow overhead.
 3. **Test mode:** The test chat panel in the dashboard calls the engine with `testMode=true`, which skips channel delivery (no SMS sent) but exercises the full pipeline.
 
 ---
@@ -47,7 +47,7 @@ The Twilio adapter handles SMS sending/receiving, webhook signature validation, 
 | File | Purpose |
 |------|---------|
 | `app/_lib/integrations/twilio.adapter.ts` | SMS adapter (sendSms, verifyWebhook, phone number management) |
-| `app/api/v1/twilio-webhook/route.ts` | Inbound SMS webhook handler with chatbot routing |
+| `app/api/v1/twilio-webhook/route.ts` | Inbound SMS webhook handler with agent routing |
 | `app/_lib/workflow/executors/twilio.ts` | Workflow executor for `send_sms` action |
 | `app/(dashboard)/workspaces/[id]/twilio-config-editor.tsx` | Structured config UI (phone numbers, webhook setup) |
 
@@ -57,7 +57,7 @@ The Twilio adapter handles SMS sending/receiving, webhook signature validation, 
 - Validate `X-Twilio-Signature` using the `twilio` SDK
 - Phone number management (add/remove via API fetch from Twilio account)
 - Webhook deduplication via `MessageSid`
-- Active conversation detection for direct chatbot routing
+- Active conversation detection for direct agent routing
 
 **Secrets:** Account SID, Auth Token
 
@@ -110,24 +110,24 @@ The Twilio adapter handles SMS sending/receiving, webhook signature validation, 
 
 ---
 
-### Phase 3a: Chatbot Engine Core
+### Phase 3a: Agent Engine Core
 
 **Status:** Complete
 
-The chatbot engine manages the full conversational loop autonomously.
+The agent engine manages the full conversational loop autonomously.
 
 #### Engine
 
 | File | Purpose |
 |------|---------|
-| `app/_lib/chatbot/engine.ts` | Core engine: `handleInboundMessage()` |
-| `app/_lib/chatbot/types.ts` | Type definitions (InboundMessageParams, ChatbotResponse, etc.) |
-| `app/_lib/chatbot/index.ts` | Barrel exports |
-| `app/_lib/chatbot/pricing.ts` | Static model pricing map for cost estimation |
+| `app/_lib/agent/engine.ts` | Core engine: `handleInboundMessage()` |
+| `app/_lib/agent/types.ts` | Type definitions (InboundMessageParams, AgentResponse, etc.) |
+| `app/_lib/agent/index.ts` | Barrel exports |
+| `app/_lib/agent/pricing.ts` | Static model pricing map for cost estimation |
 
 **Engine flow (per turn):**
 
-1. Load chatbot config from DB
+1. Load agent config from DB
 2. Find or create conversation for contact+channel+bot
 3. Check guardrails: timeout, message limit, token limit
 4. Store inbound USER message
@@ -138,8 +138,8 @@ The chatbot engine manages the full conversational loop autonomously.
 9. Store ASSISTANT response with token usage
 10. Update conversation counters (messageCount, totalTokens)
 11. Send reply via channel adapter (Twilio) -- skipped in test mode
-12. Emit events (`chatbot_response_sent`, `chatbot_turn_complete`)
-13. Return `ChatbotResponse` with usage, events, latency
+12. Emit events (`agent_response_sent`, `agent_turn_complete`)
+13. Return `AgentResponse` with usage, events, latency
 
 **Guardrails:**
 - Max messages per conversation (default 50)
@@ -152,7 +152,7 @@ The chatbot engine manages the full conversational loop autonomously.
 
 In `prisma/schema.prisma`:
 
-**Chatbot** -- Workspace-scoped bot configuration:
+**Agent** -- Workspace-scoped bot configuration:
 - Identity: name, description
 - Channel: channelType (SMS), channelIntegration (TWILIO)
 - AI: aiIntegration (OPENAI/ANTHROPIC), modelOverride, temperatureOverride, maxTokensOverride
@@ -177,18 +177,18 @@ In `prisma/schema.prisma`:
 
 | Route | Methods | Purpose |
 |-------|---------|---------|
-| `/api/v1/workspaces/[id]/chatbots` | GET, POST | List/create chatbots |
-| `/api/v1/workspaces/[id]/chatbots/[chatbotId]` | GET, PATCH, DELETE | Get/update/delete chatbot |
-| `/api/v1/workspaces/[id]/chatbots/[chatbotId]/conversations` | GET | List production conversations |
+| `/api/v1/workspaces/[id]/agents` | GET, POST | List/create agents |
+| `/api/v1/workspaces/[id]/agents/[agentId]` | GET, PATCH, DELETE | Get/update/delete agent |
+| `/api/v1/workspaces/[id]/agents/[agentId]/conversations` | GET | List production conversations |
 
 #### Dashboard UI
 
 | File | Purpose |
 |------|---------|
-| `app/(dashboard)/workspaces/[id]/chatbot-list.tsx` | Chatbot list with status, conversation count, create/edit/delete |
-| `app/(dashboard)/workspaces/[id]/chatbot-editor.tsx` | Structured config editor for all chatbot settings |
+| `app/(dashboard)/workspaces/[id]/agent-list.tsx` | Agent list with status, conversation count, create/edit/delete |
+| `app/(dashboard)/workspaces/[id]/agent-editor.tsx` | Structured config editor for all agent settings |
 
-Accessible via the **Chatbots** tab in the workspace sidebar.
+Accessible via the **Agents** tab in the workspace sidebar.
 
 ---
 
@@ -196,7 +196,7 @@ Accessible via the **Chatbots** tab in the workspace sidebar.
 
 **Status:** Complete
 
-The chatbot plugs into the workflow system as an internal adapter (like RevLine forms).
+The agent plugs into the workflow system as an internal adapter (like RevLine forms).
 
 **Registered in `app/_lib/workflow/registry.ts`:**
 
@@ -206,9 +206,9 @@ The chatbot plugs into the workflow system as an internal adapter (like RevLine 
 | Trigger | `escalation_requested` | Bot needs human help |
 | Trigger | `conversation_completed` | Conversation ended (limit, timeout, or goal) |
 | Trigger | `bot_event` | Generic event from allowedEvents config |
-| Action | `route_to_chatbot` | Activate a chatbot for a lead/channel |
+| Action | `route_to_agent` | Activate an agent for a lead/channel |
 
-**Executor:** `app/_lib/workflow/executors/chatbot.ts` -- Reads chatbotId from action params, forwards trigger payload to `handleInboundMessage()`.
+**Executor:** `app/_lib/workflow/executors/agent.ts` -- Reads agentId from action params, forwards trigger payload to `handleInboundMessage()`.
 
 **Styling:** `app/_lib/workflow/integration-config.ts` -- Violet brand color (`#8B5CF6`), Bot icon.
 
@@ -224,12 +224,12 @@ A full chat playground built into the Testing tab for real AI testing without bu
 |------|---------|
 | `app/(dashboard)/workspaces/[id]/testing-chat-panel.tsx` | Full chat playground UI |
 | `app/(dashboard)/workspaces/[id]/testing-tab.tsx` | Testing tab (Endpoints, Scenarios, **Chats**) |
-| `app/api/v1/workspaces/[id]/chatbots/[chatbotId]/test-chat/route.ts` | POST: send test message, GET: list test convos, DELETE: clear |
-| `app/api/v1/workspaces/[id]/chatbots/[chatbotId]/test-trigger/route.ts` | POST: simulate workflow trigger |
-| `app/_lib/chatbot/pricing.ts` | Cost estimation for known models |
+| `app/api/v1/workspaces/[id]/agents/[agentId]/test-chat/route.ts` | POST: send test message, GET: list test convos, DELETE: clear |
+| `app/api/v1/workspaces/[id]/agents/[agentId]/test-trigger/route.ts` | POST: simulate workflow trigger |
+| `app/_lib/agent/pricing.ts` | Cost estimation for known models |
 
 **Test Chat Features:**
-- Chatbot selector (active bots only)
+- Agent selector (active bots only)
 - Real AI calls (actual OpenAI/Anthropic API)
 - No channel delivery (testMode skips Twilio)
 - Inline metadata per response: token counts, cost estimate, latency, events emitted
@@ -250,8 +250,8 @@ Static pricing map for all supported models. Returns dollar amounts for prompt +
 
 Test conversations are completely isolated from production:
 - `Conversation.isTest` boolean field distinguishes test from real
-- Chatbot list API excludes `isTest=true` from conversation counts
-- Individual chatbot detail API excludes test conversations
+- Agent list API excludes `isTest=true` from conversation counts
+- Individual agent detail API excludes test conversations
 - Conversations list API filters `isTest: false` by default
 - Test chat GET endpoint only returns `isTest: true` conversations
 
@@ -264,7 +264,7 @@ Test conversations are completely isolated from production:
 Each workspace needs:
 1. **Twilio integration** -- Account SID + Auth Token secrets, phone numbers configured
 2. **AI integration** -- OpenAI or Anthropic API Key secret, model + temperature configured
-3. **Chatbot(s)** -- Created in the Chatbots tab with channel, AI provider, system prompt, and guardrails
+3. **Agent(s)** -- Created in the Agents tab with channel, AI provider, system prompt, and guardrails
 
 ### Twilio Webhook Setup
 
@@ -278,16 +278,16 @@ Configure in Twilio Console: Phone Numbers > Your Number > Messaging > "A messag
 
 ## Event Emission
 
-The chatbot system emits these events into the event ledger:
+The agent system emits these events into the event ledger:
 
 | Event | When |
 |-------|------|
-| `chatbot_conversation_started` | New conversation created |
-| `chatbot_conversation_completed` | Conversation ended (timeout, message limit, token limit) |
-| `chatbot_escalation_requested` | Bot escalated to human |
-| `chatbot_response_sent` | AI response delivered |
-| `chatbot_ai_failure` | AI adapter call failed |
-| `chatbot_bot_event` | Generic event from allowedEvents |
+| `agent_conversation_started` | New conversation created |
+| `agent_conversation_completed` | Conversation ended (timeout, message limit, token limit) |
+| `agent_escalation_requested` | Bot escalated to human |
+| `agent_response_sent` | AI response delivered |
+| `agent_ai_failure` | AI adapter call failed |
+| `agent_bot_event` | Generic event from allowedEvents |
 
 ---
 
@@ -296,10 +296,10 @@ The chatbot system emits these events into the event ledger:
 ### New Files (25)
 
 **Core Engine (4):**
-- `app/_lib/chatbot/engine.ts`
-- `app/_lib/chatbot/types.ts`
-- `app/_lib/chatbot/index.ts`
-- `app/_lib/chatbot/pricing.ts`
+- `app/_lib/agent/engine.ts`
+- `app/_lib/agent/types.ts`
+- `app/_lib/agent/index.ts`
+- `app/_lib/agent/pricing.ts`
 
 **Integration Adapters (3):**
 - `app/_lib/integrations/twilio.adapter.ts`
@@ -310,11 +310,11 @@ The chatbot system emits these events into the event ledger:
 - `app/api/v1/twilio-webhook/route.ts`
 
 **API Routes (7):**
-- `app/api/v1/workspaces/[id]/chatbots/route.ts`
-- `app/api/v1/workspaces/[id]/chatbots/[chatbotId]/route.ts`
-- `app/api/v1/workspaces/[id]/chatbots/[chatbotId]/conversations/route.ts`
-- `app/api/v1/workspaces/[id]/chatbots/[chatbotId]/test-chat/route.ts`
-- `app/api/v1/workspaces/[id]/chatbots/[chatbotId]/test-trigger/route.ts`
+- `app/api/v1/workspaces/[id]/agents/route.ts`
+- `app/api/v1/workspaces/[id]/agents/[agentId]/route.ts`
+- `app/api/v1/workspaces/[id]/agents/[agentId]/conversations/route.ts`
+- `app/api/v1/workspaces/[id]/agents/[agentId]/test-chat/route.ts`
+- `app/api/v1/workspaces/[id]/agents/[agentId]/test-trigger/route.ts`
 - `app/api/v1/integrations/[id]/openai-models/route.ts`
 - `app/api/v1/integrations/[id]/anthropic-models/route.ts`
 
@@ -322,11 +322,11 @@ The chatbot system emits these events into the event ledger:
 - `app/_lib/workflow/executors/twilio.ts`
 - `app/_lib/workflow/executors/openai.ts`
 - `app/_lib/workflow/executors/anthropic.ts`
-- `app/_lib/workflow/executors/chatbot.ts`
+- `app/_lib/workflow/executors/agent.ts`
 
 **Dashboard UI (6):**
-- `app/(dashboard)/workspaces/[id]/chatbot-list.tsx`
-- `app/(dashboard)/workspaces/[id]/chatbot-editor.tsx`
+- `app/(dashboard)/workspaces/[id]/agent-list.tsx`
+- `app/(dashboard)/workspaces/[id]/agent-editor.tsx`
 - `app/(dashboard)/workspaces/[id]/testing-chat-panel.tsx`
 - `app/(dashboard)/workspaces/[id]/twilio-config-editor.tsx`
 - `app/(dashboard)/workspaces/[id]/openai-config-editor.tsx`
@@ -334,16 +334,16 @@ The chatbot system emits these events into the event ledger:
 
 ### Modified Files (10+)
 
-- `prisma/schema.prisma` -- Chatbot, Conversation, ConversationMessage models + enums
+- `prisma/schema.prisma` -- Agent, Conversation, ConversationMessage models + enums
 - `app/_lib/types/index.ts` -- TwilioMeta, OpenAIMeta, AnthropicMeta types
 - `app/_lib/integrations/config.ts` -- TWILIO, OPENAI, ANTHROPIC integration configs
 - `app/_lib/integrations/index.ts` -- Barrel exports for new adapters
-- `app/_lib/workflow/registry.ts` -- Twilio, OpenAI, Anthropic, Chatbot adapter definitions
+- `app/_lib/workflow/registry.ts` -- Twilio, OpenAI, Anthropic, Agent adapter definitions
 - `app/_lib/workflow/executors/index.ts` -- Executor registration
 - `app/_lib/workflow/integration-config.ts` -- Visual styling for new adapters
-- `app/(dashboard)/workspaces/[id]/workspace-tabs.tsx` -- Chatbots tab
+- `app/(dashboard)/workspaces/[id]/workspace-tabs.tsx` -- Agents tab
 - `app/(dashboard)/workspaces/[id]/testing-tab.tsx` -- Chats sub-tab
-- `app/(dashboard)/_components/sidebar/WorkspaceNav.tsx` -- Chatbots nav item
+- `app/(dashboard)/_components/sidebar/WorkspaceNav.tsx` -- Agents nav item
 - `app/(dashboard)/workspaces/[id]/integration-actions.tsx` -- Wire-up for new integrations
 
 ### Dependencies Added
@@ -361,14 +361,14 @@ The chatbot system emits these events into the event ledger:
 #### Done (3)
 
 - **Multi-turn conversation history** — Full message history is loaded from the DB and passed to the AI on every turn. Not just the latest message.
-- **Workspace-level chatbot isolation** — Every query is scoped by workspaceId. Bots, conversations, messages never bleed between clients.
+- **Workspace-level agent isolation** — Every query is scoped by workspaceId. Bots, conversations, messages never bleed between clients.
 - **Escalation event emission** — Bot emits `escalation_requested` which can trigger workflows.
 
 #### Partial (4)
 
 - **Bot sleep / human takeover** — `ESCALATED` status stops the bot, but there is no `PAUSED` status, no auto-resume on inactivity, and no way for a human to manually pause a specific conversation from the dashboard.
 - **Escalation delivery** — The event fires and *can* trigger a workflow (e.g., email the gym owner), but there is no built-in notification and no conversation summary is generated for the human taking over.
-- **Per-conversation log** — API exists (`GET /chatbots/[id]/conversations`) with full messages, but no dashboard UI to view production conversations. Test playground shows test convos only.
+- **Per-conversation log** — API exists (`GET /agents/[id]/conversations`) with full messages, but no dashboard UI to view production conversations. Test playground shows test convos only.
 - **Per-client usage tracking** — Token counts are stored per-conversation and per-message. No aggregation view, no dashboard surface, no billing hooks.
 
 #### Missing (13)
@@ -404,9 +404,9 @@ The chatbot system emits these events into the event ledger:
 
 These are needed to actually test the system end-to-end with real leads:
 
-1. **Make channel config optional on chatbot** — Remove channel as required field, validate only at workflow-binding time
-2. **Response delay** — Add `responseDelaySeconds` field to Chatbot model and engine, apply before `sendReply`
-3. **Initial message** — Add `initialMessage` field; when a new conversation starts via `route_to_chatbot`, send this before waiting for lead input
+1. **Make channel config optional on agent** — Remove channel as required field, validate only at workflow-binding time
+2. **Response delay** — Add `responseDelaySeconds` field to Agent model and engine, apply before `sendReply`
+3. **Initial message** — Add `initialMessage` field; when a new conversation starts via `route_to_agent`, send this before waiting for lead input
 4. **Opt-out handling** — Detect STOP/UNSUBSCRIBE in inbound messages, mark conversation as completed, block future messages to that contact, surface in dashboard
 
 #### Priority 2 — Production Readiness
@@ -428,9 +428,9 @@ Architecturally significant — requires a scheduler/cron mechanism:
 
 #### Priority 4 — Visibility & Analytics
 
-12. **Production conversation viewer** — Dashboard UI to browse and read real (non-test) conversations per chatbot and per lead
+12. **Production conversation viewer** — Dashboard UI to browse and read real (non-test) conversations per agent and per lead
 13. **Conversation history on lead detail** — Show past conversations on a lead's profile page
-14. **Per-workspace usage dashboard** — Aggregated view: messages sent, tokens used, leads touched, estimated cost, broken out by chatbot
+14. **Per-workspace usage dashboard** — Aggregated view: messages sent, tokens used, leads touched, estimated cost, broken out by agent
 15. **Conversation analytics** — Dropoff chart, response time distribution, escalation rate, completion rate
 16. **Lead pipeline view** — Visual stage funnel for gym owners
 

@@ -3,7 +3,7 @@
  * 
  * Handles OpenAI Chat Completions operations for a specific workspace.
  * This is a "dumb pipe" — it sends messages to the API and returns responses.
- * Conversation state management is handled by the chatbot engine (separate layer).
+ * Conversation state management is handled by the agent engine (separate layer).
  * 
  * Secret names:
  * - "API Key" - Required for all API calls

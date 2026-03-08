@@ -13,7 +13,7 @@ import { resendExecutors } from './resend';
 import { twilioExecutors } from './twilio';
 import { openaiExecutors } from './openai';
 import { anthropicExecutors } from './anthropic';
-import { chatbotExecutors } from './chatbot';
+import { agentExecutors } from './agent';
 
 // =============================================================================
 // EXECUTOR REGISTRY
@@ -30,7 +30,7 @@ const EXECUTORS: Record<string, Record<string, ActionExecutor>> = {
   twilio: twilioExecutors,
   openai: openaiExecutors,
   anthropic: anthropicExecutors,
-  chatbot: chatbotExecutors,
+  agent: agentExecutors,
 };
 
 // =============================================================================

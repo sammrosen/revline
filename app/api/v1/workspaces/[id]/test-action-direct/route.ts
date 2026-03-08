@@ -1,12 +1,13 @@
 /**
- * Test Action API Route
+ * Test Action Direct API Route
  *
- * Fires a workflow trigger for testing purposes and returns detailed results.
- * Used by the workspace test suite modal and the chat test panel Workflow Tester.
+ * Executes a single workflow action directly for testing purposes.
+ * Builds a WorkflowContext from the provided email/params and runs the executor.
+ * Used by the chat test panel's Workflow Tester (Actions mode).
  *
  * STANDARDS:
  * - Input Validation: Zod schema for request body
- * - API Response: ApiResponse helpers (no raw NextResponse.json)
+ * - API Response: ApiResponse helpers
  * - Event-Driven Debugging: logStructured (no console.error)
  * - Workspace Isolation: auth + workspace access check
  */
@@ -14,20 +15,20 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/app/_lib/db';
-import { emitTrigger } from '@/app/_lib/workflow';
+import { upsertLead } from '@/app/_lib/event-logger';
 import { getUserIdFromHeaders } from '@/app/_lib/auth';
 import { getWorkspaceAccess, WorkspaceRole } from '@/app/_lib/workspace-access';
+import { getActionExecutor, hasActionExecutor } from '@/app/_lib/workflow/executors';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
+import { WorkflowContext } from '@/app/_lib/workflow/types';
 import { logStructured } from '@/app/_lib/reliability';
 
-const TestActionSchema = z.object({
-  trigger: z
+const TestActionDirectSchema = z.object({
+  action: z
     .string()
-    .min(1, 'Trigger is required')
-    .refine((v) => v.includes('.'), 'Invalid trigger format. Use "adapter.operation" (e.g., "abc_ignite.new_member")'),
+    .min(1, 'Action is required')
+    .refine((v) => v.includes('.'), 'Invalid action format. Use "adapter.operation" (e.g., "revline.update_lead_stage")'),
   email: z.string().email('Valid email is required'),
-  name: z.string().optional(),
-  payload: z.record(z.string(), z.unknown()).optional(),
 }).passthrough();
 
 export async function POST(
@@ -58,7 +59,7 @@ export async function POST(
     return ApiResponse.error('Invalid JSON body', 400, ErrorCodes.INVALID_INPUT);
   }
 
-  const parsed = TestActionSchema.safeParse(body);
+  const parsed = TestActionDirectSchema.safeParse(body);
   if (!parsed.success) {
     return ApiResponse.error(
       parsed.error.issues.map((e) => e.message).join(', '),
@@ -67,10 +68,14 @@ export async function POST(
     );
   }
 
-  const { trigger, email, name, payload, ...extraFields } = parsed.data;
+  const { action, email, ...fieldValues } = parsed.data;
 
   try {
-    const [adapter, operation] = trigger.split('.');
+    const [adapter, operation] = action.split('.');
+
+    if (!hasActionExecutor(adapter, operation)) {
+      return ApiResponse.error(`No executor found for action: ${action}`, 400);
+    }
 
     const workspace = await prisma.workspace.findUnique({
       where: { id: workspaceId },
@@ -80,48 +85,57 @@ export async function POST(
       return ApiResponse.error('Workspace not found', 404, ErrorCodes.NOT_FOUND);
     }
 
-    const triggerPayload = {
+    const leadId = await upsertLead({
+      workspaceId,
       email,
-      name: name || undefined,
-      source: 'test-suite',
-      ...(payload || {}),
-      ...extraFields,
+      source: 'test-suite-direct',
+    });
+
+    const actionParams: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(fieldValues)) {
+      if (key === 'name') continue;
+      if (typeof value === 'string' && value.startsWith('{')) {
+        try {
+          actionParams[key] = JSON.parse(value);
+        } catch {
+          actionParams[key] = value;
+        }
+      } else if (key === 'success' && typeof value === 'string') {
+        actionParams[key] = value === 'true';
+      } else {
+        actionParams[key] = value;
+      }
+    }
+
+    const ctx: WorkflowContext = {
+      trigger: {
+        adapter: 'test-suite',
+        operation: 'direct_action',
+        payload: { email, name: fieldValues.name, source: 'test-suite-direct' },
+      },
+      email,
+      name: fieldValues.name as string | undefined,
+      workspaceId,
+      clientId: workspaceId,
+      leadId,
+      isTest: true,
+      actionData: {},
     };
 
-    const result = await emitTrigger(
-      workspaceId,
-      { adapter, operation },
-      triggerPayload,
-      { isTest: true }
-    );
+    const executor = getActionExecutor(adapter, operation);
+    const result = await executor.execute(ctx, actionParams);
 
     const duration = Date.now() - startTime;
 
     return ApiResponse.success({
-      trigger: `${adapter}.${operation}`,
-      workflowsFound: result.workflowsFound,
-      workflowsExecuted: result.workflowsExecuted,
-      executions: result.executions.map((exec) => ({
-        workflowId: exec.workflowId,
-        workflowName: exec.workflowName,
-        status: exec.status,
-        actionsExecuted: exec.actionsExecuted,
-        actionsTotal: exec.actionsTotal,
-        error: exec.error,
-        results: exec.results.map((r) => ({
-          action: `${r.action.adapter}.${r.action.operation}`,
-          success: r.result.success,
-          error: r.result.error,
-          data: r.result.data,
-        })),
-      })),
-      allSucceeded: result.executions.every((e) => e.status === 'completed'),
+      action: `${adapter}.${operation}`,
+      ...result,
       duration,
     });
   } catch (error) {
     logStructured({
       correlationId: crypto.randomUUID(),
-      event: 'test_action_error',
+      event: 'test_action_direct_error',
       workspaceId,
       provider: 'workflow',
       success: false,

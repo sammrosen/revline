@@ -13,11 +13,11 @@ import { IntegrationNetworkGraph } from './_components/network-graph';
 import { TestingTab } from './testing-tab';
 import { WorkspaceSettings } from './workspace-settings';
 import { EventsLog } from './_components/events-log';
-import { ChatbotList } from './chatbot-list';
+import { AgentList } from './agent-list';
 import { Workflow as WorkflowIcon, Plus, List } from 'lucide-react';
 import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
 
-type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'chatbots' | 'testing' | 'settings';
+type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'agents' | 'testing' | 'settings';
 
 interface SecretSummary {
   id: string;
@@ -84,6 +84,7 @@ interface WorkspaceTabsProps {
   mailerliteGroups?: Record<string, { id: string; name: string }>;
   resendTemplates?: Record<string, { id: string; name: string; variables?: string[] }>;
   stripeProducts?: Record<string, string>;
+  agents?: Record<string, string>;
   timezone?: string; // Workspace timezone for settings
   domainConfig?: {
     customDomain: string | null;
@@ -134,9 +135,9 @@ interface IntegrationDependency {
   usedBy: Array<{ workflowId: string; workflowName: string }>;
 }
 
-const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'chatbots', 'testing', 'settings'];
+const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'agents', 'testing', 'settings'];
 
-export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, resendTemplates = {}, stripeProducts = {}, timezone = 'America/New_York', domainConfig, leadStages, leadPropertySchema }: WorkspaceTabsProps) {
+export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, resendTemplates = {}, stripeProducts = {}, agents = {}, timezone = 'America/New_York', domainConfig, leadStages, leadPropertySchema }: WorkspaceTabsProps) {
   // Initialize with default to avoid hydration mismatch, then sync from hash in useEffect
   const [activeTab, setActiveTab] = useState<TabType>('workflows');
   const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
@@ -285,6 +286,7 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
                   mailerliteGroups={mailerliteGroups}
                   resendTemplates={resendTemplates}
                   stripeProducts={stripeProducts}
+                  agents={agents}
                   leadStages={leadStages}
                   leadPropertySchema={leadPropertySchema}
                   hideHeader
@@ -302,6 +304,7 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
             mailerliteGroups={mailerliteGroups}
             resendTemplates={resendTemplates}
             stripeProducts={stripeProducts}
+            agents={agents}
             leadStages={leadStages}
             leadPropertySchema={leadPropertySchema}
             onClose={() => setShowNewWorkflow(false)}
@@ -413,9 +416,9 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
           </div>
         )}
 
-        {activeTab === 'chatbots' && (
+        {activeTab === 'agents' && (
           <div className="max-w-[1600px] mx-auto">
-            <ChatbotList workspaceId={workspaceId} />
+            <AgentList workspaceId={workspaceId} />
           </div>
         )}
 

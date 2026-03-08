@@ -3,7 +3,7 @@
  * 
  * Handles Anthropic Messages API operations for a specific workspace.
  * This is a "dumb pipe" — it sends messages to the API and returns responses.
- * Conversation state management is handled by the chatbot engine (separate layer).
+ * Conversation state management is handled by the agent engine (separate layer).
  * 
  * Key differences from OpenAI:
  * - System prompt is a top-level `system` param, not a message role

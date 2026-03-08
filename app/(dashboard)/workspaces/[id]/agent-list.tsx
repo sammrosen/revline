@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Bot, Plus, MessageCircle, Sparkles, Power, PowerOff, Trash2 } from 'lucide-react';
-import { ChatbotEditor } from './chatbot-editor';
+import { AgentEditor } from './agent-editor';
 
-interface ChatbotSummary {
+interface AgentSummary {
   id: string;
   name: string;
   description: string | null;
@@ -16,62 +16,62 @@ interface ChatbotSummary {
   createdAt: string;
 }
 
-interface ChatbotListProps {
+interface AgentListProps {
   workspaceId: string;
 }
 
-export function ChatbotList({ workspaceId }: ChatbotListProps) {
-  const [chatbots, setChatbots] = useState<ChatbotSummary[]>([]);
+export function AgentList({ workspaceId }: AgentListProps) {
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  const fetchChatbots = useCallback(async () => {
+  const fetchAgents = useCallback(async () => {
     try {
-      const res = await fetch(`/api/v1/workspaces/${workspaceId}/chatbots`);
+      const res = await fetch(`/api/v1/workspaces/${workspaceId}/agents`);
       if (res.ok) {
         const data = await res.json();
-        setChatbots(data.data || []);
+        setAgents(data.data || []);
       }
     } catch (err) {
-      console.error('Failed to fetch chatbots:', err);
+      console.error('Failed to fetch agents:', err);
     } finally {
       setLoading(false);
     }
   }, [workspaceId]);
 
   useEffect(() => {
-    fetchChatbots();
-  }, [fetchChatbots]);
+    fetchAgents();
+  }, [fetchAgents]);
 
-  const handleToggleActive = async (chatbotId: string, currentActive: boolean) => {
+  const handleToggleActive = async (agentId: string, currentActive: boolean) => {
     try {
-      const res = await fetch(`/api/v1/workspaces/${workspaceId}/chatbots/${chatbotId}`, {
+      const res = await fetch(`/api/v1/workspaces/${workspaceId}/agents/${agentId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ active: !currentActive }),
       });
       if (res.ok) {
-        fetchChatbots();
+        fetchAgents();
       }
     } catch (err) {
-      console.error('Failed to toggle chatbot:', err);
+      console.error('Failed to toggle agent:', err);
     }
   };
 
-  const handleDelete = async (chatbotId: string) => {
+  const handleDelete = async (agentId: string) => {
     if (deleting) return;
-    setDeleting(chatbotId);
+    setDeleting(agentId);
     try {
-      const res = await fetch(`/api/v1/workspaces/${workspaceId}/chatbots/${chatbotId}`, {
+      const res = await fetch(`/api/v1/workspaces/${workspaceId}/agents/${agentId}`, {
         method: 'DELETE',
       });
       if (res.ok) {
-        fetchChatbots();
+        fetchAgents();
       }
     } catch (err) {
-      console.error('Failed to delete chatbot:', err);
+      console.error('Failed to delete agent:', err);
     } finally {
       setDeleting(null);
     }
@@ -79,9 +79,9 @@ export function ChatbotList({ workspaceId }: ChatbotListProps) {
 
   if (editingId || creating) {
     return (
-      <ChatbotEditor
+      <AgentEditor
         workspaceId={workspaceId}
-        chatbotId={editingId || undefined}
+        agentId={editingId || undefined}
         onClose={() => {
           setEditingId(null);
           setCreating(false);
@@ -89,7 +89,7 @@ export function ChatbotList({ workspaceId }: ChatbotListProps) {
         onSave={() => {
           setEditingId(null);
           setCreating(false);
-          fetchChatbots();
+          fetchAgents();
         }}
       />
     );
@@ -100,36 +100,36 @@ export function ChatbotList({ workspaceId }: ChatbotListProps) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Bot className="w-5 h-5 text-violet-400" />
-          <h2 className="text-lg font-semibold text-white">Chatbots</h2>
-          <span className="text-xs text-zinc-500">({chatbots.length})</span>
+          <h2 className="text-lg font-semibold text-white">Agents</h2>
+          <span className="text-xs text-zinc-500">({agents.length})</span>
         </div>
         <button
           onClick={() => setCreating(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-black text-sm font-medium rounded hover:bg-zinc-200 transition-colors"
         >
           <Plus className="w-4 h-4" />
-          New Chatbot
+          New Agent
         </button>
       </div>
 
       {loading ? (
-        <div className="text-sm text-zinc-500 py-8 text-center">Loading chatbots...</div>
-      ) : chatbots.length === 0 ? (
+        <div className="text-sm text-zinc-500 py-8 text-center">Loading agents...</div>
+      ) : agents.length === 0 ? (
         <div className="border border-dashed border-zinc-800 rounded-lg py-12 text-center">
           <Bot className="w-10 h-10 text-zinc-700 mx-auto mb-3" />
-          <p className="text-zinc-400 text-sm mb-1">No chatbots yet</p>
-          <p className="text-zinc-600 text-xs mb-4">Create an AI chatbot to handle conversations with your leads</p>
+          <p className="text-zinc-400 text-sm mb-1">No agents yet</p>
+          <p className="text-zinc-600 text-xs mb-4">Create an AI agent to handle conversations with your leads</p>
           <button
             onClick={() => setCreating(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-sm font-medium rounded hover:bg-violet-500 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Create Chatbot
+            Create Agent
           </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {chatbots.map((bot) => (
+          {agents.map((bot) => (
             <div
               key={bot.id}
               className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors"

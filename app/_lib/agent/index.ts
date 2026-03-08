@@ -1,14 +1,14 @@
 /**
- * Chatbot Engine
+ * Agent Engine
  *
- * Import from '@/app/_lib/chatbot'
+ * Import from '@/app/_lib/agent'
  *
  * @example
- * import { handleInboundMessage } from '@/app/_lib/chatbot';
+ * import { handleInboundMessage } from '@/app/_lib/agent';
  *
  * const result = await handleInboundMessage({
  *   workspaceId: '...',
- *   chatbotId: '...',
+ *   agentId: '...',
  *   contactAddress: '+15551234567',
  *   channelAddress: '+15559876543',
  *   channel: 'SMS',
@@ -16,11 +16,12 @@
  * });
  */
 
-export { handleInboundMessage } from './engine';
+export { handleInboundMessage, initiateConversation } from './engine';
 export type {
   InboundMessageParams,
-  ChatbotResponse,
-  ChatbotConfig,
+  InitiateConversationParams,
+  AgentResponse,
+  AgentConfig,
   ConversationWithMessages,
   ConversationStatus,
   MessageRole,

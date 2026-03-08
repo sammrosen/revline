@@ -53,7 +53,8 @@ import { AlertService } from '@/app/_lib/alerts';
 export async function emitTrigger(
   workspaceId: string,
   trigger: WorkflowTrigger,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  options?: { isTest?: boolean }
 ): Promise<TriggerEmitResult> {
   // 1. Find all enabled workflows matching this trigger
   const workflows = await prisma.workflow.findMany({
@@ -80,6 +81,7 @@ export async function emitTrigger(
     name: extractName(payload),
     workspaceId,
     clientId: workspaceId, // Legacy alias
+    isTest: options?.isTest,
     actionData: {},
   };
 
