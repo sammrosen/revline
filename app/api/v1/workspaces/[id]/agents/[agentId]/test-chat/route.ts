@@ -100,6 +100,7 @@ export async function GET(
             content: true,
             promptTokens: true,
             completionTokens: true,
+            turnLog: true,
             createdAt: true,
           },
         },

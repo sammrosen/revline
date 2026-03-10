@@ -16,6 +16,7 @@ import {
   Paperclip,
   Plus,
   HelpCircle,
+  Wrench,
 } from 'lucide-react';
 
 interface AgentData {
@@ -42,6 +43,7 @@ interface AgentData {
   escalationPattern: string;
   faqOverrides: Array<{ patterns: string; response: string }>;
   allowedEvents: string[];
+  enabledTools: string[];
   active: boolean;
 }
 
@@ -118,6 +120,7 @@ const DEFAULT_DATA: AgentData = {
   escalationPattern: '[ESCALATE]',
   faqOverrides: [],
   allowedEvents: ['conversation_started', 'escalation_requested', 'conversation_completed'],
+  enabledTools: [],
   active: true,
 };
 
@@ -227,6 +230,7 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
             response: f.response,
           })),
           allowedEvents: bot.allowedEvents || [],
+          enabledTools: bot.enabledTools || [],
           active: bot.active,
         });
       }
@@ -1082,6 +1086,45 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
           </div>
         </Section>
 
+        {/* Enabled Tools */}
+        <Section icon={Wrench} title="Tools (Function Calling)">
+          <p className="text-xs text-zinc-500 mb-3">
+            Enable tools this agent can use during conversations. The AI will call these functions when relevant.
+          </p>
+          <div className="space-y-2">
+            {[
+              { value: 'check_availability', label: 'Check Availability', desc: 'Query open appointment slots' },
+              { value: 'book_appointment', label: 'Book Appointment', desc: 'Create bookings for contacts' },
+              { value: 'lookup_customer', label: 'Lookup Customer', desc: 'Find customer/member records' },
+            ].map((tool) => (
+              <label key={tool.value} className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={data.enabledTools.includes(tool.value)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setData({ ...data, enabledTools: [...data.enabledTools, tool.value] });
+                    } else {
+                      setData({
+                        ...data,
+                        enabledTools: data.enabledTools.filter((v) => v !== tool.value),
+                      });
+                    }
+                  }}
+                  className="mt-0.5 rounded border-zinc-700 bg-zinc-800 text-violet-500 focus:ring-violet-500"
+                />
+                <span>
+                  <span className="text-zinc-300">{tool.label}</span>
+                  <span className="block text-xs text-zinc-600">{tool.desc}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          {data.enabledTools.length === 0 && (
+            <p className="text-xs text-zinc-600 mt-2">No tools enabled — agent will be text-only.</p>
+          )}
+        </Section>
+
         {/* Summary */}
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4">
           <h3 className="text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Summary</h3>
@@ -1094,6 +1137,7 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
             <SummaryRow label="Model" value={data.modelOverride || '(integration default)'} />
             <SummaryRow label="Ref Files" value={`${files.length} file${files.length !== 1 ? 's' : ''}`} />
             <SummaryRow label="FAQ Rules" value={`${data.faqOverrides.filter((f) => f.patterns.trim() && f.response.trim()).length}`} />
+            <SummaryRow label="Tools" value={data.enabledTools.length > 0 ? `${data.enabledTools.length} enabled` : 'None'} />
             <SummaryRow label="Rate Limit" value={data.rateLimitPerHour > 0 ? `${data.rateLimitPerHour}/hr` : 'Unlimited'} />
             <SummaryRow label="Max Messages" value={String(data.maxMessagesPerConversation)} />
             <SummaryRow label="Timeout" value={`${data.conversationTimeoutMinutes}min`} />

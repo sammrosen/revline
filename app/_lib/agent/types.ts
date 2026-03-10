@@ -9,6 +9,61 @@ import type { ConversationStatus, MessageRole } from '@prisma/client';
 
 export { ConversationStatus, MessageRole };
 
+// ---------------------------------------------------------------------------
+// Turn log: discriminated union capturing every engine action per turn
+// ---------------------------------------------------------------------------
+
+interface TurnLogBase { ts: number; }
+
+export interface AiCallLog extends TurnLogBase {
+  type: 'ai_call';
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  finishReason: string;
+  durationMs: number;
+  iteration: number;
+}
+
+export interface ToolCallLog extends TurnLogBase {
+  type: 'tool_call';
+  tool: string;
+  args: Record<string, unknown>;
+  result: { success: boolean; data?: unknown; error?: string };
+  durationMs: number;
+  iteration: number;
+}
+
+export interface FaqMatchLog extends TurnLogBase {
+  type: 'faq_match';
+  pattern: string;
+  response: string;
+}
+
+export interface EscalationLog extends TurnLogBase {
+  type: 'escalation';
+  pattern: string;
+}
+
+export interface GuardrailLog extends TurnLogBase {
+  type: 'guardrail';
+  guardrail: 'rate_limited' | 'timeout' | 'message_limit' | 'token_limit';
+  detail: string;
+}
+
+export interface EventLog extends TurnLogBase {
+  type: 'event';
+  event: string;
+}
+
+export interface ErrorLog extends TurnLogBase {
+  type: 'error';
+  source: string;
+  message: string;
+}
+
+export type TurnLogEntry = AiCallLog | ToolCallLog | FaqMatchLog | EscalationLog | GuardrailLog | EventLog | ErrorLog;
+
 export interface InboundMessageParams {
   workspaceId: string;
   agentId: string;
@@ -51,6 +106,10 @@ export interface AgentResponse {
   faqMatch?: boolean;
   /** True if the message was rate-limited (no reply sent) */
   rateLimited?: boolean;
+  /** Tool names executed during this turn (only present when tools were used) */
+  toolsUsed?: string[];
+  /** Full turn activity log (AI calls, tool calls, guardrails, events, errors) */
+  turnLog?: TurnLogEntry[];
 }
 
 export interface ConversationWithMessages {
@@ -99,6 +158,7 @@ export interface AgentConfig {
   escalationPattern: string | null;
   faqOverrides: Array<{ patterns: string[]; response: string }> | null;
   allowedEvents: string[];
+  enabledTools: string[];
   active: boolean;
 }
 

@@ -17,6 +17,7 @@
  */
 
 export { handleInboundMessage, initiateConversation } from './engine';
+export { getAvailableTools } from './tool-registry';
 export type {
   InboundMessageParams,
   InitiateConversationParams,
@@ -25,4 +26,5 @@ export type {
   ConversationWithMessages,
   ConversationStatus,
   MessageRole,
+  TurnLogEntry,
 } from './types';

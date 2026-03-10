@@ -20,6 +20,14 @@ import {
   Play,
   CheckCircle2,
   XCircle,
+  Wrench,
+  ChevronRight,
+  ScrollText,
+  X,
+  Brain,
+  BookOpen,
+  AlertTriangle,
+  Shield,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -46,6 +54,15 @@ interface CostEstimate {
   isEstimated: boolean;
 }
 
+type TurnLogEntry =
+  | { type: 'ai_call'; ts: number; model: string; promptTokens: number; completionTokens: number; finishReason: string; durationMs: number; iteration: number }
+  | { type: 'tool_call'; ts: number; tool: string; args: Record<string, unknown>; result: { success: boolean; data?: unknown; error?: string }; durationMs: number; iteration: number }
+  | { type: 'faq_match'; ts: number; pattern: string; response: string }
+  | { type: 'escalation'; ts: number; pattern: string }
+  | { type: 'guardrail'; ts: number; guardrail: string; detail: string }
+  | { type: 'event'; ts: number; event: string }
+  | { type: 'error'; ts: number; source: string; message: string };
+
 interface ChatMessageData {
   role: 'user' | 'assistant';
   content: string;
@@ -55,6 +72,8 @@ interface ChatMessageData {
   responseDelaySkipped?: number;
   costEstimate?: CostEstimate;
   eventsEmitted?: string[];
+  toolsUsed?: string[];
+  turnLog?: TurnLogEntry[];
   error?: string;
   timestamp: Date;
 }
@@ -71,6 +90,7 @@ interface ConversationSummary {
     content: string;
     promptTokens: number;
     completionTokens: number;
+    turnLog?: unknown;
     createdAt: string;
   }>;
 }
@@ -90,6 +110,8 @@ interface TestChatResponse {
   eventsEmitted: string[];
   latencyMs?: number;
   responseDelaySkipped?: number;
+  toolsUsed?: string[];
+  turnLog?: TurnLogEntry[];
   costEstimate: CostEstimate;
   model: string;
 }
@@ -192,10 +214,24 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
   const [testerResult, setTesterResult] = useState<TriggerResult | ActionResult | null>(null);
   const [testerError, setTesterError] = useState<string | null>(null);
 
+  // Turn log side panel
+  const [logPanelOpen, setLogPanelOpen] = useState(false);
+  const [expandedLogEntries, setExpandedLogEntries] = useState<Set<string>>(new Set());
+
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const logEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selectedAgent = agents.find((b) => b.id === selectedAgentId);
+
+  const allTurnLogs = messages.flatMap((msg, msgIdx) =>
+    (msg.turnLog || []).map((entry, entryIdx) => ({ ...entry, msgIdx, entryIdx }))
+  );
+
+  // Auto-scroll log panel when new entries arrive
+  useEffect(() => {
+    if (logPanelOpen) logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [allTurnLogs.length, logPanelOpen]);
 
   // -------------------------------------------------------------------------
   // Fetch agents
@@ -384,6 +420,8 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
         responseDelaySkipped: data.responseDelaySkipped,
         costEstimate: data.costEstimate,
         eventsEmitted: data.eventsEmitted,
+        toolsUsed: data.toolsUsed,
+        turnLog: data.turnLog,
         error: data.error,
         timestamp: new Date(),
       };
@@ -488,6 +526,7 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
       content: m.content,
       promptTokens: m.promptTokens || undefined,
       completionTokens: m.completionTokens || undefined,
+      turnLog: Array.isArray(m.turnLog) ? m.turnLog as TurnLogEntry[] : undefined,
       timestamp: new Date(m.createdAt),
     }));
 
@@ -577,6 +616,24 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
         >
           <History className="w-3.5 h-3.5" />
           History
+        </button>
+        <button
+          type="button"
+          onClick={() => setLogPanelOpen(!logPanelOpen)}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+            logPanelOpen
+              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+              : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+          }`}
+          title="Toggle tool execution logs"
+        >
+          <ScrollText className="w-3.5 h-3.5" />
+          Logs
+          {allTurnLogs.length > 0 && (
+            <span className="text-[10px] bg-zinc-700 text-zinc-300 px-1.5 py-0.5 rounded-full leading-none">
+              {allTurnLogs.length}
+            </span>
+          )}
         </button>
         <button
           type="button"
@@ -719,91 +776,295 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
         </div>
       )}
 
-      {/* Chat messages */}
+      {/* Chat messages + Log panel */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
-        <div className="h-[400px] overflow-y-auto p-3 space-y-3">
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-zinc-600">
-              <Bot className="w-10 h-10 mb-2" />
-              <p className="text-sm">Send a message to start testing</p>
-            </div>
-          )}
-
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              {msg.role === 'assistant' && (
-                <div className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Bot className="w-3.5 h-3.5 text-violet-400" />
+        <div className="flex">
+          {/* Chat column */}
+          <div className={`${logPanelOpen ? 'flex-1 min-w-0' : 'w-full'} flex flex-col`}>
+            <div className="h-[400px] overflow-y-auto p-3 space-y-3">
+              {messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-zinc-600">
+                  <Bot className="w-10 h-10 mb-2" />
+                  <p className="text-sm">Send a message to start testing</p>
                 </div>
               )}
-              <div className={`max-w-[80%] ${msg.role === 'user' ? 'order-first' : ''}`}>
-                <div
-                  className={`rounded-lg px-3 py-2 text-sm ${
-                    msg.role === 'user'
-                      ? 'bg-violet-500/20 text-violet-100 border border-violet-500/30'
-                      : msg.error
-                        ? 'bg-red-500/10 text-red-300 border border-red-500/20'
-                        : 'bg-zinc-800 text-zinc-200 border border-zinc-700'
-                  }`}
-                >
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
-                </div>
 
-                {/* Metadata for bot responses */}
-                {msg.role === 'assistant' && (msg.promptTokens || msg.latencyMs || msg.eventsEmitted?.length) && (
-                  <div className="flex flex-wrap gap-2 mt-1 px-1">
-                    {msg.promptTokens !== undefined && (
-                      <span className="text-[10px] text-zinc-500 flex items-center gap-0.5">
-                        tokens: {msg.promptTokens}/{msg.completionTokens}
-                      </span>
-                    )}
-                    {msg.costEstimate && msg.costEstimate.isEstimated && (
-                      <span className="text-[10px] text-zinc-500 flex items-center gap-0.5">
-                        <DollarSign className="w-2.5 h-2.5" />
-                        {formatCost(msg.costEstimate.totalCost)}
-                      </span>
-                    )}
-                    {msg.latencyMs !== undefined && (
-                      <span className="text-[10px] text-zinc-500 flex items-center gap-0.5">
-                        <Clock className="w-2.5 h-2.5" />
-                        {msg.latencyMs}ms
-                      </span>
-                    )}
-                    {msg.responseDelaySkipped !== undefined && msg.responseDelaySkipped > 0 && (
-                      <span className="text-[10px] text-blue-400 flex items-center gap-0.5">
-                        <Clock className="w-2.5 h-2.5" />
-                        delay: {msg.responseDelaySkipped}s (skipped)
-                      </span>
-                    )}
-                    {msg.eventsEmitted && msg.eventsEmitted.length > 0 && (
-                      <span className="text-[10px] text-amber-400 flex items-center gap-0.5">
-                        <Zap className="w-2.5 h-2.5" />
-                        {msg.eventsEmitted.join(', ')}
-                      </span>
+              {messages.map((msg, i) => (
+                <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role === 'assistant' && (
+                    <div className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Bot className="w-3.5 h-3.5 text-violet-400" />
+                    </div>
+                  )}
+                  <div className={`max-w-[80%] ${msg.role === 'user' ? 'order-first' : ''}`}>
+                    <div
+                      className={`rounded-lg px-3 py-2 text-sm ${
+                        msg.role === 'user'
+                          ? 'bg-violet-500/20 text-violet-100 border border-violet-500/30'
+                          : msg.error
+                            ? 'bg-red-500/10 text-red-300 border border-red-500/20'
+                            : 'bg-zinc-800 text-zinc-200 border border-zinc-700'
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    </div>
+
+                    {/* Metadata for bot responses */}
+                    {msg.role === 'assistant' && (msg.promptTokens || msg.latencyMs || msg.eventsEmitted?.length || msg.toolsUsed?.length) && (
+                      <div className="flex flex-wrap gap-2 mt-1 px-1">
+                        {msg.promptTokens !== undefined && (
+                          <span className="text-[10px] text-zinc-500 flex items-center gap-0.5">
+                            tokens: {msg.promptTokens}/{msg.completionTokens}
+                          </span>
+                        )}
+                        {msg.costEstimate && msg.costEstimate.isEstimated && (
+                          <span className="text-[10px] text-zinc-500 flex items-center gap-0.5">
+                            <DollarSign className="w-2.5 h-2.5" />
+                            {formatCost(msg.costEstimate.totalCost)}
+                          </span>
+                        )}
+                        {msg.latencyMs !== undefined && (
+                          <span className="text-[10px] text-zinc-500 flex items-center gap-0.5">
+                            <Clock className="w-2.5 h-2.5" />
+                            {msg.latencyMs}ms
+                          </span>
+                        )}
+                        {msg.responseDelaySkipped !== undefined && msg.responseDelaySkipped > 0 && (
+                          <span className="text-[10px] text-blue-400 flex items-center gap-0.5">
+                            <Clock className="w-2.5 h-2.5" />
+                            delay: {msg.responseDelaySkipped}s (skipped)
+                          </span>
+                        )}
+                        {msg.toolsUsed && msg.toolsUsed.length > 0 && (
+                          <span className="text-[10px] text-violet-400 flex items-center gap-0.5">
+                            <Wrench className="w-2.5 h-2.5" />
+                            {msg.toolsUsed.join(', ')}
+                          </span>
+                        )}
+                        {msg.eventsEmitted && msg.eventsEmitted.length > 0 && (
+                          <span className="text-[10px] text-amber-400 flex items-center gap-0.5">
+                            <Zap className="w-2.5 h-2.5" />
+                            {msg.eventsEmitted.join(', ')}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
-              {msg.role === 'user' && (
-                <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <User className="w-3.5 h-3.5 text-zinc-400" />
+                  {msg.role === 'user' && (
+                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <User className="w-3.5 h-3.5 text-zinc-400" />
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {sending && (
+                <div className="flex gap-2 items-start">
+                  <div className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0">
+                    <Bot className="w-3.5 h-3.5 text-violet-400" />
+                  </div>
+                  <div className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
+                  </div>
                 </div>
               )}
-            </div>
-          ))}
 
-          {sending && (
-            <div className="flex gap-2 items-start">
-              <div className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0">
-                <Bot className="w-3.5 h-3.5 text-violet-400" />
+              <div ref={chatEndRef} />
+            </div>
+          </div>
+
+          {/* Turn log side panel */}
+          {logPanelOpen && (
+            <div className="w-[280px] flex-shrink-0 border-l border-zinc-800 flex flex-col h-[400px]">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
+                <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <ScrollText className="w-3 h-3" />
+                  Turn Log
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setLogPanelOpen(false)}
+                  className="text-zinc-600 hover:text-zinc-400 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <div className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2">
-                <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
+              <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+                {allTurnLogs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-zinc-600">
+                    <ScrollText className="w-6 h-6 mb-1.5" />
+                    <p className="text-[10px]">No activity yet</p>
+                    <p className="text-[10px] text-zinc-700 mt-0.5">Send a message to see the log</p>
+                  </div>
+                ) : (
+                  (() => {
+                    const grouped = new Map<number, typeof allTurnLogs>();
+                    for (const entry of allTurnLogs) {
+                      const turnNum = Math.floor(entry.msgIdx / 2) + 1;
+                      if (!grouped.has(turnNum)) grouped.set(turnNum, []);
+                      grouped.get(turnNum)!.push(entry);
+                    }
+                    return Array.from(grouped.entries()).map(([turnNum, entries]) => {
+                      const turnKey = `turn-${turnNum}`;
+                      const isTurnExpanded = expandedLogEntries.has(turnKey);
+                      const turnDuration = entries.reduce((sum, e) => sum + ('durationMs' in e ? (e as { durationMs: number }).durationMs : 0), 0);
+                      return (
+                        <div key={turnKey}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExpandedLogEntries((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(turnKey)) next.delete(turnKey);
+                                else next.add(turnKey);
+                                return next;
+                              });
+                            }}
+                            className="w-full flex items-center gap-1.5 text-left px-1 py-1"
+                          >
+                            <ChevronRight className={`w-2.5 h-2.5 text-zinc-500 transition-transform flex-shrink-0 ${isTurnExpanded ? 'rotate-90' : ''}`} />
+                            <span className="text-[10px] font-semibold text-zinc-400">Turn {turnNum}</span>
+                            <span className="text-[9px] text-zinc-600">{entries.length} action{entries.length !== 1 ? 's' : ''}</span>
+                            {turnDuration > 0 && <span className="text-[9px] text-zinc-600 ml-auto">{turnDuration}ms</span>}
+                          </button>
+                          {isTurnExpanded && (
+                            <div className="space-y-1 ml-2">
+                              {entries.map((entry) => {
+                                const entryKey = `${entry.msgIdx}-${entry.entryIdx}`;
+                                const isExpanded = expandedLogEntries.has(entryKey);
+                                return (
+                                  <div key={entryKey} className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1">
+                                    {entry.type === 'ai_call' && (
+                                      <>
+                                        <div className="flex items-center gap-1.5">
+                                          <Brain className="w-2.5 h-2.5 text-violet-400 flex-shrink-0" />
+                                          <span className="text-[10px] font-medium text-zinc-300 truncate">{entry.model}</span>
+                                          <span className="text-[9px] px-1 py-0.5 rounded bg-zinc-800 text-zinc-500 flex-shrink-0">{entry.finishReason}</span>
+                                          <span className="text-[10px] text-zinc-600 ml-auto flex-shrink-0">{entry.durationMs}ms</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-0.5 pl-4">
+                                          <span className="text-[9px] text-zinc-600">{entry.promptTokens} in / {entry.completionTokens} out</span>
+                                          {entry.iteration > 0 && <span className="text-[9px] text-zinc-700">iter {entry.iteration}</span>}
+                                        </div>
+                                      </>
+                                    )}
+
+                                    {entry.type === 'tool_call' && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setExpandedLogEntries((prev) => {
+                                              const next = new Set(prev);
+                                              if (next.has(entryKey)) next.delete(entryKey);
+                                              else next.add(entryKey);
+                                              return next;
+                                            });
+                                          }}
+                                          className="w-full flex items-center gap-1.5 text-left"
+                                        >
+                                          <ChevronRight className={`w-2.5 h-2.5 text-zinc-600 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`} />
+                                          <Wrench className="w-2.5 h-2.5 text-blue-400 flex-shrink-0" />
+                                          <span className="text-[10px] font-medium text-zinc-300 truncate">{entry.tool}</span>
+                                          <span className={`text-[10px] font-medium px-1 py-0.5 rounded flex-shrink-0 ${
+                                            entry.result.success ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                                          }`}>
+                                            {entry.result.success ? 'OK' : 'FAIL'}
+                                          </span>
+                                          <span className="text-[10px] text-zinc-600 ml-auto flex-shrink-0">{entry.durationMs}ms</span>
+                                        </button>
+                                        {isExpanded && (
+                                          <div className="mt-1.5 space-y-1.5 pl-5">
+                                            <div>
+                                              <span className="text-[10px] text-zinc-500 block mb-0.5">Args</span>
+                                              <pre className="text-[10px] text-zinc-400 bg-zinc-900 rounded px-2 py-1 overflow-x-auto max-h-28 overflow-y-auto font-mono whitespace-pre-wrap break-all">
+{JSON.stringify(entry.args, null, 2)}
+                                              </pre>
+                                            </div>
+                                            <div>
+                                              <span className="text-[10px] text-zinc-500 block mb-0.5">Result</span>
+                                              <pre className={`text-[10px] rounded px-2 py-1 overflow-x-auto max-h-28 overflow-y-auto font-mono whitespace-pre-wrap break-all ${
+                                                entry.result.success ? 'text-emerald-400/80 bg-emerald-500/5' : 'text-red-400/80 bg-red-500/5'
+                                              }`}>
+{entry.result.success ? JSON.stringify(entry.result.data, null, 2) : entry.result.error || 'Unknown error'}
+                                              </pre>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+
+                                    {entry.type === 'faq_match' && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setExpandedLogEntries((prev) => {
+                                              const next = new Set(prev);
+                                              if (next.has(entryKey)) next.delete(entryKey);
+                                              else next.add(entryKey);
+                                              return next;
+                                            });
+                                          }}
+                                          className="w-full flex items-center gap-1.5 text-left"
+                                        >
+                                          <ChevronRight className={`w-2.5 h-2.5 text-zinc-600 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`} />
+                                          <BookOpen className="w-2.5 h-2.5 text-cyan-400 flex-shrink-0" />
+                                          <span className="text-[10px] font-medium text-cyan-400">FAQ Match</span>
+                                        </button>
+                                        {isExpanded && (
+                                          <div className="mt-1 pl-5 space-y-1">
+                                            <p className="text-[9px] text-zinc-500">Pattern: <span className="text-zinc-400">{entry.pattern}</span></p>
+                                            <p className="text-[9px] text-zinc-500">Response: <span className="text-zinc-400">{entry.response.slice(0, 100)}{entry.response.length > 100 ? '...' : ''}</span></p>
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+
+                                    {entry.type === 'escalation' && (
+                                      <div className="flex items-center gap-1.5">
+                                        <AlertTriangle className="w-2.5 h-2.5 text-amber-400 flex-shrink-0" />
+                                        <span className="text-[10px] font-medium text-amber-400">Escalated</span>
+                                        <span className="text-[9px] text-zinc-600 truncate">{entry.pattern}</span>
+                                      </div>
+                                    )}
+
+                                    {entry.type === 'guardrail' && (
+                                      <div className="flex items-center gap-1.5">
+                                        <Shield className="w-2.5 h-2.5 text-orange-400 flex-shrink-0" />
+                                        <span className="text-[10px] font-medium text-orange-400">{entry.guardrail.replace(/_/g, ' ')}</span>
+                                        <span className="text-[9px] text-zinc-600 truncate ml-auto">{entry.detail}</span>
+                                      </div>
+                                    )}
+
+                                    {entry.type === 'event' && (
+                                      <div className="flex items-center gap-1.5">
+                                        <Zap className="w-2.5 h-2.5 text-amber-400 flex-shrink-0" />
+                                        <span className="text-[10px] text-zinc-400">{entry.event}</span>
+                                      </div>
+                                    )}
+
+                                    {entry.type === 'error' && (
+                                      <div className="flex items-center gap-1.5">
+                                        <XCircle className="w-2.5 h-2.5 text-red-400 flex-shrink-0" />
+                                        <span className="text-[10px] font-medium text-red-400">{entry.source}</span>
+                                        <span className="text-[9px] text-red-400/70 truncate">{entry.message}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()
+                )}
+                <div ref={logEndRef} />
               </div>
             </div>
           )}
-
-          <div ref={chatEndRef} />
         </div>
 
         {/* Quick-send buttons */}

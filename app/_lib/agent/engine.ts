@@ -19,20 +19,26 @@
  */
 
 import { prisma } from '@/app/_lib/db';
-import { ConversationStatus } from '@prisma/client';
+import { ConversationStatus, Prisma } from '@prisma/client';
 import type { ChatMessage, ChatCompletionResult } from '@/app/_lib/integrations';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { emitTrigger } from '@/app/_lib/workflow';
 import { logStructured } from '@/app/_lib/reliability';
-import type { InboundMessageParams, InitiateConversationParams, AgentResponse, AgentConfig } from './types';
+import type { InboundMessageParams, InitiateConversationParams, AgentResponse, AgentConfig, TurnLogEntry } from './types';
 import type { IntegrationResult } from '@/app/_lib/types';
 import { resolveAI, resolveChannel, getContactFieldForChannel } from './adapter-registry';
+import { resolveTools, executeTool } from './tool-registry';
+import type { ToolDefinition } from '@/app/_lib/integrations';
+
+// Register all tools with the tool registry at module load
+import './tools';
 
 export async function handleInboundMessage(
   params: InboundMessageParams
 ): Promise<AgentResponse> {
   const correlationId = crypto.randomUUID();
   const eventsEmitted: string[] = [];
+  const turnLog: TurnLogEntry[] = [];
 
   try {
     // 0a. Check if contact has opted out (skip in test mode)
@@ -188,6 +194,9 @@ export async function handleInboundMessage(
       });
       eventsEmitted.push('conversation_completed');
 
+      turnLog.push({ type: 'guardrail', guardrail: 'timeout', detail: `Timed out after ${agent.conversationTimeoutMinutes}m`, ts: Date.now() });
+      turnLog.push({ type: 'event', event: 'conversation_completed', ts: Date.now() });
+
       return {
         success: false,
         replyText: null,
@@ -197,6 +206,7 @@ export async function handleInboundMessage(
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         error: 'Conversation timed out',
         eventsEmitted,
+        turnLog,
       };
     }
 
@@ -215,6 +225,9 @@ export async function handleInboundMessage(
       });
       eventsEmitted.push('conversation_completed');
 
+      turnLog.push({ type: 'guardrail', guardrail: 'message_limit', detail: `Reached ${agent.maxMessagesPerConversation} message limit`, ts: Date.now() });
+      turnLog.push({ type: 'event', event: 'conversation_completed', ts: Date.now() });
+
       if (agent.fallbackMessage && !params.testMode) {
         await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, agent.fallbackMessage);
       }
@@ -227,6 +240,7 @@ export async function handleInboundMessage(
         status: ConversationStatus.COMPLETED,
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         eventsEmitted,
+        turnLog,
       };
     }
 
@@ -254,6 +268,8 @@ export async function handleInboundMessage(
           workspaceId: params.workspaceId,
           metadata: { agentId: agent.id, conversationId: conversation.id, recentReplies },
         });
+        turnLog.push({ type: 'guardrail', guardrail: 'rate_limited', detail: `${recentReplies}/${agent.rateLimitPerHour} replies/hr`, ts: Date.now() });
+
         return {
           success: true,
           replyText: null,
@@ -263,6 +279,7 @@ export async function handleInboundMessage(
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
           eventsEmitted: [],
           rateLimited: true,
+          turnLog,
         };
       }
     }
@@ -286,6 +303,7 @@ export async function handleInboundMessage(
         leadId: params.leadId,
       });
       eventsEmitted.push('conversation_started');
+      turnLog.push({ type: 'event', event: 'conversation_started', ts: Date.now() });
 
       // 7b. Send initial message if configured
       if (agent.initialMessage) {
@@ -329,8 +347,13 @@ export async function handleInboundMessage(
     if (agent.faqOverrides && agent.faqOverrides.length > 0) {
       const faqMatch = matchFaq(params.messageText, agent.faqOverrides);
       if (faqMatch) {
+        const matchedRule = agent.faqOverrides.find((r) =>
+          r.patterns.some((p) => params.messageText.toLowerCase().includes(p.toLowerCase()))
+        );
+        turnLog.push({ type: 'faq_match', pattern: matchedRule?.patterns.join(', ') || '?', response: faqMatch, ts: Date.now() });
+
         await prisma.conversationMessage.create({
-          data: { conversationId: conversation.id, role: 'ASSISTANT', content: faqMatch },
+          data: { conversationId: conversation.id, role: 'ASSISTANT', content: faqMatch, turnLog: turnLog.length > 0 ? (turnLog as unknown as Prisma.InputJsonValue) : undefined },
         });
         await prisma.conversation.update({
           where: { id: conversation.id },
@@ -352,6 +375,7 @@ export async function handleInboundMessage(
           eventsEmitted,
           faqMatch: true,
           responseDelaySkipped: params.testMode && agent.responseDelaySeconds > 0 ? agent.responseDelaySeconds : undefined,
+          turnLog,
         };
       }
     }
@@ -387,19 +411,30 @@ export async function handleInboundMessage(
       })),
     ];
 
-    // 10. Call AI adapter (measure latency)
+    // 10. Resolve tools and call AI adapter with tool loop
+    const MAX_TOOL_ITERATIONS = 10;
+    const toolsUsed: string[] = [];
+    const aiModel = agent.modelOverride || agent.aiIntegration;
+    const { definitions: toolDefs, executors: toolExecutors } = resolveTools(agent.enabledTools);
+
     const aiStartMs = performance.now();
-    const aiResult = await callAI(params.workspaceId, agent, aiMessages);
-    const latencyMs = Math.round(performance.now() - aiStartMs);
+    const initialCallStart = performance.now();
+    let aiResult = await callAI(params.workspaceId, agent, aiMessages, toolDefs);
+    const initialCallMs = Math.round(performance.now() - initialCallStart);
+    let accumulatedUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
     if (!aiResult.success || !aiResult.data) {
+      const latencyMs = Math.round(performance.now() - aiStartMs);
+
+      turnLog.push({ type: 'error', source: 'ai_failure', message: aiResult.error || 'AI call failed', ts: Date.now() });
+
       logStructured({
         correlationId,
         event: 'agent_ai_failure',
         workspaceId: params.workspaceId,
         provider: agent.aiIntegration,
         error: aiResult.error || 'AI call failed',
-        metadata: { agentId: agent.id, conversationId: conversation.id },
+        metadata: { agentId: agent.id, conversationId: conversation.id, latencyMs },
       });
 
       await emitEvent({
@@ -423,10 +458,134 @@ export async function handleInboundMessage(
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         error: aiResult.error || 'AI completion failed',
         eventsEmitted,
+        turnLog,
       };
     }
 
-    const completion = aiResult.data;
+    // Tool loop: keep calling AI while it requests tool executions
+    let completion = aiResult.data;
+    accumulatedUsage.promptTokens += completion.usage.promptTokens;
+    accumulatedUsage.completionTokens += completion.usage.completionTokens;
+    accumulatedUsage.totalTokens += completion.usage.totalTokens;
+
+    turnLog.push({
+      type: 'ai_call',
+      model: aiModel,
+      promptTokens: completion.usage.promptTokens,
+      completionTokens: completion.usage.completionTokens,
+      finishReason: completion.finishReason,
+      durationMs: initialCallMs,
+      iteration: 0,
+      ts: Date.now(),
+    });
+
+    for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+      if (completion.finishReason !== 'tool_calls' || completion.toolCalls.length === 0) {
+        break;
+      }
+
+      // Append assistant message with tool calls to conversation for the AI
+      aiMessages.push({
+        role: 'assistant',
+        content: completion.content || '',
+      });
+
+      // Execute each tool call and append results
+      for (const toolCall of completion.toolCalls) {
+        const toolName = toolCall.function.name;
+        toolsUsed.push(toolName);
+
+        let parsedArgs: Record<string, unknown> = {};
+        try {
+          parsedArgs = JSON.parse(toolCall.function.arguments);
+        } catch {
+          parsedArgs = {};
+        }
+
+        const toolStart = performance.now();
+        const toolResult = await executeTool(toolName, {
+          workspaceId: params.workspaceId,
+          agentId: agent.id,
+          conversationId: conversation.id,
+          leadId: params.leadId,
+          args: parsedArgs,
+        });
+        const durationMs = Math.round(performance.now() - toolStart);
+
+        turnLog.push({
+          type: 'tool_call',
+          tool: toolName,
+          args: parsedArgs,
+          result: {
+            success: toolResult.success,
+            data: toolResult.success ? toolResult.data : undefined,
+            error: toolResult.success ? undefined : toolResult.error,
+          },
+          durationMs,
+          iteration: iteration + 1,
+          ts: Date.now(),
+        });
+
+        logStructured({
+          correlationId,
+          event: 'agent_tool_executed',
+          workspaceId: params.workspaceId,
+          provider: 'agent',
+          success: toolResult.success,
+          metadata: {
+            agentId: agent.id,
+            conversationId: conversation.id,
+            tool: toolName,
+            iteration,
+            durationMs,
+          },
+        });
+
+        aiMessages.push({
+          role: 'tool',
+          content: JSON.stringify(toolResult.success ? toolResult.data : { error: toolResult.error }),
+          tool_call_id: toolCall.id,
+        });
+      }
+
+      // Re-call AI with tool results
+      const loopCallStart = performance.now();
+      const loopResult = await callAI(params.workspaceId, agent, aiMessages, toolDefs);
+      const loopCallMs = Math.round(performance.now() - loopCallStart);
+
+      if (!loopResult.success || !loopResult.data) {
+        turnLog.push({ type: 'error', source: 'ai_failure_in_tool_loop', message: loopResult.error || 'AI call failed during tool loop', ts: Date.now() });
+
+        logStructured({
+          correlationId,
+          event: 'agent_ai_failure_in_tool_loop',
+          workspaceId: params.workspaceId,
+          provider: agent.aiIntegration,
+          error: loopResult.error || 'AI call failed during tool loop',
+          metadata: { agentId: agent.id, conversationId: conversation.id, iteration },
+        });
+        break;
+      }
+
+      completion = loopResult.data;
+      accumulatedUsage.promptTokens += completion.usage.promptTokens;
+      accumulatedUsage.completionTokens += completion.usage.completionTokens;
+      accumulatedUsage.totalTokens += completion.usage.totalTokens;
+
+      turnLog.push({
+        type: 'ai_call',
+        model: aiModel,
+        promptTokens: completion.usage.promptTokens,
+        completionTokens: completion.usage.completionTokens,
+        finishReason: completion.finishReason,
+        durationMs: loopCallMs,
+        iteration: iteration + 1,
+        ts: Date.now(),
+      });
+    }
+
+    const latencyMs = Math.round(performance.now() - aiStartMs);
+    completion = { ...completion, usage: accumulatedUsage };
     const replyText = completion.content || '';
 
     // 10b. Escalation detection
@@ -441,6 +600,7 @@ export async function handleInboundMessage(
           content: cleanedReply || 'Let me connect you with a team member.',
           promptTokens: completion.usage.promptTokens,
           completionTokens: completion.usage.completionTokens,
+          turnLog: turnLog.length > 0 ? (turnLog as unknown as Prisma.InputJsonValue) : undefined,
         },
       });
 
@@ -469,6 +629,9 @@ export async function handleInboundMessage(
         leadId: params.leadId,
       });
       eventsEmitted.push('escalation_requested');
+
+      turnLog.push({ type: 'escalation', pattern: escPattern, ts: Date.now() });
+      turnLog.push({ type: 'event', event: 'escalation_requested', ts: Date.now() });
 
       try {
         const { notifyEscalation } = await import('./escalation');
@@ -501,6 +664,8 @@ export async function handleInboundMessage(
         eventsEmitted,
         latencyMs,
         responseDelaySkipped: params.testMode && agent.responseDelaySeconds > 0 ? agent.responseDelaySeconds : undefined,
+        toolsUsed: toolsUsed.length > 0 ? toolsUsed : undefined,
+        turnLog,
       };
     }
 
@@ -512,6 +677,7 @@ export async function handleInboundMessage(
         content: replyText,
         promptTokens: completion.usage.promptTokens,
         completionTokens: completion.usage.completionTokens,
+        turnLog: turnLog.length > 0 ? (turnLog as unknown as Prisma.InputJsonValue) : undefined,
       },
     });
 
@@ -544,6 +710,9 @@ export async function handleInboundMessage(
         leadId: params.leadId,
       });
       eventsEmitted.push('conversation_completed');
+
+      turnLog.push({ type: 'guardrail', guardrail: 'token_limit', detail: `Reached ${agent.maxTokensPerConversation} token limit`, ts: Date.now() });
+      turnLog.push({ type: 'event', event: 'conversation_completed', ts: Date.now() });
     }
 
     // 14. Apply response delay then send reply via channel adapter
@@ -597,6 +766,8 @@ export async function handleInboundMessage(
       eventsEmitted,
       latencyMs,
       responseDelaySkipped: delaySkipped,
+      toolsUsed: toolsUsed.length > 0 ? toolsUsed : undefined,
+      turnLog,
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown engine error';
@@ -857,6 +1028,7 @@ async function loadAgent(
     escalationPattern: agent.escalationPattern,
     faqOverrides: parseFaqOverrides(agent.faqOverrides),
     allowedEvents: (agent.allowedEvents as string[]) || [],
+    enabledTools: (agent.enabledTools as string[]) || [],
     active: agent.active,
   };
 }
@@ -943,7 +1115,8 @@ function mapRoleToAI(role: string): ChatMessage['role'] {
 async function callAI(
   workspaceId: string,
   agent: AgentConfig,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  tools?: ToolDefinition[]
 ): Promise<IntegrationResult<ChatCompletionResult>> {
   const entry = resolveAI(agent.aiIntegration);
   if (!entry) {
@@ -960,6 +1133,8 @@ async function callAI(
     model: agent.modelOverride || undefined,
     temperature: agent.temperatureOverride ?? undefined,
     maxTokens: agent.maxTokensOverride ?? undefined,
+    tools: tools && tools.length > 0 ? tools : undefined,
+    toolChoice: tools && tools.length > 0 ? 'auto' : undefined,
   });
 }
 

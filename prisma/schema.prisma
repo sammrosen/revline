@@ -524,6 +524,9 @@ model Agent {
   // Allowed event emissions (JSON array of event type strings the bot can emit)
   allowedEvents Json @default("[]") @map("allowed_events")
 
+  // Enabled tools (JSON array of tool name strings from the tool registry)
+  enabledTools Json @default("[]") @map("enabled_tools")
+
   active    Boolean  @default(true)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -605,6 +608,8 @@ model ConversationMessage {
   // Token tracking
   promptTokens     Int @default(0) @map("prompt_tokens")
   completionTokens Int @default(0) @map("completion_tokens")
+
+  turnLog Json? @map("turn_log")
 
   createdAt DateTime @default(now()) @map("created_at")
 

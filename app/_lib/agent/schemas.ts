@@ -34,6 +34,7 @@ export const CreateAgentSchema = z.object({
   escalationPattern: z.string().nullish(),
   faqOverrides: z.array(FaqOverrideSchema).max(20).nullish(),
   allowedEvents: z.array(z.string()).default([]),
+  enabledTools: z.array(z.string()).default([]),
   active: z.boolean().default(true),
 });
 

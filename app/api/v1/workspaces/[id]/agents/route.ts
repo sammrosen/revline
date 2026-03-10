@@ -126,6 +126,7 @@ export async function POST(
       escalationPattern: data.escalationPattern || null,
       faqOverrides: data.faqOverrides ?? Prisma.JsonNull,
       allowedEvents: data.allowedEvents,
+      enabledTools: data.enabledTools,
       active: data.active,
     },
   });
