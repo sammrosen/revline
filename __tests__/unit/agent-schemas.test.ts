@@ -37,6 +37,7 @@ describe('CreateAgentSchema', () => {
     expect(result.autoResumeMinutes).toBe(60);
     expect(result.rateLimitPerHour).toBe(10);
     expect(result.allowedEvents).toEqual([]);
+    expect(result.enabledTools).toEqual([]);
     expect(result.active).toBe(true);
   });
 

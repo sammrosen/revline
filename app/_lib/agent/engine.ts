@@ -419,9 +419,9 @@ export async function handleInboundMessage(
 
     const aiStartMs = performance.now();
     const initialCallStart = performance.now();
-    let aiResult = await callAI(params.workspaceId, agent, aiMessages, toolDefs);
+    const aiResult = await callAI(params.workspaceId, agent, aiMessages, toolDefs);
     const initialCallMs = Math.round(performance.now() - initialCallStart);
-    let accumulatedUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    const accumulatedUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
     if (!aiResult.success || !aiResult.data) {
       const latencyMs = Math.round(performance.now() - aiStartMs);

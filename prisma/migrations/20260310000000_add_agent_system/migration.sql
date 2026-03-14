@@ -40,6 +40,7 @@ CREATE TABLE "agents" (
     "escalation_pattern" TEXT,
     "faq_overrides" JSONB,
     "allowed_events" JSONB NOT NULL DEFAULT '[]',
+    "enabled_tools" JSONB NOT NULL DEFAULT '[]',
     "active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
@@ -91,6 +92,7 @@ CREATE TABLE "conversation_messages" (
     "content" TEXT NOT NULL,
     "prompt_tokens" INTEGER NOT NULL DEFAULT 0,
     "completion_tokens" INTEGER NOT NULL DEFAULT 0,
+    "turn_log" JSONB,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "conversation_messages_pkey" PRIMARY KEY ("id")

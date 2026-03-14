@@ -40,6 +40,15 @@ vi.mock('@/app/_lib/agent/adapter-registry', () => ({
   getContactFieldForChannel: vi.fn(() => 'phone'),
 }));
 
+// Mock tool registry (no tools enabled in tests)
+vi.mock('@/app/_lib/agent/tool-registry', () => ({
+  resolveTools: vi.fn(() => ({ definitions: [], executors: new Map() })),
+  executeTool: vi.fn(async () => ({ success: true, data: {} })),
+  registerTool: vi.fn(),
+  getAvailableTools: vi.fn(() => []),
+  isRegisteredTool: vi.fn(() => false),
+}));
+
 // Mock event emission and logging (no-op in tests)
 vi.mock('@/app/_lib/event-logger', () => ({
   emitEvent: vi.fn(async () => {}),

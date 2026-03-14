@@ -123,11 +123,16 @@ afterAll(async () => {
 afterEach(async () => {
   // Clean up test data after each test
   // Order matters due to foreign key constraints (children before parents)
-  await testPrisma.conversationMessage.deleteMany();
-  await testPrisma.agentFile.deleteMany();
-  await testPrisma.optOutRecord.deleteMany();
-  await testPrisma.conversation.deleteMany();
-  await testPrisma.agent.deleteMany();
+  // Agent tables wrapped in try/catch for resilience during migration transitions
+  try {
+    await testPrisma.conversationMessage.deleteMany();
+    await testPrisma.agentFile.deleteMany();
+    await testPrisma.optOutRecord.deleteMany();
+    await testPrisma.conversation.deleteMany();
+    await testPrisma.agent.deleteMany();
+  } catch {
+    // Tables may not exist yet if migration hasn't been applied to this test DB
+  }
   await testPrisma.idempotencyKey.deleteMany();
   await testPrisma.webhookEvent.deleteMany();
   await testPrisma.workflowExecution.deleteMany();
@@ -412,11 +417,15 @@ export async function createTestIdempotencyKey(
  */
 export async function cleanupTestData() {
   // Order matters due to foreign key constraints (children before parents)
-  await testPrisma.conversationMessage.deleteMany();
-  await testPrisma.agentFile.deleteMany();
-  await testPrisma.optOutRecord.deleteMany();
-  await testPrisma.conversation.deleteMany();
-  await testPrisma.agent.deleteMany();
+  try {
+    await testPrisma.conversationMessage.deleteMany();
+    await testPrisma.agentFile.deleteMany();
+    await testPrisma.optOutRecord.deleteMany();
+    await testPrisma.conversation.deleteMany();
+    await testPrisma.agent.deleteMany();
+  } catch {
+    // Tables may not exist yet if migration hasn't been applied to this test DB
+  }
   await testPrisma.idempotencyKey.deleteMany();
   await testPrisma.webhookEvent.deleteMany();
   await testPrisma.workflowExecution.deleteMany();
@@ -457,6 +466,7 @@ export async function createTestAgent(
     escalationPattern: string;
     faqOverrides: Array<{ patterns: string[]; response: string }>;
     allowedEvents: string[];
+    enabledTools: string[];
     active: boolean;
   }> = {}
 ) {
@@ -483,6 +493,7 @@ export async function createTestAgent(
       escalationPattern: overrides.escalationPattern ?? null,
       faqOverrides: overrides.faqOverrides as Parameters<typeof testPrisma.agent.create>[0]['data']['faqOverrides'],
       allowedEvents: (overrides.allowedEvents ?? []) as Parameters<typeof testPrisma.agent.create>[0]['data']['allowedEvents'],
+      enabledTools: (overrides.enabledTools ?? []) as Parameters<typeof testPrisma.agent.create>[0]['data']['enabledTools'],
       active: overrides.active ?? true,
     },
   });
