@@ -122,7 +122,17 @@ afterAll(async () => {
 
 afterEach(async () => {
   // Clean up test data after each test
-  // Order matters due to foreign key constraints
+  // Order matters due to foreign key constraints (children before parents)
+  // Agent tables wrapped in try/catch for resilience during migration transitions
+  try {
+    await testPrisma.conversationMessage.deleteMany();
+    await testPrisma.agentFile.deleteMany();
+    await testPrisma.optOutRecord.deleteMany();
+    await testPrisma.conversation.deleteMany();
+    await testPrisma.agent.deleteMany();
+  } catch {
+    // Tables may not exist yet if migration hasn't been applied to this test DB
+  }
   await testPrisma.idempotencyKey.deleteMany();
   await testPrisma.webhookEvent.deleteMany();
   await testPrisma.workflowExecution.deleteMany();
@@ -167,7 +177,7 @@ export const createTestClient = createTestWorkspace;
  */
 export async function createTestIntegration(
   workspaceId: string,
-  integration: 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND',
+  integration: 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND' | 'TWILIO' | 'OPENAI' | 'ANTHROPIC',
   secret: string,
   meta?: Record<string, unknown>
 ) {
@@ -406,7 +416,16 @@ export async function createTestIdempotencyKey(
  * Note: afterEach already calls this automatically.
  */
 export async function cleanupTestData() {
-  // Order matters due to foreign key constraints
+  // Order matters due to foreign key constraints (children before parents)
+  try {
+    await testPrisma.conversationMessage.deleteMany();
+    await testPrisma.agentFile.deleteMany();
+    await testPrisma.optOutRecord.deleteMany();
+    await testPrisma.conversation.deleteMany();
+    await testPrisma.agent.deleteMany();
+  } catch {
+    // Tables may not exist yet if migration hasn't been applied to this test DB
+  }
   await testPrisma.idempotencyKey.deleteMany();
   await testPrisma.webhookEvent.deleteMany();
   await testPrisma.workflowExecution.deleteMany();
@@ -419,5 +438,107 @@ export async function cleanupTestData() {
   await testPrisma.workspaceMember.deleteMany();
   await testPrisma.user.deleteMany();
   await testPrisma.workspace.deleteMany();
+}
+
+/**
+ * Test helper: Create a test agent
+ */
+export async function createTestAgent(
+  workspaceId: string,
+  overrides: Partial<{
+    name: string;
+    aiIntegration: string;
+    systemPrompt: string;
+    channelType: string;
+    channelIntegration: string;
+    channelAddress: string;
+    initialMessage: string;
+    modelOverride: string;
+    temperatureOverride: number;
+    maxTokensOverride: number;
+    maxMessagesPerConversation: number;
+    maxTokensPerConversation: number;
+    conversationTimeoutMinutes: number;
+    responseDelaySeconds: number;
+    autoResumeMinutes: number;
+    rateLimitPerHour: number;
+    fallbackMessage: string;
+    escalationPattern: string;
+    faqOverrides: Array<{ patterns: string[]; response: string }>;
+    allowedEvents: string[];
+    enabledTools: string[];
+    active: boolean;
+  }> = {}
+) {
+  return testPrisma.agent.create({
+    data: {
+      workspaceId,
+      name: overrides.name ?? 'Test Agent',
+      aiIntegration: overrides.aiIntegration ?? 'OPENAI',
+      systemPrompt: overrides.systemPrompt ?? 'You are a helpful assistant.',
+      channelType: overrides.channelType ?? null,
+      channelIntegration: overrides.channelIntegration ?? null,
+      channelAddress: overrides.channelAddress ?? null,
+      initialMessage: overrides.initialMessage ?? null,
+      modelOverride: overrides.modelOverride ?? null,
+      temperatureOverride: overrides.temperatureOverride ?? null,
+      maxTokensOverride: overrides.maxTokensOverride ?? null,
+      maxMessagesPerConversation: overrides.maxMessagesPerConversation ?? 50,
+      maxTokensPerConversation: overrides.maxTokensPerConversation ?? 100000,
+      conversationTimeoutMinutes: overrides.conversationTimeoutMinutes ?? 1440,
+      responseDelaySeconds: overrides.responseDelaySeconds ?? 0,
+      autoResumeMinutes: overrides.autoResumeMinutes ?? 60,
+      rateLimitPerHour: overrides.rateLimitPerHour ?? 10,
+      fallbackMessage: overrides.fallbackMessage ?? null,
+      escalationPattern: overrides.escalationPattern ?? null,
+      faqOverrides: overrides.faqOverrides as Parameters<typeof testPrisma.agent.create>[0]['data']['faqOverrides'],
+      allowedEvents: (overrides.allowedEvents ?? []) as Parameters<typeof testPrisma.agent.create>[0]['data']['allowedEvents'],
+      enabledTools: (overrides.enabledTools ?? []) as Parameters<typeof testPrisma.agent.create>[0]['data']['enabledTools'],
+      active: overrides.active ?? true,
+    },
+  });
+}
+
+/**
+ * Test helper: Create a test conversation
+ */
+export async function createTestConversation(
+  workspaceId: string,
+  agentId: string,
+  overrides: Partial<{
+    leadId: string;
+    channel: string;
+    contactAddress: string;
+    channelAddress: string;
+    status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ESCALATED' | 'TIMED_OUT';
+    messageCount: number;
+    totalTokens: number;
+    isTest: boolean;
+    pausedAt: Date;
+    pausedBy: string;
+    startedAt: Date;
+    lastMessageAt: Date;
+    endedAt: Date;
+  }> = {}
+) {
+  return testPrisma.conversation.create({
+    data: {
+      workspaceId,
+      agentId,
+      leadId: overrides.leadId ?? null,
+      channel: overrides.channel ?? 'SMS',
+      contactAddress: overrides.contactAddress ?? '+15551234567',
+      channelAddress: overrides.channelAddress ?? '+15559876543',
+      status: overrides.status ?? 'ACTIVE',
+      messageCount: overrides.messageCount ?? 0,
+      totalTokens: overrides.totalTokens ?? 0,
+      isTest: overrides.isTest ?? true,
+      pausedAt: overrides.pausedAt ?? null,
+      pausedBy: overrides.pausedBy ?? null,
+      startedAt: overrides.startedAt ?? new Date(),
+      lastMessageAt: overrides.lastMessageAt ?? null,
+      endedAt: overrides.endedAt ?? null,
+    },
+  });
 }
 

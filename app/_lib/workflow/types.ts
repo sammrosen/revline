@@ -127,6 +127,9 @@ export interface WorkflowContext {
   /** Lead ID if a lead was created/found */
   leadId?: string;
 
+  /** Whether this execution is a test (skips channel delivery, marks conversations as test) */
+  isTest?: boolean;
+
   /** Data accumulated from previous action executions */
   actionData: Record<string, unknown>;
 }

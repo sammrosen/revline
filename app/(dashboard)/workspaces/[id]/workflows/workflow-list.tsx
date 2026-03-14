@@ -41,6 +41,7 @@ export interface WorkflowListProps {
   mailerliteGroups?: Record<string, { id: string; name: string }>;
   resendTemplates?: Record<string, { id: string; name: string; variables?: string[] }>;
   stripeProducts?: Record<string, string>;
+  agents?: Record<string, string>;
   leadStages?: Array<{ key: string; label: string; color: string }>;
   leadPropertySchema?: LeadPropertyDefinition[] | null;
   /** Hide the header when embedded in another component that provides its own controls */
@@ -54,6 +55,7 @@ export function WorkflowList({
   mailerliteGroups = {},
   resendTemplates = {},
   stripeProducts = {},
+  agents = {},
   leadStages,
   leadPropertySchema,
   hideHeader = false,
@@ -202,6 +204,7 @@ export function WorkflowList({
             mailerliteGroups={mailerliteGroups}
             resendTemplates={resendTemplates}
             stripeProducts={stripeProducts}
+            agents={agents}
             leadStages={leadStages}
             leadPropertySchema={leadPropertySchema}
             onClose={handleCloseEditor}
@@ -240,6 +243,7 @@ export function WorkflowList({
           mailerliteGroups={mailerliteGroups}
           resendTemplates={resendTemplates}
           stripeProducts={stripeProducts}
+          agents={agents}
           leadStages={leadStages}
           leadPropertySchema={leadPropertySchema}
           onClose={handleCloseEditor}

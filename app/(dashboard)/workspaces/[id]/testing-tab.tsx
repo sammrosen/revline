@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Loader2, Play, ChevronDown, AlertCircle, CheckCircle, Search, X, ChevronUp, Plus, Zap, ChevronRight } from 'lucide-react';
+import { Loader2, Play, ChevronDown, AlertCircle, CheckCircle, Search, X, ChevronUp, Plus, Zap, ChevronRight, MessageSquare } from 'lucide-react';
+import { TestingChatPanel } from './testing-chat-panel';
 
 interface KnownEndpoint {
   method: string;
@@ -135,7 +136,7 @@ function TestPanel({ workspaceId, integrations, compact = false, onClose }: Test
     : knownEndpoints.find(e => `${e.method}:${e.path}` === selectedEndpoint)?.path || '';
 
   // Panel sub-tab
-  const [panelMode, setPanelMode] = useState<'endpoints' | 'scenarios'>('endpoints');
+  const [panelMode, setPanelMode] = useState<'endpoints' | 'scenarios' | 'chats'>('endpoints');
 
   // Check if current endpoint has a form schema
   const endpointKey = `${method}:${currentEndpointPath}`;
@@ -354,34 +355,36 @@ function TestPanel({ workspaceId, integrations, compact = false, onClose }: Test
         </div>
       )}
 
-      {/* Integration Selection */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3">
-        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-          Integration
-        </label>
-        <div className="relative">
-          <select
-            value={selectedIntegration}
-            onChange={(e) => {
-              setSelectedIntegration(e.target.value);
-              setSelectedEndpoint('custom');
-              setCustomEndpoint('');
-              setResult(null);
-              setFormData({});
-            }}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white appearance-none focus:outline-none focus:border-zinc-600"
-          >
-            {integrations.map(int => (
-              <option key={int.id} value={int.type}>
-                {int.type.replace(/_/g, ' ')}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
+      {/* Integration Selection (hidden for Chats mode) */}
+      {panelMode !== 'chats' && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3">
+          <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+            Integration
+          </label>
+          <div className="relative">
+            <select
+              value={selectedIntegration}
+              onChange={(e) => {
+                setSelectedIntegration(e.target.value);
+                setSelectedEndpoint('custom');
+                setCustomEndpoint('');
+                setResult(null);
+                setFormData({});
+              }}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white appearance-none focus:outline-none focus:border-zinc-600"
+            >
+              {integrations.map(int => (
+                <option key={int.id} value={int.type}>
+                  {int.type.replace(/_/g, ' ')}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Sub-tabs: Endpoints | Scenarios */}
+      {/* Sub-tabs: Endpoints | Scenarios | Chats */}
       <div className="flex border-b border-zinc-800">
         <button
           type="button"
@@ -406,6 +409,18 @@ function TestPanel({ workspaceId, integrations, compact = false, onClose }: Test
         >
           <Zap className="w-3 h-3" />
           Scenarios
+        </button>
+        <button
+          type="button"
+          onClick={() => setPanelMode('chats')}
+          className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+            panelMode === 'chats'
+              ? 'border-violet-500 text-white'
+              : 'border-transparent text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          <MessageSquare className="w-3 h-3" />
+          Chats
         </button>
       </div>
 
@@ -687,6 +702,10 @@ function TestPanel({ workspaceId, integrations, compact = false, onClose }: Test
       {/* === SCENARIOS TAB === */}
       {panelMode === 'scenarios' && (
         <InlineScenarioRunner workspaceId={workspaceId} integration={selectedIntegration} />
+      )}
+
+      {panelMode === 'chats' && (
+        <TestingChatPanel workspaceId={workspaceId} />
       )}
     </div>
   );

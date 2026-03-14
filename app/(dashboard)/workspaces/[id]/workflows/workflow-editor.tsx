@@ -41,6 +41,7 @@ export interface WorkflowEditorProps {
   mailerliteGroups?: Record<string, { id: string; name: string }>;
   resendTemplates?: Record<string, { id: string; name: string; variables?: string[] }>;
   stripeProducts?: Record<string, string>; // key -> product name
+  agents?: Record<string, string>; // agentId -> agent name
   leadStages?: Array<{ key: string; label: string; color: string }>;
   leadPropertySchema?: LeadPropertyDefinition[] | null;
 }
@@ -58,6 +59,7 @@ export function WorkflowEditor({
   mailerliteGroups = {},
   resendTemplates = {},
   stripeProducts = {},
+  agents = {},
   leadStages,
   leadPropertySchema,
   onClose,
@@ -643,6 +645,7 @@ export function WorkflowEditor({
                 configuredIntegrations={configuredIntegrations}
                 mailerliteGroups={mailerliteGroups}
                 resendTemplates={resendTemplates}
+                agents={agents}
                 leadStages={leadStages}
                 leadPropertySchema={leadPropertySchema}
                 workspaceId={workspaceId}
@@ -785,6 +788,7 @@ interface ActionEditorProps {
   configuredIntegrations: string[];
   mailerliteGroups: Record<string, { id: string; name: string }>;
   resendTemplates: Record<string, { id: string; name: string; variables?: string[] }>;
+  agents: Record<string, string>;
   leadStages?: Array<{ key: string; label: string; color: string }>;
   leadPropertySchema?: LeadPropertyDefinition[] | null;
   workspaceId: string;
@@ -803,6 +807,7 @@ function ActionEditor({
   configuredIntegrations,
   mailerliteGroups,
   resendTemplates,
+  agents,
   leadStages,
   leadPropertySchema,
   workspaceId,
@@ -1182,6 +1187,47 @@ function ActionEditor({
             />
           </div>
         </>
+      )}
+
+      {action.adapter === 'agent' && action.operation === 'route_to_agent' && (
+        <div>
+          <label className="block text-xs font-medium text-zinc-500 mb-1">
+            Agent <span className="text-red-400">*</span>
+          </label>
+          {Object.keys(agents).length > 0 ? (
+            <select
+              value={(action.params.agentId as string) || ''}
+              onChange={(e) => onParamChange(index, 'agentId', e.target.value)}
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm focus:outline-none focus:border-zinc-600"
+            >
+              <option value="">Select agent...</option>
+              {Object.entries(agents).map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-xs text-zinc-500 bg-zinc-900/50 border border-zinc-800 rounded p-2">
+              No agents configured. Create an agent in the Agents tab first.
+            </p>
+          )}
+          <div className="mt-3">
+            <label className="block text-xs font-medium text-zinc-500 mb-1">
+              Message (optional)
+            </label>
+            <input
+              type="text"
+              value={(action.params.messageText as string) || ''}
+              onChange={(e) => onParamChange(index, 'messageText', e.target.value || undefined)}
+              placeholder="Leave empty to use agent's initial message"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
+            />
+            <p className="text-xs text-zinc-600 mt-1">
+              {'Supports {{lead.*}} and {{payload.*}} variables. If empty, the agent sends its configured initial message.'}
+            </p>
+          </div>
+        </div>
       )}
 
       {action.adapter === 'revline' && action.operation === 'update_lead_stage' && (

@@ -60,6 +60,9 @@ function getDisplayParams(
   if (params.subject && !params.template) {
     displayParams.push({ label: 'Subject', value: formatParamValue(params.subject) });
   }
+  if (params.agentId) {
+    displayParams.push({ label: 'Agent', value: formatParamValue(params.agentId) });
+  }
 
   return displayParams;
 }

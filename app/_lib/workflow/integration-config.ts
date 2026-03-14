@@ -11,6 +11,8 @@ import {
   Mail,
   Zap,
   MessageCircle,
+  Sparkles,
+  Bot,
   LucideIcon,
 } from 'lucide-react';
 
@@ -95,6 +97,42 @@ export const INTEGRATION_CONFIG: Record<string, IntegrationStyle> = {
     icon: Mail,
     logo: '/logos/resend.png',
   },
+  twilio: {
+    name: 'Twilio',
+    color: '#F22F46',
+    bgClass: 'bg-red-500/20',
+    borderClass: 'border-red-500/40',
+    textClass: 'text-red-400',
+    icon: MessageCircle,
+    logo: '/logos/twilio.png',
+  },
+  openai: {
+    name: 'OpenAI',
+    color: '#000000',
+    bgClass: 'bg-zinc-500/20',
+    borderClass: 'border-zinc-500/40',
+    textClass: 'text-zinc-300',
+    icon: Sparkles,
+    logo: '/logos/openai.png',
+  },
+  anthropic: {
+    name: 'Anthropic',
+    color: '#D4A574',
+    bgClass: 'bg-amber-500/20',
+    borderClass: 'border-amber-500/40',
+    textClass: 'text-amber-300',
+    icon: Sparkles,
+    logo: '/logos/anthropic.png',
+  },
+  agent: {
+    name: 'Agent',
+    color: '#8B5CF6',
+    bgClass: 'bg-violet-500/20',
+    borderClass: 'border-violet-500/40',
+    textClass: 'text-violet-400',
+    icon: Bot,
+    logo: '/logos/agent.png',
+  },
   capture: {
     name: 'Capture',
     color: '#71717A',
@@ -136,6 +174,11 @@ export const OPERATION_LABELS: Record<string, string> = {
   subscription_canceled: 'Subscription Canceled',
   email_captured: 'Email Captured',
   dm_received: 'DM Received',
+  // Agent triggers
+  conversation_started: 'Conversation Started',
+  escalation_requested: 'Escalation Requested',
+  conversation_completed: 'Conversation Completed',
+  bot_event: 'Bot Event',
   // Actions
   add_to_group: 'Add to Group',
   remove_from_group: 'Remove from Group',
@@ -144,6 +187,7 @@ export const OPERATION_LABELS: Record<string, string> = {
   update_lead_stage: 'Update Lead Stage',
   emit_event: 'Emit Event',
   trigger_flow: 'Trigger Flow',
+  route_to_agent: 'Route to Agent',
 };
 
 /**

@@ -503,6 +503,10 @@ function adapterIdToIntegrationType(adapterId: string): IntegrationType | null {
     calendly: IntegrationType.CALENDLY,
     manychat: IntegrationType.MANYCHAT,
     abc_ignite: IntegrationType.ABC_IGNITE,
+    resend: IntegrationType.RESEND,
+    twilio: IntegrationType.TWILIO,
+    openai: IntegrationType.OPENAI,
+    anthropic: IntegrationType.ANTHROPIC,
   };
   return mapping[adapterId.toLowerCase()] ?? null;
 }

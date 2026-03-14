@@ -10,6 +10,10 @@ import { mailerliteExecutors } from './mailerlite';
 import { revlineExecutors } from './revline';
 import { abcIgniteExecutors } from './abc-ignite';
 import { resendExecutors } from './resend';
+import { twilioExecutors } from './twilio';
+import { openaiExecutors } from './openai';
+import { anthropicExecutors } from './anthropic';
+import { agentExecutors } from './agent';
 
 // =============================================================================
 // EXECUTOR REGISTRY
@@ -23,8 +27,10 @@ const EXECUTORS: Record<string, Record<string, ActionExecutor>> = {
   revline: revlineExecutors,
   abc_ignite: abcIgniteExecutors,
   resend: resendExecutors,
-  // Future: Add more adapters here
-  // manychat: manychatExecutors,
+  twilio: twilioExecutors,
+  openai: openaiExecutors,
+  anthropic: anthropicExecutors,
+  agent: agentExecutors,
 };
 
 // =============================================================================

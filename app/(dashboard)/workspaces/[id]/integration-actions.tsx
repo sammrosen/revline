@@ -8,8 +8,11 @@ import { StripeConfigEditor } from './stripe-config-editor';
 import { AbcIgniteConfigEditor } from './abc-ignite-config-editor';
 import { RevlineConfigEditor } from './revline-config-editor';
 import { ResendConfigEditor } from './resend-config-editor';
+import { TwilioConfigEditor } from './twilio-config-editor';
+import { OpenAIConfigEditor } from './openai-config-editor';
+import { AnthropicConfigEditor } from './anthropic-config-editor';
 
-type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND';
+type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND' | 'TWILIO' | 'OPENAI' | 'ANTHROPIC';
 
 // Available secret names by integration type
 const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
@@ -20,6 +23,9 @@ const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
   ABC_IGNITE: ['App ID', 'App Key'],
   REVLINE: [], // No secrets - internal system
   RESEND: ['API Key', 'Webhook Secret'],
+  TWILIO: ['Account SID', 'Auth Token'],
+  OPENAI: ['API Key'],
+  ANTHROPIC: ['API Key'],
 };
 
 interface SecretSummary {
@@ -72,6 +78,9 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
   const isAbcIgnite = integrationType === 'ABC_IGNITE';
   const isRevline = integrationType === 'REVLINE';
   const isResend = integrationType === 'RESEND';
+  const isTwilio = integrationType === 'TWILIO';
+  const isOpenAI = integrationType === 'OPENAI';
+  const isAnthropic = integrationType === 'ANTHROPIC';
   
   // Check if this integration has dependent workflows
   const hasDependents = dependentWorkflows.length > 0;
@@ -271,7 +280,7 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
 
   // Edit Meta Modal
   if (showEditMeta) {
-    const hasStructuredEditor = isMailerLite || isStripe || isAbcIgnite || isRevline || isResend;
+    const hasStructuredEditor = isMailerLite || isStripe || isAbcIgnite || isRevline || isResend || isTwilio || isOpenAI || isAnthropic;
     const modalTitle = isMailerLite 
       ? 'MailerLite Configuration' 
       : isStripe 
@@ -282,7 +291,13 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
             ? 'RevLine Configuration'
             : isResend
               ? 'Resend Configuration'
-              : 'Meta Config';
+              : isTwilio
+                ? 'Twilio Configuration'
+                : isOpenAI
+                  ? 'OpenAI Configuration'
+                  : isAnthropic
+                    ? 'Anthropic Configuration'
+                    : 'Meta Config';
     const modalDescription = isMailerLite 
       ? 'Configure MailerLite groups. Use the Workflows tab to set up automations.'
       : isStripe
@@ -293,7 +308,13 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
             ? 'Enable forms and configure trigger operations for this client.'
             : isResend
               ? 'Configure sender settings for transactional emails.'
-              : 'Update non-sensitive configuration (group IDs, product maps, etc.)';
+              : isTwilio
+                ? 'Configure phone numbers and webhooks for SMS messaging.'
+                : isOpenAI
+                  ? 'Configure model and generation settings for AI completions.'
+                  : isAnthropic
+                    ? 'Configure model and generation settings for Anthropic Claude completions.'
+                    : 'Update non-sensitive configuration (group IDs, product maps, etc.)';
 
     // Use fullscreen mode for RevLine editor (has preview panel)
     const useFullscreen = isRevline && isFullscreen;
@@ -374,6 +395,27 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
               integrationId={integration.id}
               workspaceId={workspaceId}
               workspaceSlug={workspaceSlug}
+            />
+          ) : isTwilio ? (
+            <TwilioConfigEditor
+              value={metaText}
+              onChange={setMetaText}
+              error={error}
+              workspaceSlug={workspaceSlug}
+            />
+          ) : isOpenAI ? (
+            <OpenAIConfigEditor
+              value={metaText}
+              onChange={setMetaText}
+              error={error}
+              integrationId={integration.id}
+            />
+          ) : isAnthropic ? (
+            <AnthropicConfigEditor
+              value={metaText}
+              onChange={setMetaText}
+              error={error}
+              integrationId={integration.id}
             />
           ) : (
             <>
