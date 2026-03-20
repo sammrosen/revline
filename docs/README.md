@@ -15,15 +15,19 @@ Transform your single-client landing page system into a **multi-client managed s
 
 ## System Status
 
-✅ **Production Ready** - All core features implemented  
-✅ **No per-client secrets in `.env`** - Only master encryption key  
-✅ **All automations emit events** - Single source of truth for debugging  
-✅ **Failures visible in one place** - Admin dashboard shows all issues  
-✅ **Can pause a client instantly** - One-click execution blocking  
-✅ **Health monitoring runs every 15min** - Proactive failure detection  
-✅ **Can onboard new client in <2 hours** - Streamlined process  
-✅ **Full funnel tracking** - Captured → Booked → Paid  
-✅ **Decoupled workflows** - Configurable trigger → action automation
+✅ **Production Ready** — All core features implemented  
+✅ **No per-client secrets in `.env`** — Only master encryption key  
+✅ **All automations emit events** — Single source of truth for debugging  
+✅ **Failures visible in one place** — Dashboard shows all issues  
+✅ **Can pause a workspace instantly** — One-click execution blocking  
+✅ **Health monitoring runs every 15min** — Proactive failure detection  
+✅ **Can onboard new client in <2 hours** — Streamlined process  
+✅ **Full funnel tracking** — Custom pipeline stages per workspace  
+✅ **Decoupled workflows** — 11-adapter trigger → action automation  
+✅ **Multi-user auth** — Organizations, workspace roles (Owner/Admin/Member/Viewer)  
+✅ **AI agent engine** — Autonomous SMS conversations via OpenAI/Anthropic + Twilio  
+✅ **Booking system** — Provider-agnostic with magic link confirmation  
+✅ **Reliability layer** — Webhook deduplication, idempotent execution
 
 ---
 
@@ -39,17 +43,20 @@ Transform your single-client landing page system into a **multi-client managed s
 
 ### Workflows
 
-- [Pre-Push Routine](./workflows/PRE-PUSH.md) - Before pushing code
-- [Client Onboarding](./workflows/CLIENT-ONBOARDING.md) - Full onboarding protocol
-- [Landing Page Creation](./workflows/LANDING-PAGE-CREATION.md) - 15-minute page workflow
-- [ManyChat Setup](./workflows/MANYCHAT-SETUP.md) - Instagram automation setup
+- [Pre-Push Routine](./workflows/PRE-PUSH.md) — Before pushing code
+- [Client Onboarding](./workflows/CLIENT-ONBOARDING.md) — Full onboarding protocol
+- [Landing Page Creation](./workflows/LANDING-PAGE-CREATION.md) — 15-minute page workflow
+- [ManyChat Setup](./workflows/MANYCHAT-SETUP.md) — Instagram automation setup
+- [Integration Onboarding](./workflows/INTEGRATION-ONBOARDING.md) — Adding new integrations
+- [External API Integration](./workflows/EXTERNAL-API-INTEGRATION.md) — External API patterns
 
 ### Reference
 
-- [Standards](./STANDARDS.md) - Coding standards and conventions
-- [Health Check System](./HEALTH-CHECK-SYSTEM.md) - Health monitoring details
-- [Production Audit](./PRODUCTION-AUDIT.md) - Security and reliability review
-- [Status](./STATUS.md) - Implementation status
+- [Standards](./STANDARDS.md) — Coding standards and conventions
+- [Health Check System](./HEALTH-CHECK-SYSTEM.md) — Health monitoring details
+- [AI Agent System](./AI-AGENT-SYSTEM.md) — AI agent engine documentation
+- [Production Audit](./PRODUCTION-AUDIT.md) — Security and reliability review
+- [Status](./STATUS.md) — Implementation status
 
 ---
 
@@ -80,42 +87,48 @@ All client secrets stored encrypted in Postgres, decrypted at runtime only.
 
 | Integration | Status | Description |
 |-------------|--------|-------------|
-| MailerLite | ✅ Complete | Email capture, customer groups |
-| Stripe | ✅ Complete | Payment webhooks, customer tracking |
+| MailerLite | ✅ Complete | Email capture, subscriber groups, tagging |
+| Stripe | ✅ Complete | Payment/subscription webhooks |
 | Calendly | ✅ Complete | Booking webhooks, stage tracking |
-| ManyChat | ✅ Docs | Traffic driver (no backend needed) |
+| ABC Ignite | ✅ Complete | Gym member management, booking, availability |
+| Resend | ✅ Complete | Transactional email (templates + inline), bounce/complaint webhooks |
+| Twilio | ✅ Complete | SMS send/receive, agent channel |
+| OpenAI | ✅ Complete | AI text generation, agent backbone |
+| Anthropic | ✅ Complete | AI text generation (Claude), agent backbone |
+| ManyChat | ✅ Stub | Instagram DM automation (adapter defined) |
+| RevLine | ✅ Internal | Lead management, event logging, form triggers |
 
 ### Workflow Engine
 
-All integrations are connected through the **Workflow Engine** - a configurable automation system:
+All integrations are connected through the **Workflow Engine** — a configurable automation system with 11 adapters:
 
-- **Triggers:** Events that start workflows (payments, bookings, email captures)
-- **Actions:** Operations workflows can execute (add to group, update lead stage)
+- **Triggers:** Events that start workflows (payments, bookings, email captures, SMS, bounces, new members, agent events)
+- **Actions:** Operations workflows can execute (add to group, send email/SMS, generate text, route to agent, enroll member, etc.)
 - **Decoupled:** Add new integrations without modifying existing code
-- **Configurable:** Different actions per client without code changes
+- **Configurable:** Different actions per workspace without code changes
 
 See [Workflow Engine Documentation](./WORKFLOW-ENGINE.md) for details.
 
 ---
 
-## Non-Goals (Intentionally NOT Built)
+## Non-Goals (Intentionally NOT Built Yet)
 
-These features come **after money**, not before:
-
-- ❌ Client dashboards
-- ❌ Client-facing alerts  
+- ❌ Client-facing dashboards (clients see booking pages, not admin)
 - ❌ Slack notifications
-- ❌ Retry queues
 - ❌ Webhook replay UI
-- ❌ Lead analytics
-- ❌ OAuth
-- ❌ Multi-admin support
+- ❌ Lead analytics / reporting
+- ❌ OAuth (email+password auth only)
+
+**Previously non-goals, now implemented:**
+- ~~Multi-admin support~~ → ✅ Multi-user with organizations and workspace roles
+- ~~Retry queues~~ → ✅ Execution retry with audit trail
+- ~~Client dashboards~~ → ✅ Booking pages for clients
 
 **Guiding Principle:** If it doesn't help detect or fix a revenue failure faster, it doesn't get built.
 
 ---
 
-*Last updated: January 2025*
+*Last updated: March 2026*
 
 
 

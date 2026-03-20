@@ -56,39 +56,112 @@ Every meaningful state change MUST emit an event. Events are the primary debuggi
 
 ```
 app/
-├── _lib/                    # Core libraries (server-only)
-│   ├── types/               # Shared type definitions
-│   │   └── index.ts         # Central type exports
-│   ├── services/            # Business logic services
-│   │   ├── lead.service.ts
-│   │   └── capture.service.ts
-│   ├── integrations/        # External service adapters
-│   │   ├── base.ts          # Abstract base class
-│   │   ├── mailerlite.ts
-│   │   ├── stripe.ts
-│   │   └── calendly.ts
-│   ├── middleware/          # Route middleware
-│   │   ├── rate-limit.ts
-│   │   ├── validate.ts
-│   │   └── security.ts
-│   ├── utils/               # Pure utility functions
-│   │   ├── crypto.ts
-│   │   ├── api-response.ts
-│   │   └── validation.ts
-│   ├── auth.ts              # Authentication
-│   ├── workspace-gate.ts    # Workspace lookup + execution gating
-│   ├── db.ts                # Prisma client
-│   └── event-logger.ts      # Event emission
-├── _components/             # Shared React components
-├── (dashboard)/             # Workspaces dashboard (internal only)
-├── api/                     # API routes
-│   └── v1/                  # API v1 (all versioned endpoints)
-│       ├── subscribe/       # Lead capture endpoint
-│       ├── stripe-webhook/  # Stripe webhooks
-│       ├── calendly-webhook/# Calendly webhooks
-│       ├── cron/            # Scheduled tasks
-│       └── admin/           # Admin API routes
-└── [landing-pages]/         # Client-facing pages
+├── _lib/                       # Core libraries (server-only)
+│   ├── integrations/           # External service adapters (10 adapters)
+│   │   ├── base.ts             # Abstract base class
+│   │   ├── config.ts           # Integration UI metadata
+│   │   ├── mailerlite.adapter.ts
+│   │   ├── stripe.adapter.ts
+│   │   ├── abc-ignite.adapter.ts
+│   │   ├── revline.adapter.ts
+│   │   ├── resend.adapter.ts
+│   │   ├── twilio.adapter.ts
+│   │   ├── openai.adapter.ts
+│   │   ├── anthropic.adapter.ts
+│   │   └── index.ts
+│   ├── workflow/               # Workflow engine
+│   │   ├── types.ts            # TypeScript interfaces
+│   │   ├── registry.ts         # Adapter definitions (11 adapters)
+│   │   ├── engine.ts           # Core execution logic
+│   │   ├── validation.ts       # Workflow config validation
+│   │   ├── integration-config.ts
+│   │   └── executors/          # Action executors (9 executors)
+│   ├── agent/                  # AI agent engine
+│   │   ├── engine.ts           # Core agent processing loop
+│   │   ├── adapter-registry.ts # AI provider adapters
+│   │   ├── tool-registry.ts    # Available agent tools
+│   │   ├── escalation.ts       # Escalation detection
+│   │   ├── pricing.ts          # Token cost calculation
+│   │   ├── file-extract.ts     # Document parsing
+│   │   ├── schemas.ts          # Zod schemas
+│   │   └── types.ts
+│   ├── booking/                # Booking system
+│   │   ├── index.ts            # Booking flow orchestration
+│   │   ├── get-provider.ts     # Provider resolution
+│   │   ├── magic-link.ts       # Magic link tokens
+│   │   └── types.ts
+│   ├── reliability/            # Reliability infrastructure
+│   │   ├── webhook-processor.ts
+│   │   ├── idempotent-executor.ts
+│   │   ├── resilient-client.ts
+│   │   └── types.ts
+│   ├── services/               # Business logic services
+│   │   ├── capture.service.ts
+│   │   ├── webhook.service.ts
+│   │   ├── lead-properties.ts
+│   │   └── payload-compatibility.ts
+│   ├── middleware/             # Route middleware
+│   │   └── rate-limit.ts
+│   ├── domain/                # Custom domain verification
+│   │   └── verification.service.ts
+│   ├── forms/                 # Form system
+│   │   ├── registry.ts
+│   │   ├── types.ts
+│   │   ├── styles.ts
+│   │   └── useFormState.ts
+│   ├── observability/         # Metrics and monitoring
+│   │   ├── metrics.ts
+│   │   └── thresholds.ts
+│   ├── auth.ts                # Authentication (multi-user)
+│   ├── crypto.ts              # AES-256-GCM encryption
+│   ├── client-gate.ts         # Workspace lookup + execution gating
+│   ├── integrations-core.ts   # Low-level integration utilities
+│   ├── organization-access.ts # Organization permission checks
+│   ├── workspace-access.ts    # Workspace membership checks
+│   ├── event-logger.ts        # Event emission
+│   ├── pushover.ts            # Pushover notifications
+│   ├── totp.ts                # TOTP 2FA support
+│   ├── db.ts                  # Prisma client
+│   └── api-paths.ts           # API path constants
+├── _components/               # Shared React components
+├── _config/                   # App configuration
+├── (auth)/                    # Auth pages (login, setup)
+├── (dashboard)/               # Protected dashboard
+│   ├── workspaces/            # Workspace management
+│   │   ├── [id]/              # Workspace detail + config editors
+│   │   │   ├── _components/   # Workspace-specific components
+│   │   │   └── workflows/     # Workflow list + editor
+│   │   └── new/               # Create workspace
+│   ├── settings/              # App settings
+│   └── onboarding/            # Onboarding wizard
+├── (sites)/                   # Site-specific layouts
+├── api/v1/                    # API v1 (all versioned endpoints)
+│   ├── auth/                  # Login, logout, 2FA
+│   ├── organizations/         # Organization CRUD + members + templates
+│   ├── workspaces/            # Workspace CRUD + agents, domain, health, events
+│   ├── integrations/          # Integration CRUD + secrets, sync, models
+│   ├── workflows/             # Workflow CRUD + executions + toggle
+│   ├── booking/               # Booking request, create, confirm, lookup
+│   ├── subscribe/             # Email capture
+│   ├── forms/                 # Form endpoints
+│   ├── stripe-webhook/        # Stripe webhooks
+│   ├── calendly-webhook/      # Calendly webhooks
+│   ├── resend-webhook/        # Resend webhooks
+│   ├── twilio-webhook/        # Twilio webhooks
+│   ├── cron/                  # Health check, data cleanup, ABC sync
+│   ├── executions/            # Execution retry
+│   └── workflow-registry/     # Available adapters
+├── public/[slug]/             # Public signup flow
+├── book/[workspaceSlug]/      # Booking pages
+└── [landing-pages]/           # Client-facing pages (cyclic, demo, diet, fit1, semi-private)
+
+__tests__/
+├── unit/                      # Unit tests
+└── integration/               # Integration tests
+
+prisma/                        # Database schema & migrations
+docs/                          # Documentation
+types/                         # Global TypeScript type definitions
 ```
 
 ---
@@ -309,10 +382,10 @@ export const integrations = {
 5. **Wire frontend components** - See `docs/workflows/INTEGRATION-ONBOARDING.md` for full checklist.
 
 **Critical:** The frontend requires updates in **multiple files**:
-- `app/_lib/integrations/config.ts` - Integration metadata
-- `app/workspaces/[id]/add-integration-form.tsx` - Add form
-- `app/workspaces/[id]/integration-actions.tsx` - Edit/Configure modal
-- Custom config editor components
+- `app/_lib/integrations/config.ts` — Integration metadata and UI config
+- `app/(dashboard)/workspaces/[id]/add-integration-form.tsx` — Add integration form
+- `app/(dashboard)/workspaces/[id]/integration-actions.tsx` — Edit/Configure modal
+- Custom config editor components (e.g., `*-config-editor.tsx`, `*-add-config.tsx`)
 
 Missing any wire-up causes **runtime errors** (e.g., `ReferenceError: isYourIntegration is not defined`).
 
@@ -441,5 +514,6 @@ Use transactions when:
 |---------|------|---------|
 | 1.0 | 2024-01 | Initial standards document |
 | 1.1 | 2026-01 | Updated "client" → "workspace" terminology, added timing-safe comparison guidance, Zod validation, database transactions, rate limiting for auth routes |
+| 1.2 | 2026-03 | Updated directory structure to reflect full codebase (agent, booking, reliability, forms, observability, domain), corrected frontend component paths to (dashboard) route group, expanded integration adapter listing |
 
 

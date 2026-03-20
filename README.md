@@ -7,11 +7,15 @@
 RevLine is an internal operations platform that lets you manage automation services for multiple business clients from a single dashboard. Each client gets their own encrypted integrations, event logging, and health monitoring—without touching code or environment files.
 
 **Core capabilities:**
-- 🔐 **Encrypted per-client secrets** - MailerLite, Stripe, Calendly credentials stored securely in Postgres
-- 📊 **Event logging** - Full audit trail for every automation action
-- ⏸️ **Instant client controls** - Pause/unpause any client with one click
-- 🏥 **Health monitoring** - Automatic checks every 15 minutes with email alerts
-- 🎯 **Lead tracking** - Follow customers through capture → booking → payment stages
+- 🔐 **Encrypted per-workspace secrets** — 10 integration types with AES-256-GCM encryption
+- 📊 **Event logging** — Full audit trail for every automation action (12 system types)
+- ⏸️ **Instant workspace controls** — Pause/unpause any workspace with one click
+- 🏥 **Health monitoring** — Automatic checks every 15 minutes with email/Pushover alerts
+- 🎯 **Lead tracking** — Custom pipeline stages and properties per workspace
+- 🔄 **Workflow engine** — 11-adapter trigger → action automation system
+- 🤖 **AI agents** — Autonomous SMS conversations via OpenAI/Anthropic + Twilio
+- 📅 **Booking system** — Provider-agnostic with magic link confirmation
+- 👥 **Multi-user auth** — Organizations, workspace roles (Owner/Admin/Member/Viewer)
 
 ## Quick Start
 
@@ -57,14 +61,20 @@ Open [http://localhost:3000/workspaces](http://localhost:3000/workspaces) to acc
 
 ## Integrations
 
-RevLine supports these integrations per-client:
+RevLine supports 10 integration types per-workspace:
 
 | Integration | Purpose |
 |-------------|---------|
-| **MailerLite** | Email capture and subscriber management |
-| **Stripe** | Payment webhooks and customer tracking |
+| **MailerLite** | Email capture, subscriber groups, tagging |
+| **Stripe** | Payment/subscription webhooks |
 | **Calendly** | Booking webhooks and appointment tracking |
-| **ManyChat** | Instagram DM automation (coming soon) |
+| **ABC Ignite** | Gym member management, booking, availability |
+| **Resend** | Transactional email (templates + inline), bounce/complaint webhooks |
+| **Twilio** | SMS send/receive, AI agent channel |
+| **OpenAI** | AI text generation, agent backbone |
+| **Anthropic** | AI text generation (Claude), agent backbone |
+| **ManyChat** | Instagram DM automation (stub) |
+| **RevLine** | Internal lead management, event logging, form triggers |
 
 ## Testing
 
@@ -111,29 +121,38 @@ GitHub Actions workflow is configured in `.github/workflows/ci.yml`.
 
 ```
 app/
-├── (dashboard)/           # App dashboard (protected)
-│   ├── workspaces/       # Workspace management
-│   ├── login/            # User authentication
-│   └── onboarding/       # Client setup wizard
-├── api/
-│   ├── v1/               # API routes (auth, workspaces, integrations, etc.)
-│   ├── subscribe/        # Email capture endpoint
-│   ├── stripe-webhook/   # Stripe webhook handler
-│   ├── calendly-webhook/ # Calendly webhook handler
-│   └── cron/             # Health check cron job
+├── (auth)/                # Auth pages (login, setup)
+├── (dashboard)/           # Protected dashboard
+│   ├── workspaces/        # Workspace management + config editors
+│   ├── settings/          # App settings
+│   └── onboarding/        # Onboarding wizard
+├── api/v1/                # API routes
+│   ├── auth/              # Login, logout, 2FA
+│   ├── organizations/     # Org CRUD + members + templates
+│   ├── workspaces/        # Workspace CRUD + agents, domain, health
+│   ├── integrations/      # Integration CRUD + secrets, sync
+│   ├── workflows/         # Workflow CRUD + executions
+│   ├── booking/           # Booking request, confirm, lookup
+│   ├── *-webhook/         # Stripe, Calendly, Resend, Twilio webhooks
+│   └── cron/              # Health check, data cleanup, ABC sync
 ├── _lib/
-│   ├── integrations/     # Integration adapters
-│   ├── services/         # Business logic
-│   ├── middleware/       # Rate limiting, etc.
-│   └── utils/            # Validation, API responses
-└── (landing pages)/      # Client-facing pages
+│   ├── integrations/      # 10 integration adapters
+│   ├── workflow/           # Workflow engine + 9 executors
+│   ├── agent/             # AI agent engine
+│   ├── booking/           # Booking system + magic links
+│   ├── reliability/       # Webhook processor, idempotency
+│   ├── services/          # Business logic
+│   └── forms/             # Form system
+├── public/[slug]/         # Public signup flow
+├── book/[workspaceSlug]/  # Booking pages
+└── [landing-pages]/       # Client-facing pages
 
 __tests__/
-├── unit/                 # Unit tests
-└── integration/          # Integration tests
+├── unit/                  # Unit tests
+└── integration/           # Integration tests
 
-docs/                     # Documentation
-prisma/                   # Database schema & migrations
+docs/                      # Documentation
+prisma/                    # Database schema & 18 migrations
 ```
 
 ## Landing Pages
@@ -203,12 +222,14 @@ npm run ci             # Full CI check
 
 ## Security
 
-- All client secrets are encrypted with AES-256-GCM before storage
-- Admin passwords hashed with Argon2id
+- All workspace secrets are encrypted with AES-256-GCM before storage (keyring with version support)
+- User passwords hashed with Argon2id (64MB memory, 3 iterations)
 - Session-based authentication with HTTP-only cookies
-- Rate limiting on all public endpoints
-- Input validation and XSS sanitization
-- Webhook signature verification (Stripe, Calendly)
+- Optional TOTP 2FA with recovery codes
+- Rate limiting on all public endpoints (global + per-route)
+- Zod input validation on all external input
+- Webhook signature verification (Stripe, Calendly, Resend, Twilio)
+- SMS opt-out compliance tracking
 
 ## License
 
