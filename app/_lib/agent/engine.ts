@@ -29,6 +29,9 @@ import type { IntegrationResult } from '@/app/_lib/types';
 import { resolveAI, resolveChannel, getContactFieldForChannel } from './adapter-registry';
 import { resolveTools, executeTool } from './tool-registry';
 import type { ToolDefinition } from '@/app/_lib/integrations';
+import { checkSendWindow, shouldEnforceQuietHours } from './quiet-hours';
+import type { SendType, SendReplyResult } from './quiet-hours';
+import { sanitizeForGsm7, estimateSegments, shouldSanitizeSms } from './sms-encoding';
 
 // Register all tools with the tool registry at module load
 import './tools';
@@ -808,6 +811,40 @@ export async function initiateConversation(
       return errorResponse('Agent not found or inactive', correlationId);
     }
 
+    // 1b. Quiet hours check for proactive outreach (before any DB writes)
+    if (!params.testMode && shouldEnforceQuietHours(agent.channelType)) {
+      const gate = checkSendWindow(agent.timezone);
+      if (!gate.allowed) {
+        logStructured({
+          correlationId,
+          event: 'agent_send_blocked_quiet_hours',
+          workspaceId: params.workspaceId,
+          provider: agent.channelIntegration || 'agent',
+          success: false,
+          metadata: {
+            agentId: agent.id,
+            sendType: 'proactive',
+            localHour: gate.localHour,
+            localMinute: gate.localMinute,
+            timezone: agent.timezone,
+            nextWindowAt: gate.nextWindowAt?.toISOString(),
+          },
+        });
+        return {
+          success: false,
+          replyText: null,
+          conversationId: '',
+          isNewConversation: false,
+          status: ConversationStatus.ACTIVE,
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          error: 'outside_send_window',
+          eventsEmitted: [],
+          blockedByQuietHours: true,
+          nextWindowAt: gate.nextWindowAt ?? undefined,
+        };
+      }
+    }
+
     // 2. Validate channel is configured
     if (!agent.channelIntegration || !agent.channelAddress) {
       if (params.testMode) {
@@ -938,7 +975,8 @@ export async function initiateConversation(
         agent,
         agent.channelAddress,
         contactAddress,
-        outboundText
+        outboundText,
+        'proactive'
       );
     }
 
@@ -1002,6 +1040,7 @@ async function loadAgent(
 ): Promise<AgentConfig | null> {
   const agent = await prisma.agent.findFirst({
     where: { id: agentId, workspaceId, active: true },
+    include: { workspace: { select: { timezone: true } } },
   });
 
   if (!agent) return null;
@@ -1030,6 +1069,8 @@ async function loadAgent(
     allowedEvents: (agent.allowedEvents as string[]) || [],
     enabledTools: (agent.enabledTools as string[]) || [],
     active: agent.active,
+    timezone: agent.workspace.timezone,
+    allowUnicode: agent.allowUnicode,
   };
 }
 
@@ -1143,8 +1184,9 @@ async function sendReply(
   agent: AgentConfig,
   fromAddress: string,
   toAddress: string,
-  body: string
-): Promise<void> {
+  body: string,
+  sendType: SendType = 'reactive'
+): Promise<SendReplyResult> {
   if (!agent.channelIntegration) {
     logStructured({
       correlationId: crypto.randomUUID(),
@@ -1154,7 +1196,47 @@ async function sendReply(
       success: true,
       metadata: { agentId: agent.id, reason: 'no_channel_configured' },
     });
-    return;
+    return { sent: false };
+  }
+
+  // Quiet hours send gate
+  if (shouldEnforceQuietHours(agent.channelType)) {
+    const gate = checkSendWindow(agent.timezone);
+    if (!gate.allowed) {
+      if (sendType === 'proactive') {
+        logStructured({
+          correlationId: crypto.randomUUID(),
+          event: 'agent_send_blocked_quiet_hours',
+          workspaceId,
+          provider: agent.channelIntegration,
+          success: false,
+          metadata: {
+            agentId: agent.id,
+            sendType,
+            localHour: gate.localHour,
+            localMinute: gate.localMinute,
+            timezone: agent.timezone,
+            nextWindowAt: gate.nextWindowAt?.toISOString(),
+          },
+        });
+        return { sent: false, blockedByQuietHours: true, nextWindowAt: gate.nextWindowAt ?? undefined };
+      }
+      // Reactive: log warning but proceed (responding to user-initiated contact)
+      logStructured({
+        correlationId: crypto.randomUUID(),
+        event: 'agent_send_outside_window',
+        workspaceId,
+        provider: agent.channelIntegration,
+        success: true,
+        metadata: {
+          agentId: agent.id,
+          sendType,
+          localHour: gate.localHour,
+          localMinute: gate.localMinute,
+          timezone: agent.timezone,
+        },
+      });
+    }
   }
 
   const entry = resolveChannel(agent.channelIntegration);
@@ -1167,7 +1249,7 @@ async function sendReply(
       error: `Unsupported channel: ${agent.channelIntegration}`,
       metadata: { agentId: agent.id },
     });
-    return;
+    return { sent: false };
   }
 
   const adapter = await entry.forWorkspace(workspaceId);
@@ -1180,10 +1262,31 @@ async function sendReply(
       error: `${entry.label} not configured for this workspace`,
       metadata: { agentId: agent.id },
     });
-    return;
+    return { sent: false };
   }
 
-  const result = await adapter.sendMessage(fromAddress, toAddress, body);
+  // SMS encoding sanitization
+  let sanitizedBody = body;
+  if (shouldSanitizeSms(agent.channelType) && !agent.allowUnicode) {
+    sanitizedBody = sanitizeForGsm7(body);
+  }
+  const segments = estimateSegments(sanitizedBody);
+  logStructured({
+    correlationId: crypto.randomUUID(),
+    event: 'agent_sms_segments',
+    workspaceId,
+    provider: agent.channelIntegration,
+    success: true,
+    metadata: {
+      agentId: agent.id,
+      encoding: segments.encoding,
+      segments: segments.segments,
+      characters: segments.characters,
+      sanitized: sanitizedBody !== body,
+    },
+  });
+
+  const result = await adapter.sendMessage(fromAddress, toAddress, sanitizedBody);
   if (!result.success) {
     logStructured({
       correlationId: crypto.randomUUID(),
@@ -1193,7 +1296,10 @@ async function sendReply(
       error: result.error || 'Send failed',
       metadata: { agentId: agent.id },
     });
+    return { sent: false };
   }
+
+  return { sent: true };
 }
 
 async function emitAgentEvent(

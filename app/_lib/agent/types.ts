@@ -110,6 +110,10 @@ export interface AgentResponse {
   toolsUsed?: string[];
   /** Full turn activity log (AI calls, tool calls, guardrails, events, errors) */
   turnLog?: TurnLogEntry[];
+  /** True if proactive send was blocked by quiet hours enforcement */
+  blockedByQuietHours?: boolean;
+  /** When the send window next opens (only set when blockedByQuietHours is true) */
+  nextWindowAt?: Date;
 }
 
 export interface ConversationWithMessages {
@@ -160,6 +164,10 @@ export interface AgentConfig {
   allowedEvents: string[];
   enabledTools: string[];
   active: boolean;
+  /** IANA timezone from the parent workspace (e.g., "America/New_York") */
+  timezone: string;
+  /** When true, skip GSM-7 sanitization and allow Unicode SMS (UCS-2) */
+  allowUnicode: boolean;
 }
 
 export interface InitiateConversationParams {

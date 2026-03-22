@@ -520,6 +520,7 @@ model Agent {
   fallbackMessage            String? @map("fallback_message")
   escalationPattern          String? @map("escalation_pattern")
   faqOverrides               Json?   @map("faq_overrides")
+  allowUnicode               Boolean @default(false) @map("allow_unicode")
 
   // Allowed event emissions (JSON array of event type strings the bot can emit)
   allowedEvents Json @default("[]") @map("allowed_events")
