@@ -32,6 +32,7 @@ import type { ToolDefinition } from '@/app/_lib/integrations';
 import { checkSendWindow, shouldEnforceQuietHours } from './quiet-hours';
 import type { SendType, SendReplyResult } from './quiet-hours';
 import { sanitizeForGsm7, estimateSegments, shouldSanitizeSms } from './sms-encoding';
+import { retryWithBackoff } from './retry';
 
 // Register all tools with the tool registry at module load
 import './tools';
@@ -422,7 +423,16 @@ export async function handleInboundMessage(
 
     const aiStartMs = performance.now();
     const initialCallStart = performance.now();
-    const aiResult = await callAI(params.workspaceId, agent, aiMessages, toolDefs);
+    const aiResult = await retryWithBackoff(
+      () => callAI(params.workspaceId, agent, aiMessages, toolDefs),
+      {
+        shouldRetry: (r) => !r.success && r.retryable === true,
+        getRetryAfterMs: (r) => r.retryAfterMs,
+        onRetry: (attempt, r, delayMs) => {
+          turnLog.push({ type: 'retry', attempt, error: r.error || 'Unknown', delayMs, ts: Date.now() });
+        },
+      },
+    );
     const initialCallMs = Math.round(performance.now() - initialCallStart);
     const accumulatedUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
@@ -480,6 +490,8 @@ export async function handleInboundMessage(
       durationMs: initialCallMs,
       iteration: 0,
       ts: Date.now(),
+      cacheCreationTokens: completion.usage.cacheCreationTokens,
+      cacheReadTokens: completion.usage.cacheReadTokens,
     });
 
     for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
@@ -553,7 +565,16 @@ export async function handleInboundMessage(
 
       // Re-call AI with tool results
       const loopCallStart = performance.now();
-      const loopResult = await callAI(params.workspaceId, agent, aiMessages, toolDefs);
+      const loopResult = await retryWithBackoff(
+        () => callAI(params.workspaceId, agent, aiMessages, toolDefs),
+        {
+          shouldRetry: (r) => !r.success && r.retryable === true,
+          getRetryAfterMs: (r) => r.retryAfterMs,
+          onRetry: (attempt, r, delayMs) => {
+            turnLog.push({ type: 'retry', attempt, error: r.error || 'Unknown', delayMs, ts: Date.now() });
+          },
+        },
+      );
       const loopCallMs = Math.round(performance.now() - loopCallStart);
 
       if (!loopResult.success || !loopResult.data) {
@@ -584,6 +605,8 @@ export async function handleInboundMessage(
         durationMs: loopCallMs,
         iteration: iteration + 1,
         ts: Date.now(),
+        cacheCreationTokens: completion.usage.cacheCreationTokens,
+        cacheReadTokens: completion.usage.cacheReadTokens,
       });
     }
 

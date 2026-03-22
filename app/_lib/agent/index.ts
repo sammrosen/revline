@@ -27,8 +27,11 @@ export type {
   ConversationStatus,
   MessageRole,
   TurnLogEntry,
+  RetryLog,
 } from './types';
 export type { SendType, SendReplyResult } from './quiet-hours';
 export { checkSendWindow, shouldEnforceQuietHours } from './quiet-hours';
 export type { SegmentEstimate } from './sms-encoding';
 export { sanitizeForGsm7, isGsm7Compatible, estimateSegments, shouldSanitizeSms } from './sms-encoding';
+export type { RetryOptions } from './retry';
+export { retryWithBackoff } from './retry';

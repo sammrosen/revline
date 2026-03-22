@@ -23,6 +23,8 @@ export interface AiCallLog extends TurnLogBase {
   finishReason: string;
   durationMs: number;
   iteration: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
 }
 
 export interface ToolCallLog extends TurnLogBase {
@@ -62,7 +64,14 @@ export interface ErrorLog extends TurnLogBase {
   message: string;
 }
 
-export type TurnLogEntry = AiCallLog | ToolCallLog | FaqMatchLog | EscalationLog | GuardrailLog | EventLog | ErrorLog;
+export interface RetryLog extends TurnLogBase {
+  type: 'retry';
+  attempt: number;
+  error: string;
+  delayMs: number;
+}
+
+export type TurnLogEntry = AiCallLog | ToolCallLog | FaqMatchLog | EscalationLog | GuardrailLog | EventLog | ErrorLog | RetryLog;
 
 export interface InboundMessageParams {
   workspaceId: string;
