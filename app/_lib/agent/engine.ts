@@ -35,9 +35,16 @@ import { sanitizeForGsm7, estimateSegments, shouldSanitizeSms } from './sms-enco
 import { retryWithBackoff } from './retry';
 import { cancelPendingFollowUps } from './follow-up';
 import { checkConsent, revokeConsent } from '@/app/_lib/services/consent.service';
+import { withTransaction } from '@/app/_lib/utils/transaction';
+import { maskContact } from '@/app/_lib/utils/validation';
 
 // Register all tools with the tool registry at module load
 import './tools';
+
+/** Whether to skip the intentional response delay (webhook callers can't afford it). */
+function shouldApplyDelay(params: InboundMessageParams): boolean {
+  return params.callerContext !== 'webhook' && !params.testMode;
+}
 
 export async function handleInboundMessage(
   params: InboundMessageParams
@@ -110,10 +117,14 @@ export async function handleInboundMessage(
           },
         });
 
-        await revokeConsent(params.workspaceId, params.contactAddress, params.channel);
+        const agentRecord = await prisma.agent.findUnique({
+          where: { id: params.agentId },
+          select: { channelType: true },
+        });
+        await revokeConsent(params.workspaceId, params.contactAddress, agentRecord?.channelType || params.channel);
 
         if (activeConvo) {
-          await cancelPendingFollowUps(activeConvo.id, 'opted_out');
+          await cancelPendingFollowUps(activeConvo.id, 'opted_out', params.workspaceId);
         }
 
         await emitAgentEvent(params.workspaceId, 'contact_opted_out', {
@@ -146,7 +157,7 @@ export async function handleInboundMessage(
 
     // 2b. Cancel pending follow-ups on any inbound message
     if (!isNew) {
-      await cancelPendingFollowUps(conversation.id);
+      await cancelPendingFollowUps(conversation.id, 'lead_responded', params.workspaceId);
     }
 
     // 3. Handle PAUSED conversations -- auto-resume or guard
@@ -272,17 +283,21 @@ export async function handleInboundMessage(
         },
       });
       if (recentReplies >= agent.rateLimitPerHour) {
-        await prisma.conversationMessage.create({
-          data: { conversationId: conversation.id, role: 'USER', content: params.messageText },
-        });
-        await prisma.conversation.update({
-          where: { id: conversation.id },
-          data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
+        await withTransaction(async (tx) => {
+          await tx.conversationMessage.create({
+            data: { conversationId: conversation.id, role: 'USER', content: params.messageText },
+          });
+          await tx.conversation.update({
+            where: { id: conversation.id },
+            data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
+          });
         });
         logStructured({
           correlationId,
           event: 'agent_rate_limited',
           workspaceId: params.workspaceId,
+          provider: agent.aiIntegration,
+          success: false,
           metadata: { agentId: agent.id, conversationId: conversation.id, recentReplies },
         });
         turnLog.push({ type: 'guardrail', guardrail: 'rate_limited', detail: `${recentReplies}/${agent.rateLimitPerHour} replies/hr`, ts: Date.now() });
@@ -352,7 +367,7 @@ export async function handleInboundMessage(
         });
 
         if (!params.testMode) {
-          if (agent.responseDelaySeconds > 0) {
+          if (shouldApplyDelay(params) && agent.responseDelaySeconds > 0) {
             await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
           }
           await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, initialText);
@@ -369,15 +384,17 @@ export async function handleInboundMessage(
         );
         turnLog.push({ type: 'faq_match', pattern: matchedRule?.patterns.join(', ') || '?', response: faqMatch, ts: Date.now() });
 
-        await prisma.conversationMessage.create({
-          data: { conversationId: conversation.id, role: 'ASSISTANT', content: faqMatch, turnLog: turnLog.length > 0 ? (turnLog as unknown as Prisma.InputJsonValue) : undefined },
-        });
-        await prisma.conversation.update({
-          where: { id: conversation.id },
-          data: { messageCount: { increment: 2 }, lastMessageAt: new Date() },
+        await withTransaction(async (tx) => {
+          await tx.conversationMessage.create({
+            data: { conversationId: conversation.id, role: 'ASSISTANT', content: faqMatch, turnLog: turnLog.length > 0 ? (turnLog as unknown as Prisma.InputJsonValue) : undefined },
+          });
+          await tx.conversation.update({
+            where: { id: conversation.id },
+            data: { messageCount: { increment: 2 }, lastMessageAt: new Date() },
+          });
         });
         if (!params.testMode) {
-          if (agent.responseDelaySeconds > 0) {
+          if (shouldApplyDelay(params) && agent.responseDelaySeconds > 0) {
             await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
           }
           await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, faqMatch);
@@ -655,7 +672,7 @@ export async function handleInboundMessage(
       });
 
       if (cleanedReply && !params.testMode) {
-        if (agent.responseDelaySeconds > 0) {
+        if (shouldApplyDelay(params) && agent.responseDelaySeconds > 0) {
           await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
         }
         await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, cleanedReply);
@@ -708,40 +725,36 @@ export async function handleInboundMessage(
       };
     }
 
-    // 11. Store ASSISTANT response
-    await prisma.conversationMessage.create({
-      data: {
-        conversationId: conversation.id,
-        role: 'ASSISTANT',
-        content: replyText,
-        promptTokens: completion.usage.promptTokens,
-        completionTokens: completion.usage.completionTokens,
-        turnLog: turnLog.length > 0 ? (turnLog as unknown as Prisma.InputJsonValue) : undefined,
-      },
-    });
-
-    // 12. Update conversation counters
+    // 11. Store ASSISTANT response + update counters atomically
     const newMessageCount = conversation.messageCount + 2; // USER + ASSISTANT
     const newTotalTokens = conversation.totalTokens + completion.usage.totalTokens;
+    const hitTokenLimit = newTotalTokens >= agent.maxTokensPerConversation;
+    const finalStatus: ConversationStatus = hitTokenLimit ? ConversationStatus.COMPLETED : ConversationStatus.ACTIVE;
 
-    await prisma.conversation.update({
-      where: { id: conversation.id },
-      data: {
-        messageCount: newMessageCount,
-        totalTokens: newTotalTokens,
-        lastMessageAt: new Date(),
-      },
+    await withTransaction(async (tx) => {
+      await tx.conversationMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: 'ASSISTANT',
+          content: replyText,
+          promptTokens: completion.usage.promptTokens,
+          completionTokens: completion.usage.completionTokens,
+          turnLog: turnLog.length > 0 ? (turnLog as unknown as Prisma.InputJsonValue) : undefined,
+        },
+      });
+
+      await tx.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          messageCount: newMessageCount,
+          totalTokens: newTotalTokens,
+          lastMessageAt: new Date(),
+          ...(hitTokenLimit ? { status: ConversationStatus.COMPLETED, endedAt: new Date() } : {}),
+        },
+      });
     });
 
-    // 13. Check token limit after update
-    let finalStatus: ConversationStatus = ConversationStatus.ACTIVE;
-    if (newTotalTokens >= agent.maxTokensPerConversation) {
-      await prisma.conversation.update({
-        where: { id: conversation.id },
-        data: { status: ConversationStatus.COMPLETED, endedAt: new Date() },
-      });
-      finalStatus = ConversationStatus.COMPLETED;
-
+    if (hitTokenLimit) {
       await emitAgentEvent(params.workspaceId, 'conversation_completed', {
         agentId: agent.id,
         conversationId: conversation.id,
@@ -760,7 +773,7 @@ export async function handleInboundMessage(
       : undefined;
 
     if (replyText && !params.testMode) {
-      if (agent.responseDelaySeconds > 0) {
+      if (shouldApplyDelay(params) && agent.responseDelaySeconds > 0) {
         await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
       }
       await sendReply(
@@ -1064,7 +1077,7 @@ export async function initiateConversation(
       metadata: {
         agentId: agent.id,
         conversationId: conversation.id,
-        contactAddress,
+        contactAddress: maskContact(contactAddress || ''),
         mode: 'proactive',
       },
     });
@@ -1131,14 +1144,16 @@ export async function loadAgent(
     fallbackMessage: agent.fallbackMessage,
     escalationPattern: agent.escalationPattern,
     faqOverrides: parseFaqOverrides(agent.faqOverrides),
-    allowedEvents: (agent.allowedEvents as string[]) || [],
-    enabledTools: (agent.enabledTools as string[]) || [],
+    allowedEvents: Array.isArray(agent.allowedEvents) ? agent.allowedEvents as string[] : [],
+    enabledTools: Array.isArray(agent.enabledTools) ? agent.enabledTools as string[] : [],
     active: agent.active,
     timezone: agent.workspace.timezone,
     allowUnicode: agent.allowUnicode,
     followUpEnabled: agent.followUpEnabled,
     followUpAiGenerated: agent.followUpAiGenerated,
-    followUpSequence: (agent.followUpSequence as Array<{ delayMinutes: number; message?: string }>) || [],
+    followUpSequence: Array.isArray(agent.followUpSequence)
+      ? (agent.followUpSequence as Array<{ delayMinutes: number; message?: string; variants?: string[] }>)
+      : [],
   };
 }
 
@@ -1221,7 +1236,7 @@ function mapRoleToAI(role: string): ChatMessage['role'] {
   }
 }
 
-async function callAI(
+export async function callAI(
   workspaceId: string,
   agent: AgentConfig,
   messages: ChatMessage[],
@@ -1354,13 +1369,28 @@ export async function sendReply(
     },
   });
 
-  const result = await adapter.sendMessage(fromAddress, toAddress, sanitizedBody);
+  let result;
+  try {
+    result = await adapter.sendMessage(fromAddress, toAddress, sanitizedBody);
+  } catch (err) {
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'agent_send_failed',
+      workspaceId,
+      provider: agent.channelIntegration,
+      success: false,
+      error: err instanceof Error ? err.message : 'Channel adapter threw',
+      metadata: { agentId: agent.id },
+    });
+    return { sent: false };
+  }
   if (!result.success) {
     logStructured({
       correlationId: crypto.randomUUID(),
       event: 'agent_send_failed',
       workspaceId,
       provider: agent.channelIntegration,
+      success: false,
       error: result.error || 'Send failed',
       metadata: { agentId: agent.id },
     });

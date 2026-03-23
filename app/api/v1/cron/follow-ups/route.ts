@@ -26,15 +26,6 @@ function validateAuth(request: NextRequest): boolean {
   return authHeader === `Bearer ${cronSecret}`;
 }
 
-function log(message: string, data?: Record<string, unknown>): void {
-  console.log(JSON.stringify({
-    timestamp: new Date().toISOString(),
-    source: 'follow_up_cron',
-    message,
-    ...data,
-  }));
-}
-
 // ---------------------------------------------------------------------------
 // Phase 1: Detect idle conversations and schedule first follow-up
 // ---------------------------------------------------------------------------
@@ -55,16 +46,16 @@ async function detectIdleConversations(): Promise<number> {
   });
 
   for (const agent of agents) {
-    const sequence = agent.followUpSequence as Array<{ delayMinutes: number; message?: string }>;
-    if (!sequence || sequence.length === 0) continue;
+    const raw = agent.followUpSequence;
+    if (!Array.isArray(raw) || raw.length === 0) continue;
+    const sequence = raw as Array<{ delayMinutes: number; message?: string }>;
 
-    const firstDelayMs = sequence[0].delayMinutes * 60 * 1000;
+    const first = sequence[0];
+    if (typeof first?.delayMinutes !== 'number') continue;
+
+    const firstDelayMs = first.delayMinutes * 60 * 1000;
     const idleThreshold = new Date(Date.now() - firstDelayMs);
 
-    // Find ACTIVE conversations where:
-    // - Last message is from ASSISTANT (bot spoke last, lead went silent)
-    // - lastMessageAt is older than the first step's delay
-    // - No PENDING or SENT follow-ups exist yet
     const idleConversations = await prisma.conversation.findMany({
       where: {
         agentId: agent.id,
@@ -97,7 +88,7 @@ async function detectIdleConversations(): Promise<number> {
         convo.contactAddress,
         convo.channelAddress,
         0,
-        0 // Already past the delay -- schedule for now
+        0
       );
       scheduled++;
     }
@@ -124,7 +115,6 @@ async function processDueFollowUps(): Promise<{ sent: number; skipped: number; r
 
   if (dueFollowUps.length === 0) return stats;
 
-  // Cache loaded agents to avoid repeated DB calls within one batch
   const agentCache = new Map<string, AgentConfig | null>();
 
   for (const followUp of dueFollowUps) {
@@ -166,6 +156,7 @@ async function processDueFollowUps(): Promise<{ sent: number; skipped: number; r
         event: 'follow_up_processing_error',
         workspaceId: followUp.workspaceId,
         provider: 'agent',
+        success: false,
         error: err instanceof Error ? err.message : 'Unknown',
         metadata: { followUpId: followUp.id, conversationId: followUp.conversationId },
       });
@@ -185,8 +176,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const cronCorrelationId = crypto.randomUUID();
   const startTime = Date.now();
-  log('Follow-up cron starting');
+
+  logStructured({
+    correlationId: cronCorrelationId,
+    event: 'follow_up_cron_started',
+    workspaceId: '',
+    provider: 'cron',
+    success: true,
+  });
 
   let scheduled = 0;
   let phase2Stats = { sent: 0, skipped: 0, rescheduled: 0, cancelled: 0 };
@@ -194,17 +193,39 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     scheduled = await detectIdleConversations();
   } catch (err) {
-    log('Phase 1 (detect idle) failed', { error: err instanceof Error ? err.message : 'Unknown' });
+    logStructured({
+      correlationId: cronCorrelationId,
+      event: 'follow_up_cron_phase1_failed',
+      workspaceId: '',
+      provider: 'cron',
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown',
+    });
   }
 
   try {
     phase2Stats = await processDueFollowUps();
   } catch (err) {
-    log('Phase 2 (process due) failed', { error: err instanceof Error ? err.message : 'Unknown' });
+    logStructured({
+      correlationId: cronCorrelationId,
+      event: 'follow_up_cron_phase2_failed',
+      workspaceId: '',
+      provider: 'cron',
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown',
+    });
   }
 
   const durationMs = Date.now() - startTime;
-  log('Follow-up cron completed', { scheduled, ...phase2Stats, durationMs });
+
+  logStructured({
+    correlationId: cronCorrelationId,
+    event: 'follow_up_cron_completed',
+    workspaceId: '',
+    provider: 'cron',
+    success: true,
+    metadata: { scheduled, ...phase2Stats, durationMs },
+  });
 
   return NextResponse.json({
     success: true,

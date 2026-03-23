@@ -16,7 +16,7 @@
  * });
  */
 
-export { handleInboundMessage, initiateConversation, loadAgent, sendReply } from './engine';
+export { handleInboundMessage, initiateConversation, loadAgent, sendReply, callAI } from './engine';
 export { getAvailableTools } from './tool-registry';
 export type {
   InboundMessageParams,

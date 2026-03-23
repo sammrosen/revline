@@ -36,6 +36,7 @@ export const CreateAgentSchema = z.object({
   allowedEvents: z.array(z.string()).default([]),
   enabledTools: z.array(z.string()).default([]),
   active: z.boolean().default(true),
+  allowUnicode: z.boolean().default(false),
   followUpEnabled: z.boolean().default(false),
   followUpAiGenerated: z.boolean().default(true),
   followUpSequence: z.array(z.object({

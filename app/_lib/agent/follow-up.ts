@@ -17,11 +17,10 @@ import { prisma } from '@/app/_lib/db';
 import { ConversationStatus, FollowUpStatus } from '@prisma/client';
 import { logStructured } from '@/app/_lib/reliability';
 import type { AgentConfig } from './types';
-import type { ChatMessage, ChatCompletionResult } from '@/app/_lib/integrations';
-import type { IntegrationResult } from '@/app/_lib/types';
-import { resolveAI } from './adapter-registry';
+import type { ChatMessage } from '@/app/_lib/integrations';
 import { retryWithBackoff } from './retry';
-import { sendReply } from './engine';
+import { sendReply, callAI } from './engine';
+import { withTransaction } from '@/app/_lib/utils/transaction';
 
 export interface FollowUpRecord {
   id: string;
@@ -89,10 +88,17 @@ export async function scheduleFollowUp(
  */
 export async function cancelPendingFollowUps(
   conversationId: string,
-  reason: string = 'lead_responded'
+  reason: string = 'lead_responded',
+  workspaceId?: string
 ): Promise<number> {
+  const where: { conversationId: string; status: FollowUpStatus; workspaceId?: string } = {
+    conversationId,
+    status: FollowUpStatus.PENDING,
+  };
+  if (workspaceId) where.workspaceId = workspaceId;
+
   const result = await prisma.followUp.updateMany({
-    where: { conversationId, status: FollowUpStatus.PENDING },
+    where,
     data: { status: FollowUpStatus.CANCELLED, skipReason: reason },
   });
 
@@ -100,7 +106,7 @@ export async function cancelPendingFollowUps(
     logStructured({
       correlationId: crypto.randomUUID(),
       event: 'follow_up_cancelled',
-      workspaceId: '',
+      workspaceId: workspaceId || '',
       provider: 'agent',
       success: true,
       metadata: { conversationId, cancelledCount: result.count, reason },
@@ -138,7 +144,7 @@ export async function processFollowUp(
       select: { id: true },
     });
     if (lastMessage) {
-      await cancelPendingFollowUps(followUp.conversationId);
+      await cancelPendingFollowUps(followUp.conversationId, 'lead_responded', followUp.workspaceId);
       return { action: 'cancelled', reason: 'lead_responded' };
     }
   }
@@ -153,7 +159,7 @@ export async function processFollowUp(
     },
   });
   if (optOut) {
-    await cancelPendingFollowUps(followUp.conversationId, 'opted_out');
+    await cancelPendingFollowUps(followUp.conversationId, 'opted_out', followUp.workspaceId);
     return { action: 'cancelled', reason: 'opted_out' };
   }
 
@@ -227,25 +233,25 @@ export async function processFollowUp(
     return { action: 'skipped', reason: 'send_failed' };
   }
 
-  // Store as conversation message
-  await prisma.conversationMessage.create({
-    data: {
-      conversationId: followUp.conversationId,
-      role: 'ASSISTANT',
-      content: messageText,
-    },
-  });
+  // Store message + update counters + mark sent atomically
+  await withTransaction(async (tx) => {
+    await tx.conversationMessage.create({
+      data: {
+        conversationId: followUp.conversationId,
+        role: 'ASSISTANT',
+        content: messageText,
+      },
+    });
 
-  // Update conversation counters
-  await prisma.conversation.update({
-    where: { id: followUp.conversationId },
-    data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
-  });
+    await tx.conversation.update({
+      where: { id: followUp.conversationId },
+      data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
+    });
 
-  // Mark follow-up as sent
-  await prisma.followUp.update({
-    where: { id: followUp.id },
-    data: { status: FollowUpStatus.SENT, sentAt: new Date(), messageText },
+    await tx.followUp.update({
+      where: { id: followUp.id },
+      data: { status: FollowUpStatus.SENT, sentAt: new Date(), messageText },
+    });
   });
 
   logStructured({
@@ -319,7 +325,13 @@ export async function generateFollowUpMessage(
       { role: 'user', content: '[SYSTEM: The lead has not responded. Generate a follow-up message.]' },
     ];
 
-    const result = await callFollowUpAI(workspaceId, agent, aiMessages);
+    const result = await retryWithBackoff(
+      () => callAI(workspaceId, agent, aiMessages),
+      {
+        shouldRetry: (r) => !r.success && r.retryable === true,
+        getRetryAfterMs: (r) => r.retryAfterMs,
+      },
+    );
 
     if (!result.success || !result.data?.content) return null;
 
@@ -330,6 +342,7 @@ export async function generateFollowUpMessage(
       event: 'follow_up_ai_generation_failed',
       workspaceId,
       provider: agent.aiIntegration,
+      success: false,
       error: err instanceof Error ? err.message : 'Unknown',
       metadata: { conversationId, agentId: agent.id },
     });
@@ -346,35 +359,6 @@ async function markSkipped(followUpId: string, reason: string): Promise<void> {
     where: { id: followUpId },
     data: { status: FollowUpStatus.SKIPPED, skipReason: reason },
   });
-}
-
-async function callFollowUpAI(
-  workspaceId: string,
-  agent: AgentConfig,
-  messages: ChatMessage[]
-): Promise<IntegrationResult<ChatCompletionResult>> {
-  const entry = resolveAI(agent.aiIntegration);
-  if (!entry) {
-    return { success: false, error: `Unsupported AI integration: ${agent.aiIntegration}` };
-  }
-
-  const adapter = await entry.forWorkspace(workspaceId);
-  if (!adapter) {
-    return { success: false, error: `${entry.label} not configured for this workspace` };
-  }
-
-  return retryWithBackoff(
-    () => adapter.chatCompletion({
-      messages,
-      model: agent.modelOverride || undefined,
-      temperature: agent.temperatureOverride ?? undefined,
-      maxTokens: 200,
-    }),
-    {
-      shouldRetry: (r) => !r.success && r.retryable === true,
-      getRetryAfterMs: (r) => r.retryAfterMs,
-    },
-  );
 }
 
 async function interpolateFollowUpTemplate(

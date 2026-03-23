@@ -58,7 +58,8 @@ function getLocalTime(timezone: string): { hour: number; minute: number; validTi
       hour12: false,
     });
     const parts = formatter.formatToParts(new Date());
-    const hour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
+    let hour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
+    if (hour === 24) hour = 0; // en-US + hour12:false may use 24 for midnight
     const minute = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
     return { hour, minute, validTimezone: tz };
   } catch {
@@ -70,10 +71,68 @@ function getLocalTime(timezone: string): { hour: number; minute: number; validTi
       hour12: false,
     });
     const parts = formatter.formatToParts(new Date());
-    const hour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
+    let hour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
+    if (hour === 24) hour = 0;
     const minute = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
     return { hour, minute, validTimezone: tz };
   }
+}
+
+/**
+ * UTC instant when the wall-clock reads (year, month, day, hour, minute) in `timeZone`.
+ * Scans a ±2 day UTC range by minute — correct across DST; 9:00 etc. always exists.
+ */
+function utcInstantForZonedWallClock(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  timeZone: string
+): Date {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+  const read = (utcMs: number) => {
+    const parts = formatter.formatToParts(new Date(utcMs));
+    const g = (type: string) => parts.find((p) => p.type === type)?.value;
+    let hh = parseInt(g('hour') || '0', 10);
+    if (hh === 24) hh = 0;
+    return {
+      y: parseInt(g('year') || '0', 10),
+      mo: parseInt(g('month') || '0', 10),
+      d: parseInt(g('day') || '0', 10),
+      h: hh,
+      mi: parseInt(g('minute') || '0', 10),
+    };
+  };
+
+  const lo = Date.UTC(year, month - 1, day - 1, 0, 0, 0, 0);
+  const hi = Date.UTC(year, month - 1, day + 2, 0, 0, 0, 0);
+
+  for (let t = lo; t <= hi; t += 60 * 1000) {
+    const p = read(t);
+    if (p.y === year && p.mo === month && p.d === day && p.h === hour && p.mi === minute) {
+      return new Date(t);
+    }
+  }
+
+  // Last resort: same scan by second (handles edge cases where minute step lands oddly)
+  for (let t = lo; t <= hi; t += 1000) {
+    const p = read(t);
+    if (p.y === year && p.mo === month && p.d === day && p.h === hour && p.mi === minute) {
+      return new Date(t);
+    }
+  }
+
+  return new Date(Date.UTC(year, month - 1, day, hour + 12, minute, 0, 0));
 }
 
 /**
@@ -120,9 +179,6 @@ export function getNextWindowOpen(
   const startHour = config?.startHour ?? DEFAULT_START_HOUR;
   const { hour, validTimezone } = getLocalTime(timezone);
 
-  // Build a Date object for the target local time using timezone offset math.
-  // We compute the offset between UTC and the target timezone, then construct
-  // the Date in UTC that corresponds to the desired local time.
   const now = new Date();
 
   const localDateStr = new Intl.DateTimeFormat('en-CA', {
@@ -132,20 +188,21 @@ export function getNextWindowOpen(
     day: '2-digit',
   }).format(now);
 
-  // localDateStr is "YYYY-MM-DD" in the target timezone
-  const [year, month, day] = localDateStr.split('-').map(Number);
+  const [y0, m0, d0] = localDateStr.split('-').map(Number);
 
-  // If current hour is before start, window opens today; otherwise tomorrow
-  const targetDay = hour < startHour ? day : day + 1;
+  let y: number;
+  let mo: number;
+  let d: number;
+  if (hour < startHour) {
+    y = y0;
+    mo = m0;
+    d = d0;
+  } else {
+    const nextCal = new Date(Date.UTC(y0, m0 - 1, d0 + 1));
+    y = nextCal.getUTCFullYear();
+    mo = nextCal.getUTCMonth() + 1;
+    d = nextCal.getUTCDate();
+  }
 
-  // Build a rough target in UTC by creating the local datetime string
-  // and computing the actual UTC offset for the timezone
-  const candidateLocal = new Date(year, month - 1, targetDay, startHour, 0, 0, 0);
-
-  // Compute the offset: difference between UTC and local interpretation
-  const utcEquivalent = new Date(candidateLocal.toLocaleString('en-US', { timeZone: 'UTC' }));
-  const localEquivalent = new Date(candidateLocal.toLocaleString('en-US', { timeZone: validTimezone }));
-  const offsetMs = utcEquivalent.getTime() - localEquivalent.getTime();
-
-  return new Date(candidateLocal.getTime() + offsetMs);
+  return utcInstantForZonedWallClock(y, mo, d, startHour, 0, validTimezone);
 }

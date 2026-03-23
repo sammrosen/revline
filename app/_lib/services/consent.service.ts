@@ -12,6 +12,8 @@
  * - Workspace-isolated: every query scoped to workspaceId
  * - Event-driven: emits consent_granted, consent_revoked
  * - Fail-safe: no consent record = blocked (deny by default)
+ *   DB errors in checkConsent return null (deny). DB errors in
+ *   revokeConsent/recordConsent are logged but don't crash callers.
  * - Never delete consent records — soft revoke via revokedAt
  */
 
@@ -53,85 +55,112 @@ export interface ConsentRecord {
  */
 export async function recordConsent(
   params: RecordConsentParams
-): Promise<ConsentRecord> {
+): Promise<ConsentRecord | null> {
   const channel = params.channel.toUpperCase();
 
-  const record = await prisma.consentRecord.upsert({
-    where: {
-      workspaceId_contactAddress_channel: {
+  try {
+    const record = await prisma.consentRecord.upsert({
+      where: {
+        workspaceId_contactAddress_channel: {
+          workspaceId: params.workspaceId,
+          contactAddress: params.contactAddress,
+          channel,
+        },
+      },
+      update: {
+        consentType: params.consentType,
+        method: params.method,
+        languagePresented: params.languagePresented,
+        ipAddress: params.ipAddress ?? null,
+        grantedAt: new Date(),
+        expiresAt: params.expiresAt ?? null,
+        revokedAt: null,
+      },
+      create: {
         workspaceId: params.workspaceId,
         contactAddress: params.contactAddress,
         channel,
+        consentType: params.consentType,
+        method: params.method,
+        languagePresented: params.languagePresented,
+        ipAddress: params.ipAddress ?? null,
+        expiresAt: params.expiresAt ?? null,
       },
-    },
-    update: {
-      consentType: params.consentType,
-      method: params.method,
-      languagePresented: params.languagePresented,
-      ipAddress: params.ipAddress ?? null,
-      grantedAt: new Date(),
-      expiresAt: params.expiresAt ?? null,
-      revokedAt: null,
-    },
-    create: {
+    });
+
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'consent_granted',
       workspaceId: params.workspaceId,
-      contactAddress: params.contactAddress,
-      channel,
-      consentType: params.consentType,
-      method: params.method,
-      languagePresented: params.languagePresented,
-      ipAddress: params.ipAddress ?? null,
-      expiresAt: params.expiresAt ?? null,
-    },
-  });
+      provider: 'consent',
+      success: true,
+      metadata: {
+        channel,
+        consentType: params.consentType,
+        method: params.method,
+      },
+    });
 
-  logStructured({
-    correlationId: crypto.randomUUID(),
-    event: 'consent_granted',
-    workspaceId: params.workspaceId,
-    provider: 'consent',
-    success: true,
-    metadata: {
-      contactAddress: params.contactAddress,
-      channel,
-      consentType: params.consentType,
-      method: params.method,
-    },
-  });
-
-  return record;
+    return record;
+  } catch (err) {
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'consent_record_failed',
+      workspaceId: params.workspaceId,
+      provider: 'consent',
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown',
+      metadata: { channel },
+    });
+    return null;
+  }
 }
 
 /**
  * Check whether a contact has active (non-revoked, non-expired) consent
  * on a given channel. Returns the record if valid, null otherwise.
+ * Fail-safe: DB errors return null (deny by default).
  */
 export async function checkConsent(
   workspaceId: string,
   contactAddress: string,
   channel: string
 ): Promise<ConsentRecord | null> {
-  const record = await prisma.consentRecord.findUnique({
-    where: {
-      workspaceId_contactAddress_channel: {
-        workspaceId,
-        contactAddress,
-        channel: channel.toUpperCase(),
+  try {
+    const record = await prisma.consentRecord.findUnique({
+      where: {
+        workspaceId_contactAddress_channel: {
+          workspaceId,
+          contactAddress,
+          channel: channel.toUpperCase(),
+        },
       },
-    },
-  });
+    });
 
-  if (!record) return null;
-  if (record.revokedAt) return null;
-  if (record.expiresAt && record.expiresAt < new Date()) return null;
+    if (!record) return null;
+    if (record.revokedAt) return null;
+    if (record.expiresAt && record.expiresAt < new Date()) return null;
 
-  return record;
+    return record;
+  } catch (err) {
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'consent_check_failed',
+      workspaceId,
+      provider: 'consent',
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown',
+      metadata: { channel: channel.toUpperCase() },
+    });
+    return null;
+  }
 }
 
 /**
  * Soft-revoke consent for a contact on a specific channel.
  * Sets revokedAt but never deletes the record (regulatory retention).
  * Returns true if a record was revoked, false if no active record existed.
+ * DB errors are logged but don't crash the caller.
  */
 export async function revokeConsent(
   workspaceId: string,
@@ -140,35 +169,47 @@ export async function revokeConsent(
 ): Promise<boolean> {
   const normalizedChannel = channel.toUpperCase();
 
-  const record = await prisma.consentRecord.findUnique({
-    where: {
-      workspaceId_contactAddress_channel: {
-        workspaceId,
-        contactAddress,
-        channel: normalizedChannel,
+  try {
+    const record = await prisma.consentRecord.findUnique({
+      where: {
+        workspaceId_contactAddress_channel: {
+          workspaceId,
+          contactAddress,
+          channel: normalizedChannel,
+        },
       },
-    },
-  });
+    });
 
-  if (!record || record.revokedAt) return false;
+    if (!record || record.revokedAt) return false;
 
-  await prisma.consentRecord.update({
-    where: { id: record.id },
-    data: { revokedAt: new Date() },
-  });
+    await prisma.consentRecord.update({
+      where: { id: record.id },
+      data: { revokedAt: new Date() },
+    });
 
-  logStructured({
-    correlationId: crypto.randomUUID(),
-    event: 'consent_revoked',
-    workspaceId,
-    provider: 'consent',
-    success: true,
-    metadata: {
-      contactAddress,
-      channel: normalizedChannel,
-      consentRecordId: record.id,
-    },
-  });
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'consent_revoked',
+      workspaceId,
+      provider: 'consent',
+      success: true,
+      metadata: {
+        channel: normalizedChannel,
+        consentRecordId: record.id,
+      },
+    });
 
-  return true;
+    return true;
+  } catch (err) {
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'consent_revoke_failed',
+      workspaceId,
+      provider: 'consent',
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown',
+      metadata: { channel: normalizedChannel },
+    });
+    return false;
+  }
 }

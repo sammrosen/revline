@@ -85,6 +85,8 @@ export interface InboundMessageParams {
   systemPromptOverride?: string;
   /** When provided, continue this specific conversation instead of lookup by address */
   conversationId?: string;
+  /** Caller context — 'webhook' skips synchronous response delay to avoid Twilio timeouts */
+  callerContext?: 'webhook' | 'api' | 'test';
 }
 
 export interface AgentResponse {

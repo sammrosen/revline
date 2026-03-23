@@ -1,8 +1,43 @@
 # AI Agent Features
 
 > **Created:** March 14, 2026
+> **Updated:** March 22, 2026
 > **Source:** Production deployment research covering Claude prompt engineering, TCPA compliance, multi-channel messaging (SMS/web/IG/WhatsApp), reliability patterns, and analytics — cross-referenced against the current RevLine agent system.
 > **Scope:** Everything needed to take the agent system from "works in test" to "production-grade across channels at scale."
+
+---
+
+## Status Summary
+
+| Feature | Status | Sprint |
+|---------|--------|--------|
+| 1.1 Quiet Hours Enforcement | DONE | 3/21 |
+| 1.2 Consent Record Storage | DONE | 3/22 |
+| 1.3 First Message Compliance | SKIPPED | — |
+| 1.4 SMS Encoding Awareness | DONE | 3/21 |
+| 2.1 Anthropic Prompt Caching | DONE | 3/21 |
+| 2.2 Sliding Window | ON HOLD | — |
+| 3.1 Follow-Up Scheduler | DONE | 3/21 |
+| 3.2 Follow-Up Message Variants | DONE | 3/22 |
+| 3.3 Conversation Stage Tracking | DEFERRED | — |
+| 4.1 AI Retry with Backoff | DONE | 3/21 |
+| 4.2 Circuit Breaker | DEFERRED | — |
+| 4.3 Queue-Based Webhooks | NOT STARTED | — |
+| 5.1–5.3 Prompt Engineering | NOT STARTED | — |
+| 6.1–6.3 Escalation Improvements | NOT STARTED | — |
+| 7.1–7.3 New Channels | NOT STARTED | — |
+| 8.1–8.4 Analytics | NOT STARTED | — |
+| 9.1–9.3 Advanced Reliability | NOT STARTED | — |
+
+**Decisions made:**
+- **1.3 First Message Compliance** — Skipped for reactive-first launch. When the lead initiates contact, explicit first-message disclaimers are not required. Revisit when adding proactive marketing campaigns.
+- **2.2 Sliding Window** — On hold. Over-engineering for current SMS conversation lengths. Revisit when conversations consistently exceed 20+ messages.
+- **3.3 Conversation Stage Tracking** — Deferred. Message-count-based heuristics are unreliable. The useful version requires AI-classified stages via structured output from the main AI call, tracked at the lead level (not conversation level), aggregating across channels. Separate future build.
+- **4.2 Circuit Breaker** — Deferred. Retry with backoff covers 95% of transient failures. Circuit breaker matters at 10+ active workspaces with sustained traffic. Not needed for first gym launch.
+
+**Future ideas (not in original backlog):**
+- **Cross-channel lead context:** Before starting a new conversation, load summary of all prior conversations for that lead (any channel, any agent) and inject into system prompt. Data model already supports this via `Lead.conversations` relation.
+- **Email channel via Resend:** Register EMAIL adapter in channel registry, route through `sendReply()`. All existing features (consent, follow-ups, variants, quiet hours) apply automatically.
 
 ---
 
@@ -10,149 +45,143 @@
 
 These are not features. These are lawsuits waiting to happen if skipped.
 
-### 1.1 Quiet Hours Enforcement
+### 1.1 Quiet Hours Enforcement — DONE (3/21 Sprint)
 
 **Risk:** TCPA violations cost $500–$1,500 per message with no cap. Over 100 class-action cases filed since November 2024 targeting quiet hours specifically.
 
-**What to build:**
-- [ ] Pre-send check in `sendReply()` and `initiateConversation()` that blocks delivery outside allowed hours
-- [ ] Use `Workspace.timezone` (already exists, IANA format) to compute recipient local time
-- [ ] Default window: 9 AM–8 PM (buffers against strictest state rules — Florida, Oklahoma, Washington restrict to 8 AM–8 PM)
-- [ ] Per-workspace override for stricter state rules (Florida 3-attempt limit per 24hr rolling period)
-- [ ] When blocked by quiet hours: queue the message and deliver at next window open
-- [ ] Log `agent_send_delayed_quiet_hours` event
+**Built:**
+- [x] Pre-send check in `sendReply()` and `initiateConversation()` that blocks delivery outside allowed hours
+- [x] Use `Workspace.timezone` (already exists, IANA format) to compute recipient local time
+- [x] Default window: 9 AM–8 PM (buffers against strictest state rules — Florida, Oklahoma, Washington restrict to 8 AM–8 PM)
+- [ ] Per-workspace override for stricter state rules (Florida 3-attempt limit per 24hr rolling period) — future
+- [x] When blocked by quiet hours: proactive sends blocked, follow-ups rescheduled to next window
+- [x] Log `agent_send_blocked_quiet_hours` event
 
-**Where it touches:**
-- `app/_lib/agent/engine.ts` — `sendReply()`, `initiateConversation()`
-- New: quiet hours check utility (timezone-aware)
-- New: delayed message queue (can be simple DB-backed initially, BullMQ later)
+**Files:** `app/_lib/agent/quiet-hours.ts` (new), `app/_lib/agent/engine.ts` (modified)
 
-### 1.2 Consent Record Storage
+### 1.2 Consent Record Storage — DONE (3/22 Sprint)
 
 **Risk:** TCPA requires proof of Prior Express Written Consent for every marketing SMS. Consent records must be retained 5–6 years. Without them, every message is legally indefensible.
 
-**What to build:**
-- [ ] `ConsentRecord` model: workspaceId, contactAddress, channel, consentType (marketing/transactional), method (web_form/sms_keyword/in_person), languagePresented (exact text), formVersion, ipAddress, timestamp, expiresAt
-- [ ] Record consent at every opt-in point (signup forms, web chat pre-chat form, keyword opt-in)
-- [ ] Check consent before first outbound message in `initiateConversation()`
-- [ ] Consent query API for compliance audits
-- [ ] Retain opt-out records indefinitely (already stored, just ensure no TTL/cleanup)
+**Built:**
+- [x] `ConsentRecord` model: workspaceId, contactAddress, channel, consentType, method, languagePresented, ipAddress, grantedAt, expiresAt, revokedAt
+- [ ] Record consent at every opt-in point (signup forms, web chat pre-chat form, keyword opt-in) — consent collection UI is a separate build
+- [x] Check consent before first outbound message in `initiateConversation()`
+- [ ] Consent query API for compliance audits — future
+- [x] Retain opt-out records indefinitely (already stored, no TTL/cleanup)
+- [x] Revoke consent on opt-out (alongside OptOutRecord upsert)
 
-**Where it touches:**
-- `prisma/schema.prisma` — new `ConsentRecord` model
-- `app/_lib/agent/engine.ts` — consent check in `initiateConversation()`
-- Public form submission handlers — record consent on submit
+**Files:** `app/_lib/services/consent.service.ts` (new, platform-level), `prisma/schema.prisma` (modified), `app/_lib/agent/engine.ts` (modified)
 
-### 1.3 First Message Compliance Validation
+### 1.3 First Message Compliance Validation — SKIPPED
 
-**Risk:** SMS marketing messages must include program name, message frequency disclosure, data rates notice, and opt-out instructions. Missing any of these in the first message is a regulatory violation.
+Not needed for reactive-first launch. When the lead initiates contact, the reply is reactive and explicit first-message disclaimers are not legally required. Revisit for proactive marketing campaigns.
 
-**What to build:**
-- [ ] Validation on Agent `initialMessage` field — warn if missing: gym name, frequency, "Msg & data rates may apply", "Reply STOP to opt out"
-- [ ] Dashboard warning (not hard block) when saving an agent with a non-compliant initial message
-- [ ] Auto-append opt-out footer option: configurable per-agent text appended to the first outbound message only
-
-### 1.4 SMS Encoding Awareness
+### 1.4 SMS Encoding Awareness — DONE (3/21 Sprint)
 
 **Risk:** A single emoji or smart quote from Claude switches encoding from GSM-7 (160 chars/segment) to UCS-2 (70 chars/segment), tripling SMS costs silently.
 
-**What to build:**
-- [ ] Post-processing step in `sendReply()` that sanitizes AI output: replace curly quotes with straight quotes, strip emoji unless explicitly allowed
-- [ ] GSM-7 compatibility check utility — flag non-GSM characters before send
-- [ ] Per-agent toggle: `allowUnicode` (default false for SMS channels)
-- [ ] Log segment count estimate on every outbound SMS for cost tracking
+**Built:**
+- [x] Post-processing step in `sendReply()` that sanitizes AI output: replace curly quotes with straight quotes, strip emoji unless explicitly allowed
+- [x] GSM-7 compatibility check utility — flag non-GSM characters before send
+- [x] Per-agent toggle: `allowUnicode` (default false for SMS channels)
+- [x] Log segment count estimate on every outbound SMS for cost tracking
+
+**Files:** `app/_lib/agent/sms-encoding.ts` (new), `app/_lib/agent/engine.ts` (modified)
 
 ---
 
 ## Priority 2 — Cost Reduction (direct money savings, quick wins)
 
-### 2.1 Anthropic Prompt Caching
+### 2.1 Anthropic Prompt Caching — DONE (3/21 Sprint)
 
 **Impact:** System prompts are 500–1,000+ tokens, sent on every turn. Prompt caching reduces repeat system prompt cost by 90% within a 5-minute window. For steady SMS traffic this is significant.
 
-**What to build:**
-- [ ] Add `cache_control: { type: "ephemeral" }` to the system message in `anthropic.adapter.ts`
-- [ ] Track cache hit/miss in response metadata (Anthropic returns `cache_creation_input_tokens` and `cache_read_input_tokens`)
-- [ ] Surface cache stats in test chat panel and turn log
+**Built:**
+- [x] Add `cache_control: { type: "ephemeral" }` to the system message in `anthropic.adapter.ts`
+- [x] Track cache hit/miss in response metadata (Anthropic returns `cache_creation_input_tokens` and `cache_read_input_tokens`)
+- [x] Surface cache stats in turn log (`cacheCreationTokens`, `cacheReadTokens` on `AiCallLog`)
 
-**Where it touches:**
-- `app/_lib/integrations/anthropic.adapter.ts` — modify `chatCompletion()` to add cache control on system messages
+**Files:** `app/_lib/integrations/anthropic.adapter.ts` (modified), `app/_lib/integrations/openai.adapter.ts` (modified for type uniformity)
 
-### 2.2 Conversation History Sliding Window
+### 2.2 Conversation History Sliding Window — ON HOLD
 
-**Impact:** Currently loads ALL messages every turn. A 50-message conversation sends ~10K+ tokens of history on every request, most of which is stale context that degrades quality and inflates cost.
+**Impact:** Currently loads ALL messages every turn. A 50-message conversation sends ~10K+ tokens of history on every request.
 
-**What to build:**
+**Decision:** Over-engineering for current SMS conversation lengths. Most SMS conversations are 5-15 messages. Revisit when conversations consistently exceed 20+ messages or when multi-turn web chat is added.
+
+**What to build (when needed):**
 - [ ] Sliding window: keep last N message pairs (configurable, default 10 pairs = 20 messages)
 - [ ] When conversation exceeds window, generate a summary of older messages via a cheap Haiku call
 - [ ] Payload structure: `[system_prompt, conversation_summary, last_N_pairs, new_message]`
 - [ ] Store summary on `Conversation.metadata` so it's computed once, updated incrementally
 - [ ] Per-agent config: `contextWindowSize` (number of recent message pairs to include)
 
-**Where it touches:**
-- `app/_lib/agent/engine.ts` — message loading and AI message construction (step 8–9)
-- `app/_lib/agent/types.ts` — add `contextWindowSize` to `AgentConfig`
-- `prisma/schema.prisma` — add field to Agent model
-
 ---
 
 ## Priority 3 — Follow-Up Sequencing (biggest conversion impact)
 
-The research identifies speed-to-lead and follow-up cadence as the single most impactful variable in conversion. A lead contacted within 5 minutes is 100x more likely to be reached than one at 30 minutes. This entire subsystem is currently missing.
+The research identifies speed-to-lead and follow-up cadence as the single most impactful variable in conversion. A lead contacted within 5 minutes is 100x more likely to be reached than one at 30 minutes.
 
-### 3.1 Follow-Up Scheduler
+### 3.1 Follow-Up Scheduler — DONE (3/21 Sprint)
 
-**What to build:**
-- [ ] `FollowUp` model: conversationId, agentId, workspaceId, contactAddress, scheduledAt, attemptNumber, status (PENDING/SENT/SKIPPED/CANCELLED), skipReason, sentAt
-- [ ] Per-agent follow-up sequence config: array of `{ delayMinutes, templateKey? }` (e.g., `[{ delay: 60 }, { delay: 1440 }, { delay: 2880 }]`)
-- [ ] Scheduler: cron job (or extend existing cron infrastructure) that runs every 1–5 minutes, picks up due follow-ups, runs pre-send checks, delivers or skips
-- [ ] Pre-send checks before every follow-up delivery:
-  - Has the lead responded since scheduling? → skip
-  - Are they opted out? → cancel all remaining
-  - Is it within quiet hours? → reschedule to next window
-  - Have we exceeded max follow-up count? → mark conversation dormant
-  - Is conversation still ACTIVE? → skip if completed/escalated
-- [ ] Cancel all pending follow-ups when lead responds (conversation becomes reactive again)
+**Built:**
+- [x] `FollowUp` model: conversationId, agentId, workspaceId, contactAddress, channelAddress, stepIndex, scheduledAt, status (PENDING/SENT/SKIPPED/CANCELLED), skipReason, sentAt, messageText
+- [x] Per-agent follow-up sequence config: `followUpSequence` JSON array of `{ delayMinutes, message?, variants? }`
+- [x] Toggle: `followUpEnabled`, `followUpAiGenerated` (AI-generated vs template-based)
+- [x] Cron job at `/api/v1/cron/follow-ups` — detects idle conversations, schedules follow-ups, processes due follow-ups
+- [x] Pre-send checks: lead responded → cancel, opted out → cancel, quiet hours → reschedule, conversation not ACTIVE → skip
+- [x] Cancel all pending follow-ups on inbound message (with reason parameter)
+- [x] All outbound delivery routed through `sendReply('proactive')` (consolidated in 3/22 audit fix)
+- [x] Agent editor UI: enable toggle, AI/template toggle, dynamic step list with delay + unit
 
-### 3.2 Follow-Up Message Variants
+**Files:** `app/_lib/agent/follow-up.ts` (new), `app/api/v1/cron/follow-ups/route.ts` (new), `app/_lib/agent/engine.ts` (modified), `app/(dashboard)/workspaces/[id]/agent-editor.tsx` (modified)
 
-**What to build:**
-- [ ] Per-stage variant pool: array of message templates per follow-up step
-- [ ] Rotation strategy: sequential or random, never repeat within same conversation
-- [ ] Support both static templates and AI-generated variants (use conversation context for personalization)
-- [ ] Lead variable interpolation (already exists via `interpolateLeadVariables()`)
+### 3.2 Follow-Up Message Variants — DONE (3/22 Sprint)
 
-### 3.3 Conversation Stage Tracking
+**Built:**
+- [x] Per-step variant pool: optional `variants: string[]` array per follow-up step (max 5)
+- [x] Rotation strategy: hash-based deterministic pick, queries already-sent messages to avoid repeats within same conversation
+- [x] Support both static templates and AI-generated variants (AI mode generates varied messages naturally)
+- [x] Lead variable interpolation via `{{firstName}}`, `{{properties.KEY}}` in templates and variants
+- [x] Agent editor UI: single/variants radio toggle per step, variant textareas with add/remove
 
-**What to build:**
-- [ ] Define stage enum: GREETING, QUALIFICATION, DISCOVERY, VALUE_PRESENTATION, CLOSING, FOLLOW_UP, DORMANT
-- [ ] Track current stage in `Conversation.metadata`
-- [ ] Stage transitions driven by: message count, AI output signals, time elapsed, explicit CTA responses
-- [ ] Stage-aware system prompt augmentation: inject current stage context so Claude adjusts behavior per phase
-- [ ] Analytics: where leads drop off by stage (enables funnel optimization)
+**Files:** `app/_lib/agent/follow-up.ts` (modified), `app/_lib/agent/types.ts` (modified), `app/_lib/agent/schemas.ts` (modified), `app/(dashboard)/workspaces/[id]/agent-editor.tsx` (modified)
+
+### 3.3 Conversation Stage Tracking — DEFERRED
+
+**Decision:** Message-count-based heuristics are unreliable and misleading. The useful version requires:
+- AI-classified stages via structured output from the main AI call (zero extra latency)
+- Stage tracked at the **lead level**, not conversation level, aggregating across all channels
+- Integration with the existing `Lead.stage` CRM pipeline (workspace-customizable stages)
+- This is a different, bigger build. Not an ASAP item.
 
 ---
 
 ## Priority 4 — Reliability Engineering (prevents 3 AM pages)
 
-### 4.1 AI Call Retry with Backoff
+### 4.1 AI Call Retry with Backoff — DONE (3/21 Sprint)
 
-**What to build:**
-- [ ] Wrap `callAI()` in a retry utility with exponential backoff + jitter
-- [ ] Per-error-code strategy: 429 (use `Retry-After` header), 529/500 (retry up to 3x), 413 (trim context and retry), 402 (alert admin, no retry)
-- [ ] Max 3 retries, starting at 1s delay, capping at 30s
-- [ ] Log each retry attempt in turn log
-- [ ] After all retries exhausted, fall through to `fallbackMessage`
+**Built:**
+- [x] Generic `retryWithBackoff<T>()` utility wrapping `callAI()` in both code paths (initial + tool loop)
+- [x] Exponential backoff with jitter: 1s base, 2x multiplier, 30s max, 3 retries
+- [x] Honors `Retry-After` header from AI providers (429 responses)
+- [x] Adapters (`anthropic.adapter.ts`, `openai.adapter.ts`) extract `Retry-After` and pass as `retryAfterMs` in `IntegrationResult`
+- [x] `RetryLog` entries in turn log for diagnostics
+- [x] After all retries exhausted, falls through to `fallbackMessage`
 
-### 4.2 Circuit Breaker for AI Providers
+**Files:** `app/_lib/agent/retry.ts` (new), `app/_lib/agent/engine.ts` (modified), `app/_lib/integrations/anthropic.adapter.ts` (modified), `app/_lib/integrations/openai.adapter.ts` (modified), `app/_lib/integrations/base.ts` (modified)
 
-**What to build:**
-- [ ] Circuit breaker with three states: CLOSED (normal), OPEN (failures exceeded threshold), HALF-OPEN (testing recovery)
+### 4.2 Circuit Breaker for AI Providers — DEFERRED
+
+**Decision:** Retry with backoff covers 95% of transient failures at current scale. Circuit breaker adds value at sustained high traffic (10+ active workspaces) where repeated retries waste resources. Not needed for first gym launch.
+
+**What to build (when needed):**
+- [ ] Circuit breaker with three states: CLOSED, OPEN, HALF-OPEN
 - [ ] Config: 5 consecutive failures to trip, 30s reset timeout, 3 successes to close
 - [ ] When OPEN: skip AI call entirely, serve `fallbackMessage` or FAQ response immediately
 - [ ] Per-provider circuit breaker (OpenAI and Anthropic fail independently)
 - [ ] Emit `agent_circuit_breaker_opened` / `agent_circuit_breaker_closed` events
-- [ ] Could live in `adapter-registry.ts` as a wrapper around `forWorkspace()`
 
 ### 4.3 Queue-Based Webhook Processing
 
@@ -330,13 +359,15 @@ The research identifies speed-to-lead and follow-up cadence as the single most i
 
 **Architecture decisions that affect multiple priorities:**
 
-- **Queue system:** Priorities 1.1 (quiet hours delay), 3.1 (follow-up scheduler), and 4.3 (webhook processing) all need a job queue. Start with a DB-backed `ScheduledJob` table processed by the existing cron infrastructure. Migrate to BullMQ + Redis when running 10+ active workspaces.
+- **Queue system:** Follow-ups use the `FollowUp` model + cron as a DB-backed job queue. This pattern extends naturally to queue-based webhooks (4.3) and any future scheduled tasks. Migrate to BullMQ + Redis when running 10+ active workspaces.
 
-- **Channel adapter registry:** Priorities 7.1–7.3 all plug into the existing `CHANNEL_REGISTRY` in `adapter-registry.ts`. The engine is already channel-agnostic — new channels need an adapter class and a registry entry. No engine changes.
+- **Channel adapter registry:** Priorities 7.1–7.3 all plug into the existing `CHANNEL_REGISTRY` in `adapter-registry.ts`. The engine is already channel-agnostic — new channels need an adapter class and a registry entry. No engine changes. All built features (consent, quiet hours, SMS encoding, follow-ups, retry) apply automatically to new channels via `sendReply()`.
 
-- **Conversation metadata:** Priorities 3.3 (stage tracking), 5.3 (prompt version), and 6.3 (handoff summary) all write to `Conversation.metadata` JSON. Define a typed schema for this field to prevent collisions.
+- **Consent as platform service:** Consent lives at `app/_lib/services/consent.service.ts`, not in the agent module. The agent system *consumes* consent checks; other systems (forms, web chat, API) *write* consent records. Per-workspace, per-contact, per-channel granularity.
 
-- **Cron infrastructure:** Priorities 1.1, 3.1, and 5.3's stale knowledge check all need scheduled execution. The existing `/api/v1/cron/` routes are the pattern to follow.
+- **Cron infrastructure:** Follow-up cron (`/api/v1/cron/follow-ups`) follows the health-check cron pattern. Future crons (stale knowledge, consent audit) follow the same shape.
+
+- **Cross-channel context:** The data model already supports aggregating all conversations for a lead via `Lead.conversations`. When building cross-channel context injection, query by `leadId` and summarize — no schema changes needed.
 
 **What NOT to build:**
 - Redis / BullMQ infrastructure until queue volume justifies it (DB-backed queue is fine for <10 active workspaces)
@@ -344,3 +375,29 @@ The research identifies speed-to-lead and follow-up cadence as the single most i
 - Multi-language support (gym clients are US-based English for now)
 - Voice channel (fundamentally different architecture)
 - Billing integration (track usage first, billing system is a separate project)
+
+---
+
+## Audit Issues (identified 3/22, not yet fixed)
+
+These were found during the PRE-PUSH code audit. They are real issues but not blockers for first gym launch. Fix before scaling.
+
+### High Priority
+1. **`sendReply` missing try/catch around `adapter.sendMessage()`** — if the channel adapter throws (vs returning `{ success: false }`), the error propagates uncaught and aborts the entire turn.
+2. **`checkConsent` fails open on DB error** — DB connection failure during consent check should deny, not crash. Needs try/catch with fail-safe deny.
+3. **Channel key mismatch** — opt-out revokes consent with `params.channel`, consent check uses `agent.channelType || 'SMS'`. If these differ (e.g., `"twilio"` vs `"SMS"`), consent records won't match.
+
+### Medium Priority
+4. **`cancelPendingFollowUps` missing `workspaceId` parameter** — query relies solely on `conversationId`. Works due to UUID uniqueness but violates workspace isolation standard. Also logs `workspaceId: ''`.
+5. **Unsafe `as` casts on JsonValue fields** — `loadAgent()` casts `allowedEvents`, `enabledTools`, `followUpSequence` from Prisma `JsonValue` without runtime validation. If stored JSON is malformed, produces garbage at runtime. Should use Zod parse.
+6. **Cron uses custom `log()` not `logStructured()`** — 4 calls in follow-up cron with wrong schema, invisible to standard observability tooling.
+7. **`allowUnicode` missing from `CreateAgentSchema`** — field exists on DB model and engine reads it, but can't be set via API.
+
+### Low Priority
+8. **Multiple internal queries not scoped by `workspaceId`** — 7 instances in `follow-up.ts` and 1 in `engine.ts`. Not exploitable (UUIDs are unique) but violates convention.
+9. **Rate-limit log missing `provider`/`success` fields** — inconsistent with all other `logStructured()` calls.
+10. **PII (`contactAddress`) in structured log metadata** — phone numbers in plaintext logs at multiple call sites.
+
+### Test Coverage Gaps
+- No unit tests for: `quiet-hours.ts`, `sms-encoding.ts`, `retry.ts`, `follow-up.ts`, `consent.service.ts`
+- Existing `agent-engine.test.ts` covers core flow but not: quiet hours blocking, SMS sanitization, consent checks, follow-up cancellation on inbound, retry behavior
