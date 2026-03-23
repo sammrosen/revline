@@ -41,6 +41,7 @@ export const CreateAgentSchema = z.object({
   followUpSequence: z.array(z.object({
     delayMinutes: z.number().int().positive(),
     message: z.string().max(500).optional(),
+    variants: z.array(z.string().max(500)).max(5).optional(),
   })).max(10).default([]),
 });
 

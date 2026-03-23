@@ -181,8 +181,8 @@ export interface AgentConfig {
   followUpEnabled: boolean;
   /** When true, follow-up messages are AI-generated; when false, use templates */
   followUpAiGenerated: boolean;
-  /** Sequence of follow-up steps with delay and optional template message */
-  followUpSequence: Array<{ delayMinutes: number; message?: string }>;
+  /** Sequence of follow-up steps with delay, optional template, and optional variants */
+  followUpSequence: Array<{ delayMinutes: number; message?: string; variants?: string[] }>;
 }
 
 export interface InitiateConversationParams {

@@ -164,7 +164,13 @@ export async function processFollowUp(
     messageText = await generateFollowUpMessage(followUp.workspaceId, agent, followUp.conversationId);
   } else {
     const step = agent.followUpSequence[followUp.stepIndex];
-    if (step?.message) {
+    if (step?.variants && step.variants.length > 0) {
+      const picked = await selectVariant(step.variants, followUp.conversationId, followUp.stepIndex);
+      if (picked) {
+        messageText = await interpolateFollowUpTemplate(picked, followUp);
+      }
+    }
+    if (!messageText && step?.message) {
       messageText = await interpolateFollowUpTemplate(step.message, followUp);
     }
   }
@@ -397,4 +403,34 @@ async function interpolateFollowUpTemplate(
     }
     return '';
   });
+}
+
+/**
+ * Pick a variant for a follow-up step, avoiding repeats within the same
+ * conversation. Falls back to null if all variants have been used.
+ */
+async function selectVariant(
+  variants: string[],
+  conversationId: string,
+  stepIndex: number
+): Promise<string | null> {
+  if (variants.length === 0) return null;
+  if (variants.length === 1) return variants[0];
+
+  const sent = await prisma.followUp.findMany({
+    where: { conversationId, stepIndex, status: FollowUpStatus.SENT },
+    select: { messageText: true },
+  });
+  const usedTexts = new Set(sent.map((s) => s.messageText));
+
+  const available = variants.filter((v) => !usedTexts.has(v));
+  if (available.length === 0) return null;
+
+  // Deterministic pick: hash conversationId + stepIndex + attempt count
+  let hash = 0;
+  const seed = `${conversationId}:${stepIndex}:${sent.length}`;
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  }
+  return available[Math.abs(hash) % available.length];
 }
