@@ -276,12 +276,3 @@ export const CommonSchemas = {
     .regex(/^[a-z][a-z0-9_]*$/, 'Slug must start with a letter and contain only lowercase letters, numbers, and underscores'),
 };
 
-/**
- * Mask a contact address for log output. Preserves first 2 and last 4 chars.
- * '+15551234567' -> '+1***4567'
- */
-export function maskContact(address: string): string {
-  if (!address || address.length <= 6) return '***';
-  return address.slice(0, 2) + '***' + address.slice(-4);
-}
-

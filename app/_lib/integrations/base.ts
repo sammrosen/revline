@@ -193,8 +193,8 @@ export abstract class BaseIntegrationAdapter<TMeta extends IntegrationMeta = Int
   /**
    * Create an error result
    */
-  protected error<T>(error: string, retryable = false, retryAfterMs?: number): IntegrationResult<T> {
-    return { success: false, error, retryable, retryAfterMs };
+  protected error<T>(error: string, retryable = false): IntegrationResult<T> {
+    return { success: false, error, retryable };
   }
 
   /**

@@ -42,7 +42,7 @@ export async function notifyEscalation(params: EscalationParams): Promise<void> 
       <h2 style="color: #7c3aed;">Agent Escalation</h2>
       <p>An agent conversation needs human attention.</p>
       <table style="margin: 16px 0; font-size: 14px;">
-        <tr><td style="padding: 4px 12px 4px 0; color: #888;">Contact</td><td>${escapeHtml(contactAddress)}</td></tr>
+        <tr><td style="padding: 4px 12px 4px 0; color: #888;">Contact</td><td>${contactAddress}</td></tr>
         <tr><td style="padding: 4px 12px 4px 0; color: #888;">Conversation</td><td style="font-family: monospace; font-size: 12px;">${conversationId.slice(0, 8)}...</td></tr>
       </table>
       <h3 style="margin-top: 24px;">Conversation Summary</h3>

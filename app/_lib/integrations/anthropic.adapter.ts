@@ -147,11 +147,7 @@ export class AnthropicAdapter extends BaseIntegrationAdapter<AnthropicMeta> {
       };
 
       if (systemPrompt) {
-        requestParams.system = [{
-          type: 'text' as const,
-          text: systemPrompt,
-          cache_control: { type: 'ephemeral' as const },
-        }];
+        requestParams.system = systemPrompt;
       }
 
       const temperature = this.resolveTemperature(params.temperature);
@@ -206,8 +202,6 @@ export class AnthropicAdapter extends BaseIntegrationAdapter<AnthropicMeta> {
           promptTokens: response.usage.input_tokens,
           completionTokens: response.usage.output_tokens,
           totalTokens: response.usage.input_tokens + response.usage.output_tokens,
-          cacheCreationTokens: response.usage.cache_creation_input_tokens ?? undefined,
-          cacheReadTokens: response.usage.cache_read_input_tokens ?? undefined,
         },
         model: response.model,
       });
@@ -221,23 +215,13 @@ export class AnthropicAdapter extends BaseIntegrationAdapter<AnthropicMeta> {
       const isServer = error instanceof Anthropic.InternalServerError;
       const retryable = isRateLimit || isServer;
 
-      let retryAfterMs: number | undefined;
-      if (retryable && error instanceof Anthropic.APIError && error.headers) {
-        const retryAfter = error.headers.get('retry-after');
-        if (retryAfter) {
-          const seconds = Number(retryAfter);
-          if (!Number.isNaN(seconds)) retryAfterMs = seconds * 1000;
-        }
-      }
-
       if (!retryable) {
         await this.markUnhealthy();
       }
 
       return this.error(
         error instanceof Error ? error.message : 'Anthropic API error',
-        retryable,
-        retryAfterMs
+        retryable
       );
     }
   }

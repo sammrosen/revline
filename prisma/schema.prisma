@@ -104,8 +104,6 @@ model Workspace {
   agents             Agent[]
   conversations      Conversation[]
   optOutRecords      OptOutRecord[]
-  followUps          FollowUp[]
-  consentRecords     ConsentRecord[]
 
   @@index([organizationId])
   @@map("workspaces")
@@ -522,12 +520,6 @@ model Agent {
   fallbackMessage            String? @map("fallback_message")
   escalationPattern          String? @map("escalation_pattern")
   faqOverrides               Json?   @map("faq_overrides")
-  allowUnicode               Boolean @default(false) @map("allow_unicode")
-
-  // Follow-up sequence config
-  followUpEnabled     Boolean @default(false) @map("follow_up_enabled")
-  followUpAiGenerated Boolean @default(true) @map("follow_up_ai_generated")
-  followUpSequence    Json    @default("[]") @map("follow_up_sequence")
 
   // Allowed event emissions (JSON array of event type strings the bot can emit)
   allowedEvents Json @default("[]") @map("allowed_events")
@@ -542,7 +534,6 @@ model Agent {
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   conversations Conversation[]
   files         AgentFile[]
-  followUps     FollowUp[]
 
   @@index([workspaceId, active])
   @@map("agents")
@@ -592,7 +583,6 @@ model Conversation {
   agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
   lead      Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
   messages  ConversationMessage[]
-  followUps FollowUp[]
 
   @@index([workspaceId, status])
   @@index([agentId, status])
@@ -650,76 +640,4 @@ model OptOutRecord {
   @@unique([workspaceId, contactAddress])
   @@index([workspaceId])
   @@map("opt_out_records")
-}
-
-model FollowUp {
-  id             String   @id @default(uuid())
-  workspaceId    String   @map("workspace_id")
-  conversationId String   @map("conversation_id")
-  agentId        String   @map("agent_id")
-  contactAddress String   @map("contact_address")
-  channelAddress String   @map("channel_address")
-
-  stepIndex      Int      @map("step_index")
-  scheduledAt    DateTime @map("scheduled_at")
-  status         FollowUpStatus @default(PENDING)
-
-  skipReason     String?  @map("skip_reason")
-  sentAt         DateTime? @map("sent_at")
-  messageText    String?  @map("message_text") @db.Text
-
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  conversation  Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  agent         Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
-
-  @@index([status, scheduledAt])
-  @@index([conversationId, status])
-  @@index([workspaceId])
-  @@map("follow_ups")
-}
-
-enum FollowUpStatus {
-  PENDING
-  SENT
-  SKIPPED
-  CANCELLED
-}
-
-model ConsentRecord {
-  id               String        @id @default(uuid())
-  workspaceId      String        @map("workspace_id")
-  contactAddress   String        @map("contact_address")
-  channel          String        // SMS, EMAIL, WHATSAPP, INSTAGRAM — string for extensibility
-  consentType      ConsentType   @map("consent_type")
-  method           ConsentMethod
-  languagePresented String       @map("language_presented") @db.Text
-  ipAddress        String?       @map("ip_address")
-  grantedAt        DateTime      @default(now()) @map("granted_at")
-  expiresAt        DateTime?     @map("expires_at")
-  revokedAt        DateTime?     @map("revoked_at")
-
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
-
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-
-  @@unique([workspaceId, contactAddress, channel])
-  @@index([workspaceId])
-  @@index([workspaceId, contactAddress])
-  @@map("consent_records")
-}
-
-enum ConsentType {
-  MARKETING
-  TRANSACTIONAL
-}
-
-enum ConsentMethod {
-  WEB_FORM
-  SMS_KEYWORD
-  IN_PERSON
-  API
 }

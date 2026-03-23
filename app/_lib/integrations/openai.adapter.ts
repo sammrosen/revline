@@ -73,8 +73,6 @@ export interface ChatCompletionResult {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
-    cacheCreationTokens?: number;
-    cacheReadTokens?: number;
   };
   model: string;
 }
@@ -232,23 +230,13 @@ export class OpenAIAdapter extends BaseIntegrationAdapter<OpenAIMeta> {
       const isServer = error instanceof OpenAI.InternalServerError;
       const retryable = isRateLimit || isServer;
 
-      let retryAfterMs: number | undefined;
-      if (retryable && error instanceof OpenAI.APIError && error.headers) {
-        const retryAfter = error.headers.get('retry-after');
-        if (retryAfter) {
-          const seconds = Number(retryAfter);
-          if (!Number.isNaN(seconds)) retryAfterMs = seconds * 1000;
-        }
-      }
-
       if (!retryable) {
         await this.markUnhealthy();
       }
 
       return this.error(
         error instanceof Error ? error.message : 'OpenAI API error',
-        retryable,
-        retryAfterMs
+        retryable
       );
     }
   }

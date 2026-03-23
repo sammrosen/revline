@@ -952,8 +952,6 @@ export interface IntegrationResult<T = unknown> {
   data?: T;
   error?: string;
   retryable?: boolean;
-  /** Milliseconds to wait before retrying, from Retry-After header when available */
-  retryAfterMs?: number;
 }
 
 /**

@@ -126,7 +126,11 @@ export async function POST(request: NextRequest) {
 
     if (!twilioSignature) {
       await WebhookProcessor.markFailed(registration.id, 'Missing X-Twilio-Signature header');
-      return twimlResponse(200);
+      return ApiResponse.error(
+        'Missing signature header',
+        400,
+        ErrorCodes.MISSING_SIGNATURE
+      );
     }
 
     const twilioAdapter = await TwilioAdapter.forWorkspace(client.id);
@@ -153,7 +157,11 @@ export async function POST(request: NextRequest) {
         errorMessage: verification.error,
       });
 
-      return twimlResponse(200);
+      return ApiResponse.error(
+        verification.error || 'Webhook verification failed',
+        400,
+        ErrorCodes.INVALID_SIGNATURE
+      );
     }
 
     const payload = TwilioAdapter.parseWebhookPayload(params);
@@ -205,7 +213,7 @@ export async function POST(request: NextRequest) {
         workspaceId: client.id,
         contactAddress: payload.from,
         channelAddress: payload.to,
-        status: { in: [ConversationStatus.ACTIVE, ConversationStatus.PAUSED] },
+        status: ConversationStatus.ACTIVE,
       },
       select: { id: true, agentId: true },
     });
@@ -230,7 +238,6 @@ export async function POST(request: NextRequest) {
         channelAddress: payload.to,
         channel: 'SMS',
         messageText: payload.body,
-        callerContext: 'webhook',
       });
 
       await WebhookProcessor.markProcessed(registration.id);

@@ -14,7 +14,6 @@ import { handleInboundMessage } from '@/app/_lib/agent';
 import { estimateCost, getDefaultModel } from '@/app/_lib/agent/pricing';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
 import { TestChatSchema } from '@/app/_lib/agent/schemas';
-import { rateLimitByIdentifier } from '@/app/_lib/middleware/rate-limit';
 
 type RouteParams = { params: Promise<{ id: string; agentId: string }> };
 
@@ -24,11 +23,6 @@ export async function POST(
 ) {
   const userId = await getUserIdFromHeaders();
   if (!userId) return ApiResponse.unauthorized();
-
-  const rateLimit = rateLimitByIdentifier(`test_chat:${userId}`, { requests: 30, windowMs: 60_000 });
-  if (!rateLimit.allowed) {
-    return ApiResponse.error('Rate limit exceeded', 429, ErrorCodes.RATE_LIMITED);
-  }
 
   const { id: workspaceId, agentId } = await params;
   const access = await getWorkspaceAccess(userId, workspaceId);
