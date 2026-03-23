@@ -17,6 +17,7 @@ import {
   Plus,
   HelpCircle,
   Wrench,
+  Clock,
 } from 'lucide-react';
 
 interface AgentData {
@@ -45,6 +46,9 @@ interface AgentData {
   allowedEvents: string[];
   enabledTools: string[];
   active: boolean;
+  followUpEnabled: boolean;
+  followUpAiGenerated: boolean;
+  followUpSequence: Array<{ delayMinutes: number; unit: 'minutes' | 'hours' | 'days'; message: string; variants: string[] }>;
 }
 
 interface Integration {
@@ -122,6 +126,9 @@ const DEFAULT_DATA: AgentData = {
   allowedEvents: ['conversation_started', 'escalation_requested', 'conversation_completed'],
   enabledTools: [],
   active: true,
+  followUpEnabled: false,
+  followUpAiGenerated: true,
+  followUpSequence: [],
 };
 
 export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEditorProps) {
@@ -232,6 +239,17 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
           allowedEvents: bot.allowedEvents || [],
           enabledTools: bot.enabledTools || [],
           active: bot.active,
+          followUpEnabled: bot.followUpEnabled ?? false,
+          followUpAiGenerated: bot.followUpAiGenerated ?? true,
+          followUpSequence: ((bot.followUpSequence || []) as Array<{ delayMinutes: number; message?: string; variants?: string[] }>).map(
+            (s: { delayMinutes: number; message?: string; variants?: string[] }) => {
+              let unit: 'minutes' | 'hours' | 'days' = 'minutes';
+              let delay = s.delayMinutes;
+              if (delay >= 1440 && delay % 1440 === 0) { unit = 'days'; delay = delay / 1440; }
+              else if (delay >= 60 && delay % 60 === 0) { unit = 'hours'; delay = delay / 60; }
+              return { delayMinutes: delay, unit, message: s.message || '', variants: s.variants || [] };
+            }
+          ),
         });
       }
     } catch (err) {
@@ -435,6 +453,14 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
             patterns: f.patterns.split(',').map((p) => p.trim()).filter(Boolean),
             response: f.response,
           })),
+        followUpSequence: data.followUpSequence.map((s) => {
+          const filtered = s.variants.map((v) => v.trim()).filter(Boolean);
+          return {
+            delayMinutes: s.unit === 'days' ? s.delayMinutes * 1440 : s.unit === 'hours' ? s.delayMinutes * 60 : s.delayMinutes,
+            ...(s.message.trim() ? { message: s.message.trim() } : {}),
+            ...(filtered.length > 0 ? { variants: filtered } : {}),
+          };
+        }),
       };
 
       const url = agentId
@@ -1057,6 +1083,211 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
           </div>
         </Section>
 
+        {/* Follow-Up Sequence */}
+        <Section icon={Clock} title="Follow-Up Sequence">
+          <div className="space-y-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={data.followUpEnabled}
+                onChange={(e) => setData({ ...data, followUpEnabled: e.target.checked })}
+                className="rounded border-zinc-700 bg-zinc-800 text-violet-500 focus:ring-violet-500"
+              />
+              <span className="text-zinc-300">Enable follow-ups for idle conversations</span>
+            </label>
+            {data.followUpEnabled && (
+              <>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={data.followUpAiGenerated}
+                    onChange={(e) => setData({ ...data, followUpAiGenerated: e.target.checked })}
+                    className="rounded border-zinc-700 bg-zinc-800 text-violet-500 focus:ring-violet-500"
+                  />
+                  <span className="text-zinc-300">AI-generated messages</span>
+                  <span className="text-[10px] text-zinc-600">(off = use templates below)</span>
+                </label>
+                <p className="text-xs text-zinc-500">
+                  {data.followUpAiGenerated
+                    ? 'The AI will generate contextual follow-ups based on the conversation history.'
+                    : 'Each step uses a fixed template message. Supports {{firstName}} variables.'}
+                </p>
+
+                {data.followUpSequence.map((step, idx) => (
+                  <div key={idx} className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Step {idx + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = [...data.followUpSequence];
+                          updated.splice(idx, 1);
+                          setData({ ...data, followUpSequence: updated });
+                        }}
+                        className="text-zinc-500 hover:text-red-400 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <Field label="Delay" hint="After last message">
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          value={step.delayMinutes}
+                          onChange={(e) => {
+                            const updated = [...data.followUpSequence];
+                            updated[idx] = { ...updated[idx], delayMinutes: parseInt(e.target.value, 10) || 1 };
+                            setData({ ...data, followUpSequence: updated });
+                          }}
+                          min={1}
+                          className="w-24 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+                        />
+                        <select
+                          value={step.unit}
+                          onChange={(e) => {
+                            const updated = [...data.followUpSequence];
+                            updated[idx] = { ...updated[idx], unit: e.target.value as 'minutes' | 'hours' | 'days' };
+                            setData({ ...data, followUpSequence: updated });
+                          }}
+                          className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+                        >
+                          <option value="minutes">minutes</option>
+                          <option value="hours">hours</option>
+                          <option value="days">days</option>
+                        </select>
+                      </div>
+                    </Field>
+                    {!data.followUpAiGenerated && (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`variant-mode-${idx}`}
+                              checked={step.variants.length === 0}
+                              onChange={() => {
+                                const updated = [...data.followUpSequence];
+                                updated[idx] = { ...updated[idx], variants: [] };
+                                setData({ ...data, followUpSequence: updated });
+                              }}
+                              className="text-violet-500 focus:ring-violet-500"
+                            />
+                            <span className="text-xs text-zinc-400">Single message</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`variant-mode-${idx}`}
+                              checked={step.variants.length > 0}
+                              onChange={() => {
+                                const updated = [...data.followUpSequence];
+                                updated[idx] = { ...updated[idx], variants: updated[idx].variants.length > 0 ? updated[idx].variants : [''] };
+                                setData({ ...data, followUpSequence: updated });
+                              }}
+                              className="text-violet-500 focus:ring-violet-500"
+                            />
+                            <span className="text-xs text-zinc-400">Variants</span>
+                            {step.variants.length > 0 && (
+                              <span className="text-[10px] bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded-full">{step.variants.length}</span>
+                            )}
+                          </label>
+                        </div>
+
+                        {step.variants.length === 0 ? (
+                          <Field label="Message Template" hint="Supports {{firstName}} variables">
+                            <textarea
+                              value={step.message}
+                              onChange={(e) => {
+                                const updated = [...data.followUpSequence];
+                                updated[idx] = { ...updated[idx], message: e.target.value };
+                                setData({ ...data, followUpSequence: updated });
+                              }}
+                              placeholder="Hey {{firstName}}, just checking in! Still interested in getting started?"
+                              rows={2}
+                              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder:text-zinc-600 focus:border-violet-500 focus:outline-none resize-none font-mono"
+                            />
+                          </Field>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Message Variants <span className="normal-case">(rotated per lead, no repeats)</span></p>
+                            {step.variants.map((v, vIdx) => (
+                              <div key={vIdx} className="flex gap-2 items-start">
+                                <textarea
+                                  value={v}
+                                  onChange={(e) => {
+                                    const updated = [...data.followUpSequence];
+                                    const newVariants = [...updated[idx].variants];
+                                    newVariants[vIdx] = e.target.value;
+                                    updated[idx] = { ...updated[idx], variants: newVariants };
+                                    setData({ ...data, followUpSequence: updated });
+                                  }}
+                                  placeholder={`Variant ${vIdx + 1} — e.g., "Hey {{firstName}}, wanted to follow up..."`}
+                                  rows={2}
+                                  className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder:text-zinc-600 focus:border-violet-500 focus:outline-none resize-none font-mono"
+                                />
+                                {step.variants.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = [...data.followUpSequence];
+                                      const newVariants = [...updated[idx].variants];
+                                      newVariants.splice(vIdx, 1);
+                                      updated[idx] = { ...updated[idx], variants: newVariants };
+                                      setData({ ...data, followUpSequence: updated });
+                                    }}
+                                    className="mt-2 text-zinc-500 hover:text-red-400 transition-colors"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            {step.variants.length < 5 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = [...data.followUpSequence];
+                                  updated[idx] = { ...updated[idx], variants: [...updated[idx].variants, ''] };
+                                  setData({ ...data, followUpSequence: updated });
+                                }}
+                                className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                              >
+                                <Plus className="w-3 h-3" /> Add variant
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ))}
+                {data.followUpSequence.length < 10 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setData({
+                        ...data,
+                        followUpSequence: [
+                          ...data.followUpSequence,
+                          { delayMinutes: data.followUpSequence.length === 0 ? 1 : 24, unit: data.followUpSequence.length === 0 ? 'hours' : 'hours', message: '', variants: [] },
+                        ],
+                      })
+                    }
+                    className="flex items-center gap-2 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add step
+                  </button>
+                )}
+                {data.followUpSequence.length === 0 && (
+                  <p className="text-xs text-amber-400">
+                    Add at least one step for follow-ups to work.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        </Section>
+
         {/* Allowed Events */}
         <Section icon={Bot} title="Workflow Events">
           <p className="text-xs text-zinc-500 mb-3">
@@ -1141,6 +1372,14 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
             <SummaryRow label="Rate Limit" value={data.rateLimitPerHour > 0 ? `${data.rateLimitPerHour}/hr` : 'Unlimited'} />
             <SummaryRow label="Max Messages" value={String(data.maxMessagesPerConversation)} />
             <SummaryRow label="Timeout" value={`${data.conversationTimeoutMinutes}min`} />
+            <SummaryRow
+              label="Follow-Ups"
+              value={
+                data.followUpEnabled && data.followUpSequence.length > 0
+                  ? `${data.followUpSequence.length} step${data.followUpSequence.length !== 1 ? 's' : ''} (${data.followUpAiGenerated ? 'AI' : 'template'})`
+                  : 'Disabled'
+              }
+            />
             <SummaryRow label="Status" value={data.active ? 'Active' : 'Inactive'} />
           </div>
           <ContextBudget

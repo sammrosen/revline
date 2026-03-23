@@ -23,6 +23,8 @@ export interface AiCallLog extends TurnLogBase {
   finishReason: string;
   durationMs: number;
   iteration: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
 }
 
 export interface ToolCallLog extends TurnLogBase {
@@ -62,7 +64,14 @@ export interface ErrorLog extends TurnLogBase {
   message: string;
 }
 
-export type TurnLogEntry = AiCallLog | ToolCallLog | FaqMatchLog | EscalationLog | GuardrailLog | EventLog | ErrorLog;
+export interface RetryLog extends TurnLogBase {
+  type: 'retry';
+  attempt: number;
+  error: string;
+  delayMs: number;
+}
+
+export type TurnLogEntry = AiCallLog | ToolCallLog | FaqMatchLog | EscalationLog | GuardrailLog | EventLog | ErrorLog | RetryLog;
 
 export interface InboundMessageParams {
   workspaceId: string;
@@ -76,6 +85,8 @@ export interface InboundMessageParams {
   systemPromptOverride?: string;
   /** When provided, continue this specific conversation instead of lookup by address */
   conversationId?: string;
+  /** Caller context — 'webhook' skips synchronous response delay to avoid Twilio timeouts */
+  callerContext?: 'webhook' | 'api' | 'test';
 }
 
 export interface AgentResponse {
@@ -110,6 +121,10 @@ export interface AgentResponse {
   toolsUsed?: string[];
   /** Full turn activity log (AI calls, tool calls, guardrails, events, errors) */
   turnLog?: TurnLogEntry[];
+  /** True if proactive send was blocked by quiet hours enforcement */
+  blockedByQuietHours?: boolean;
+  /** When the send window next opens (only set when blockedByQuietHours is true) */
+  nextWindowAt?: Date;
 }
 
 export interface ConversationWithMessages {
@@ -160,6 +175,16 @@ export interface AgentConfig {
   allowedEvents: string[];
   enabledTools: string[];
   active: boolean;
+  /** IANA timezone from the parent workspace (e.g., "America/New_York") */
+  timezone: string;
+  /** When true, skip GSM-7 sanitization and allow Unicode SMS (UCS-2) */
+  allowUnicode: boolean;
+  /** When true, schedule follow-ups for idle conversations */
+  followUpEnabled: boolean;
+  /** When true, follow-up messages are AI-generated; when false, use templates */
+  followUpAiGenerated: boolean;
+  /** Sequence of follow-up steps with delay, optional template, and optional variants */
+  followUpSequence: Array<{ delayMinutes: number; message?: string; variants?: string[] }>;
 }
 
 export interface InitiateConversationParams {

@@ -10,7 +10,7 @@ import { NextRequest } from 'next/server';
 import { getUserIdFromHeaders } from '@/app/_lib/auth';
 import { getWorkspaceAccess } from '@/app/_lib/workspace-access';
 import { prisma } from '@/app/_lib/db';
-import { ConversationStatus, IntegrationType, Prisma } from '@prisma/client';
+import { ConversationStatus, FollowUpStatus, IntegrationType, Prisma } from '@prisma/client';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
 import { UpdateAgentSchema } from '@/app/_lib/agent/schemas';
 
@@ -154,6 +154,11 @@ export async function DELETE(
       status: ConversationStatus.COMPLETED,
       endedAt: new Date(),
     },
+  });
+
+  await prisma.followUp.updateMany({
+    where: { agentId, workspaceId, status: FollowUpStatus.PENDING },
+    data: { status: FollowUpStatus.CANCELLED, skipReason: 'agent_deleted' },
   });
 
   await prisma.agent.delete({ where: { id: agentId } });

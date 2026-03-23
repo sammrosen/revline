@@ -15,3 +15,7 @@ export type { CaptureEmailParams } from './capture.service';
 
 export { WebhookService } from './webhook.service';
 export type { ProcessCheckoutParams } from './webhook.service';
+
+export { recordConsent, checkConsent, revokeConsent } from './consent.service';
+export { ConsentType, ConsentMethod } from './consent.service';
+export type { RecordConsentParams, ConsentRecord } from './consent.service';

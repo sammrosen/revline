@@ -212,3 +212,57 @@ describe('ConversationActionSchema', () => {
     expect(ConversationActionSchema.safeParse({}).success).toBe(false);
   });
 });
+
+describe('CreateAgentSchema — follow-up and encoding fields', () => {
+  const base = {
+    name: 'Bot',
+    aiIntegration: 'OPENAI',
+    systemPrompt: 'Hi',
+  };
+
+  it('applies follow-up defaults', () => {
+    const result = CreateAgentSchema.parse(base);
+    expect(result.followUpEnabled).toBe(false);
+    expect(result.followUpAiGenerated).toBe(true);
+    expect(result.followUpSequence).toEqual([]);
+  });
+
+  it('applies allowUnicode default', () => {
+    const result = CreateAgentSchema.parse(base);
+    expect(result.allowUnicode).toBe(false);
+  });
+
+  it('accepts explicit allowUnicode true', () => {
+    const result = CreateAgentSchema.parse({ ...base, allowUnicode: true });
+    expect(result.allowUnicode).toBe(true);
+  });
+
+  it('accepts followUpSequence with variants', () => {
+    const result = CreateAgentSchema.parse({
+      ...base,
+      followUpSequence: [
+        { delayMinutes: 60, message: 'Hey!', variants: ['Hi!', 'Hello!'] },
+      ],
+    });
+    expect(result.followUpSequence).toHaveLength(1);
+    expect(result.followUpSequence[0].variants).toEqual(['Hi!', 'Hello!']);
+  });
+
+  it('rejects more than 10 follow-up steps', () => {
+    const steps = Array.from({ length: 11 }, (_, i) => ({
+      delayMinutes: (i + 1) * 60,
+    }));
+    const result = CreateAgentSchema.safeParse({ ...base, followUpSequence: steps });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects more than 5 variants per step', () => {
+    const result = CreateAgentSchema.safeParse({
+      ...base,
+      followUpSequence: [
+        { delayMinutes: 60, variants: ['a', 'b', 'c', 'd', 'e', 'f'] },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+});
