@@ -34,6 +34,7 @@ import type { SendType, SendReplyResult } from './quiet-hours';
 import { sanitizeForGsm7, estimateSegments, shouldSanitizeSms } from './sms-encoding';
 import { retryWithBackoff } from './retry';
 import { cancelPendingFollowUps } from './follow-up';
+import { checkConsent, revokeConsent } from '@/app/_lib/services/consent.service';
 
 // Register all tools with the tool registry at module load
 import './tools';
@@ -108,6 +109,12 @@ export async function handleInboundMessage(
             conversationId: activeConvo?.id || null,
           },
         });
+
+        await revokeConsent(params.workspaceId, params.contactAddress, params.channel);
+
+        if (activeConvo) {
+          await cancelPendingFollowUps(activeConvo.id, 'opted_out');
+        }
 
         await emitAgentEvent(params.workspaceId, 'contact_opted_out', {
           agentId: params.agentId,
@@ -942,6 +949,35 @@ export async function initiateConversation(
           status: ConversationStatus.COMPLETED,
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
           error: 'contact_opted_out',
+          eventsEmitted: [],
+        };
+      }
+    }
+
+    // 4b. Check consent for proactive outreach
+    if (contactAddress && !params.testMode) {
+      const consent = await checkConsent(params.workspaceId, contactAddress, agent.channelType || 'SMS');
+      if (!consent) {
+        logStructured({
+          correlationId,
+          event: 'agent_send_blocked_no_consent',
+          workspaceId: params.workspaceId,
+          provider: agent.channelIntegration || 'agent',
+          success: false,
+          metadata: {
+            agentId: agent.id,
+            contactAddress,
+            channel: agent.channelType || 'SMS',
+          },
+        });
+        return {
+          success: false,
+          replyText: null,
+          conversationId: '',
+          isNewConversation: false,
+          status: ConversationStatus.ACTIVE,
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          error: 'no_consent',
           eventsEmitted: [],
         };
       }

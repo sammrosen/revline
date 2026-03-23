@@ -55,6 +55,7 @@ Two issues from the code audit were fixed before this sprint:
 ### Patterns to follow
 
 - **New agent module**: create `app/_lib/agent/<name>.ts`, export from `index.ts`, import in `engine.ts`. Pure functions preferred. See `quiet-hours.ts` or `sms-encoding.ts` as templates.
+- **Platform-level service**: for concerns that cross system boundaries (consent, billing, etc.), create `app/_lib/services/<name>.service.ts`. The agent engine imports from services — services never import from agent. See `capture.service.ts` as a template.
 - **Turn log entries**: add a new interface to the `TurnLogEntry` discriminated union in `types.ts` with a unique `type` string literal. The engine pushes log entries during processing; they're stored on the conversation for debugging.
 - **Structured logging**: use `logStructured()` from `app/_lib/reliability` for all operational events. Required fields: `correlationId`, `event`, `workspaceId`, `provider`, `success`.
 - **Prisma changes**: modify `prisma/schema.prisma`, but do NOT run `prisma migrate dev` or `prisma db push` during this sprint — migrations are batched at the end.
@@ -77,31 +78,54 @@ Four items, ordered by: legal protection > reliability > conversion impact > ana
 
 **Why first:** TCPA requires proof of Prior Express Written Consent for every marketing SMS. Without consent records, every outbound message is legally indefensible regardless of how well the agent performs. Quiet hours (3/21) prevent timing violations; this prevents "no consent at all" violations.
 
+**Abstraction layer:** Consent is a **platform-level service**, not an agent concern. Consent is per-workspace, per-contact, per-channel — a lead in a workspace may have SMS consent but not WhatsApp consent, or email consent but not SMS. The agent system is a *consumer* of consent, not the *owner*. This allows future callers (signup forms, marketing automation, compliance audit APIs) to use the same consent service without importing from the agent module.
+
+Follows `STANDARDS.md`:
+- **Abstraction First:** `Route Handler / Engine → Service Layer (consent.service.ts) → Prisma`
+- **Workspace Isolation:** Every query scoped to `workspaceId`
+- **Event-Driven Debugging:** Emits `consent_granted`, `consent_revoked` events
+- **Fail-Safe Defaults:** No consent record = blocked (deny by default for proactive outreach)
+
 **Scope:**
-- New Prisma model: `ConsentRecord` — workspaceId, contactAddress, channel, consentType (MARKETING / TRANSACTIONAL), method (WEB_FORM / SMS_KEYWORD / IN_PERSON / API), languagePresented (exact consent text shown), ipAddress, timestamp, expiresAt, revokedAt
-- New enum: `ConsentType` (MARKETING, TRANSACTIONAL)
-- New enum: `ConsentMethod` (WEB_FORM, SMS_KEYWORD, IN_PERSON, API)
-- New module: `app/_lib/agent/consent.ts` with three functions:
-  - `recordConsent(params)` — creates a consent record, logs event
-  - `checkConsent(workspaceId, contactAddress, channel)` — returns latest active consent or null
-  - `revokeConsent(workspaceId, contactAddress, channel)` — soft-revoke by setting `revokedAt`, logs event
-- Engine integration:
-  - `initiateConversation()` — call `checkConsent()` before first outbound; block if no consent, log `agent_send_blocked_no_consent`
-  - Opt-out handler in `handleInboundMessage()` — call `revokeConsent()` alongside existing opt-out record creation
-- Workspace relation: add `consentRecords ConsentRecord[]` to Workspace model
+
+*Prisma model:*
+- New model: `ConsentRecord` with unique constraint on `(workspaceId, contactAddress, channel)`
+  - `workspaceId` — workspace isolation
+  - `contactAddress` — phone number, email, IG handle, etc.
+  - `channel` — `SMS`, `EMAIL`, `WHATSAPP`, `INSTAGRAM` (string, not enum — extensible for future channels)
+  - `consentType` — enum: `MARKETING`, `TRANSACTIONAL`
+  - `method` — enum: `WEB_FORM`, `SMS_KEYWORD`, `IN_PERSON`, `API`
+  - `languagePresented` — exact consent text shown to the user (required for TCPA proof)
+  - `ipAddress` — for web form audit trail (nullable for non-web methods)
+  - `grantedAt` — when consent was given
+  - `expiresAt` — optional expiry (nullable)
+  - `revokedAt` — soft revoke timestamp (nullable — never delete consent records)
+- New enums: `ConsentType`, `ConsentMethod`
+- Workspace relation: `consentRecords ConsentRecord[]`
+
+*Service module: `app/_lib/services/consent.service.ts`*
+- `recordConsent(params): Promise<ConsentRecord>` — upsert consent record (re-granting after revocation creates a new active record), emit `consent_granted` event
+- `checkConsent(workspaceId, contactAddress, channel): Promise<ConsentRecord | null>` — returns latest active (non-revoked, non-expired) consent record, or null
+- `revokeConsent(workspaceId, contactAddress, channel): Promise<boolean>` — set `revokedAt` on active record, emit `consent_revoked` event, return true if a record was revoked
+- All functions workspace-scoped, all emit structured log events
+
+*Engine integration (thin — agent is a consumer):*
+- `initiateConversation()` — after loading agent and resolving contact address, call `checkConsent(workspaceId, contactAddress, channelType)`. If null and consent is required (marketing), block with `AgentResponse.error = 'no_consent'`. Transactional consent type bypasses this check.
+- Opt-out handler in `handleInboundMessage()` — call `revokeConsent(workspaceId, contactAddress, channelType)` alongside existing `OptOutRecord` upsert
 
 **Files:**
 - Modified: `prisma/schema.prisma` — `ConsentRecord` model, `ConsentType` enum, `ConsentMethod` enum, Workspace relation
-- New: `app/_lib/agent/consent.ts`
-- Modified: `app/_lib/agent/engine.ts` — consent check in `initiateConversation()`, revocation in opt-out handler
-- Modified: `app/_lib/agent/index.ts` — export consent functions
-- Modified: `app/_lib/agent/types.ts` — add `ConsentLog` to `TurnLogEntry` union (optional, for audit trail in turn log)
+- New: `app/_lib/services/consent.service.ts` — platform-level consent service
+- Modified: `app/_lib/services/index.ts` — export consent service (if barrel exists)
+- Modified: `app/_lib/agent/engine.ts` — consent check in `initiateConversation()`, revocation in opt-out handler (imports from services, not agent)
 
 **Edge cases:**
-- No consent record found → block outbound, return `AgentResponse` with error reason `no_consent`
+- No consent record found → block proactive outbound, return `AgentResponse` with error reason `no_consent`
 - Expired consent (`expiresAt < now`) → treat as no consent
 - Transactional consent type → always allow (TCPA only requires PEWC for marketing)
-- Multiple consent records for same contact → use most recent non-revoked record
+- Re-granting after revocation → new `grantedAt`, `revokedAt` cleared (or new row — upsert handles both)
+- Reactive messages (`handleInboundMessage`) → do NOT check consent (lead initiated contact, consent is implicit for the reply)
+- Channel string mismatch → normalize to uppercase before lookup
 
 ---
 
@@ -225,16 +249,16 @@ Four items, ordered by: legal protection > reliability > conversion impact > ana
 **No new columns on Agent** — follow-up variants live inside existing `followUpSequence` JSON column. Conversation stage lives in existing `Conversation.metadata` JSON.
 
 **New files (3):**
-- `app/_lib/agent/consent.ts`
+- `app/_lib/services/consent.service.ts` — platform-level consent service (not in agent module)
 - `app/_lib/agent/circuit-breaker.ts`
 - `app/_lib/agent/stages.ts`
 
 **Modified files (6):**
-- `app/_lib/agent/engine.ts` — consent check, circuit breaker, stage tracking
+- `app/_lib/agent/engine.ts` — consent check (imports from services), circuit breaker, stage tracking
 - `app/_lib/agent/follow-up.ts` — variant selection, stage updates
 - `app/_lib/agent/types.ts` — new log types, stage type, variant type extension
 - `app/_lib/agent/schemas.ts` — variants in follow-up step validation
-- `app/_lib/agent/index.ts` — new exports
+- `app/_lib/agent/index.ts` — new exports (circuit breaker, stages — consent exports from services)
 - `app/(dashboard)/workspaces/[id]/agent-editor.tsx` — follow-up variant UI
 
 ---
