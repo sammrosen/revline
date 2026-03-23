@@ -33,6 +33,7 @@ import { checkSendWindow, shouldEnforceQuietHours } from './quiet-hours';
 import type { SendType, SendReplyResult } from './quiet-hours';
 import { sanitizeForGsm7, estimateSegments, shouldSanitizeSms } from './sms-encoding';
 import { retryWithBackoff } from './retry';
+import { cancelPendingFollowUps } from './follow-up';
 
 // Register all tools with the tool registry at module load
 import './tools';
@@ -135,6 +136,11 @@ export async function handleInboundMessage(
 
     // 2. Find or create conversation
     const { conversation, isNew } = await findOrCreateConversation(params, agent);
+
+    // 2b. Cancel pending follow-ups on any inbound message
+    if (!isNew) {
+      await cancelPendingFollowUps(conversation.id);
+    }
 
     // 3. Handle PAUSED conversations -- auto-resume or guard
     if (conversation.status === ConversationStatus.PAUSED) {
@@ -1057,7 +1063,7 @@ export async function initiateConversation(
 // INTERNAL HELPERS
 // =============================================================================
 
-async function loadAgent(
+export async function loadAgent(
   workspaceId: string,
   agentId: string
 ): Promise<AgentConfig | null> {
@@ -1094,6 +1100,9 @@ async function loadAgent(
     active: agent.active,
     timezone: agent.workspace.timezone,
     allowUnicode: agent.allowUnicode,
+    followUpEnabled: agent.followUpEnabled,
+    followUpAiGenerated: agent.followUpAiGenerated,
+    followUpSequence: (agent.followUpSequence as Array<{ delayMinutes: number; message?: string }>) || [],
   };
 }
 
@@ -1202,7 +1211,7 @@ async function callAI(
   });
 }
 
-async function sendReply(
+export async function sendReply(
   workspaceId: string,
   agent: AgentConfig,
   fromAddress: string,

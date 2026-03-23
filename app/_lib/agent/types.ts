@@ -177,6 +177,12 @@ export interface AgentConfig {
   timezone: string;
   /** When true, skip GSM-7 sanitization and allow Unicode SMS (UCS-2) */
   allowUnicode: boolean;
+  /** When true, schedule follow-ups for idle conversations */
+  followUpEnabled: boolean;
+  /** When true, follow-up messages are AI-generated; when false, use templates */
+  followUpAiGenerated: boolean;
+  /** Sequence of follow-up steps with delay and optional template message */
+  followUpSequence: Array<{ delayMinutes: number; message?: string }>;
 }
 
 export interface InitiateConversationParams {
