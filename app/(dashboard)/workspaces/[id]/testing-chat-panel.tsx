@@ -28,6 +28,7 @@ import {
   BookOpen,
   AlertTriangle,
   Shield,
+  Eye,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -145,6 +146,7 @@ interface TriggerResult {
     results: Array<{
       action: string;
       success: boolean;
+      data?: { dryRun?: boolean; summary?: string; [key: string]: unknown };
       error?: string;
     }>;
   }>;
@@ -157,6 +159,17 @@ interface ActionResult {
   error?: string;
   duration: number;
 }
+
+interface WorkflowPreview {
+  id: string;
+  name: string;
+  triggerAdapter: string;
+  triggerOperation: string;
+  enabled: boolean;
+  actions: Array<{ adapter: string; operation: string; params: Record<string, unknown> }>;
+}
+
+const DRY_RUN_ADAPTERS = new Set(['resend', 'twilio', 'mailerlite', 'abc_ignite']);
 
 // ---------------------------------------------------------------------------
 // Quick-send presets
@@ -213,6 +226,9 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
   const [testerLoading, setTesterLoading] = useState(false);
   const [testerResult, setTesterResult] = useState<TriggerResult | ActionResult | null>(null);
   const [testerError, setTesterError] = useState<string | null>(null);
+
+  // Action preview
+  const [workflowPreviews, setWorkflowPreviews] = useState<WorkflowPreview[]>([]);
 
   // Turn log side panel
   const [logPanelOpen, setLogPanelOpen] = useState(false);
@@ -301,6 +317,40 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
     }
     loadRegistry();
   }, [workspaceId]);
+
+  // Fetch workspace workflows for action preview
+  useEffect(() => {
+    async function loadWorkflows() {
+      try {
+        const res = await fetch(`/api/v1/workflows?workspaceId=${encodeURIComponent(workspaceId)}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        const workflows = json.data?.workflows || [];
+        setWorkflowPreviews(
+          workflows.map((w: WorkflowPreview) => ({
+            id: w.id,
+            name: w.name,
+            triggerAdapter: w.triggerAdapter,
+            triggerOperation: w.triggerOperation,
+            enabled: w.enabled,
+            actions: w.actions || [],
+          }))
+        );
+      } catch {
+        // silently fail
+      }
+    }
+    loadWorkflows();
+  }, [workspaceId]);
+
+  // Compute matched workflows for selected trigger
+  const matchedWorkflows = (() => {
+    if (testerMode !== 'triggers' || !selectedTesterKey) return [];
+    const [adapter, operation] = selectedTesterKey.split('.');
+    return workflowPreviews.filter(
+      (w) => w.enabled && w.triggerAdapter === adapter && w.triggerOperation === operation
+    );
+  })();
 
   // When tester selection changes, reset field values to defaults
   useEffect(() => {
@@ -1247,6 +1297,40 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
                     </div>
                   )}
 
+                  {/* Action preview for triggers */}
+                  {testerMode === 'triggers' && matchedWorkflows.length > 0 && (
+                    <div className="bg-zinc-950 border border-zinc-700/50 rounded-lg p-2.5 space-y-1.5">
+                      <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Eye className="w-3 h-3" />
+                        Actions Preview
+                      </p>
+                      {matchedWorkflows.map((wf) => (
+                        <div key={wf.id}>
+                          <p className="text-[10px] font-medium text-zinc-300">{wf.name}</p>
+                          {wf.actions.map((a, i) => {
+                            const isDryRun = DRY_RUN_ADAPTERS.has(a.adapter);
+                            return (
+                              <div key={i} className="flex items-center gap-1.5 ml-2 mt-0.5">
+                                <span className={`w-1 h-1 rounded-full flex-shrink-0 ${isDryRun ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                                <span className="text-[10px] text-zinc-400">{a.adapter}.{a.operation}</span>
+                                {isDryRun && (
+                                  <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/15 text-amber-500">dry-run</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                      {matchedWorkflows.some((wf) => wf.actions.some((a) => DRY_RUN_ADAPTERS.has(a.adapter))) && (
+                        <p className="text-[9px] text-zinc-600 mt-1">External API calls are simulated in test mode.</p>
+                      )}
+                    </div>
+                  )}
+
+                  {testerMode === 'triggers' && matchedWorkflows.length === 0 && selectedTesterKey && (
+                    <p className="text-[10px] text-zinc-600">No enabled workflows match this trigger.</p>
+                  )}
+
                   {/* Execute button */}
                   <button
                     type="button"
@@ -1291,12 +1375,26 @@ export function TestingChatPanel({ workspaceId }: TestingChatPanelProps) {
                         <div key={i} className="border-t border-zinc-800 pt-2">
                           <p className="text-[10px] font-medium text-zinc-300">{exec.workflowName}</p>
                           {exec.results.map((r, j) => (
-                            <div key={j} className="flex items-center gap-1.5 mt-1">
-                              {r.success
-                                ? <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                                : <XCircle className="w-3 h-3 text-red-400" />}
-                              <span className="text-[10px] text-zinc-400">{r.action}</span>
-                              {r.error && <span className="text-[10px] text-red-400 ml-1">- {r.error}</span>}
+                            <div key={j} className="mt-1">
+                              <div className="flex items-center gap-1.5">
+                                {r.data?.dryRun ? (
+                                  <Eye className="w-3 h-3 text-amber-400" />
+                                ) : r.success ? (
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                ) : (
+                                  <XCircle className="w-3 h-3 text-red-400" />
+                                )}
+                                <span className="text-[10px] text-zinc-400">{r.action}</span>
+                                {r.data?.dryRun && (
+                                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                                    DRY RUN
+                                  </span>
+                                )}
+                                {r.error && <span className="text-[10px] text-red-400 ml-1">- {r.error}</span>}
+                              </div>
+                              {r.data?.dryRun && r.data?.summary && (
+                                <p className="text-[9px] text-zinc-500 ml-[18px] mt-0.5">{r.data.summary}</p>
+                              )}
                             </div>
                           ))}
                         </div>

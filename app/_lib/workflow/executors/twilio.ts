@@ -86,6 +86,19 @@ const sendSms: ActionExecutor = {
     const toParam = params.to as string | undefined;
     const phoneNumberKey = params.phoneNumber as string | undefined;
 
+    if (ctx.isTest) {
+      const to = toParam || (ctx.trigger.payload.from as string | undefined) || 'unknown';
+      return {
+        success: true,
+        data: {
+          dryRun: true,
+          action: 'send_sms',
+          summary: `Would send SMS to ${to}: "${(body || '').slice(0, 80)}${(body || '').length > 80 ? '...' : ''}"`,
+          params: { to, body, phoneNumber: phoneNumberKey },
+        },
+      };
+    }
+
     if (!body) {
       return { success: false, error: 'Missing body parameter' };
     }
