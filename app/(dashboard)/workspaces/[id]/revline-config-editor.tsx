@@ -62,8 +62,25 @@ interface BookingCopyConfig {
   footerEmail?: string;
 }
 
+interface LandingCopyConfig {
+  heroHeadline?: string;
+  heroSubhead?: string;
+  heroCtaText?: string;
+  heroCtaLink?: string;
+  servicesTitle?: string;
+  services?: Array<{ title: string; description: string }>;
+  images?: string[];
+  contactTitle?: string;
+  contactSubhead?: string;
+  contactSubmitText?: string;
+  contactSuccessMessage?: string;
+  footerText?: string;
+  footerEmail?: string;
+}
+
 interface CopyConfig {
   booking?: BookingCopyConfig;
+  landing?: LandingCopyConfig;
 }
 
 interface FeaturesConfig {
@@ -511,8 +528,15 @@ export function RevlineConfigEditor({
                       headerStyle={meta.headerStyle}
                       typography={meta.typography}
                       copy={meta.copy?.booking}
+                      landingCopy={meta.copy?.landing}
                       workspaceName={workspaceSlug}
-                      formType={(previewForm || selectedBuildForm || '').includes('signup') ? 'signup' : 'booking'}
+                      formType={
+                        (previewForm || selectedBuildForm || '').includes('landing')
+                          ? 'landing'
+                          : (previewForm || selectedBuildForm || '').includes('signup')
+                            ? 'signup'
+                            : 'booking'
+                      }
                       signupConfig={meta.signup}
                     />
                   </div>
