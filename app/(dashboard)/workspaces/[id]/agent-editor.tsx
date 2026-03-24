@@ -75,10 +75,12 @@ interface AgentEditorProps {
 
 const CHANNEL_TYPES = [
   { value: 'SMS', label: 'SMS' },
+  { value: 'EMAIL', label: 'Email' },
 ];
 
 const CHANNEL_INTEGRATIONS: Record<string, string[]> = {
   SMS: ['TWILIO'],
+  EMAIL: ['RESEND'],
 };
 
 const AI_INTEGRATIONS = ['OPENAI', 'ANTHROPIC'];
@@ -635,6 +637,30 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
                 {hasChannelIntegration && (() => {
                   const channelInt = integrations.find((i) => i.integration === data.channelIntegration);
                   const meta = channelInt?.meta as Record<string, unknown> | null;
+
+                  if (data.channelType === 'EMAIL') {
+                    const configuredEmail = meta && typeof meta === 'object' && 'fromEmail' in meta
+                      ? (meta.fromEmail as string)
+                      : '';
+
+                    return (
+                      <Field label="Send From" required hint="Email address the agent sends from (must match Resend verified domain)">
+                        <input
+                          type="email"
+                          value={data.channelAddress || configuredEmail}
+                          onChange={(e) => setData({ ...data, channelAddress: e.target.value })}
+                          placeholder={configuredEmail || 'agent@yourdomain.com'}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+                        />
+                        {configuredEmail && !data.channelAddress && (
+                          <p className="text-xs text-zinc-500 mt-1">
+                            Using configured from-address: {configuredEmail}
+                          </p>
+                        )}
+                      </Field>
+                    );
+                  }
+
                   const phoneNumbers = meta && typeof meta === 'object' && 'phoneNumbers' in meta
                     ? (meta.phoneNumbers as Record<string, { number: string; label: string }>)
                     : null;

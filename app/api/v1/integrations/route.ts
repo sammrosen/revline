@@ -129,7 +129,6 @@ export async function POST(request: NextRequest) {
       system: EventSystem.BACKEND,
       eventType: 'integration_added',
       success: true,
-      meta: { integration, configured: encryptedSecrets.length > 0 },
     });
 
     return NextResponse.json(

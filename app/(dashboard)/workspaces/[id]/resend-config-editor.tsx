@@ -462,6 +462,64 @@ export function ResendConfigEditor({
         </div>
       </div>
 
+      {/* Inbound Email (Agent Channel) Section */}
+      <div>
+        <h4 className="text-sm font-medium text-zinc-300 mb-2">Inbound Email (Agent Channel)</h4>
+        <p className="text-xs text-zinc-500 mb-4">
+          Receive email replies so AI agents can have bidirectional email conversations. Requires Resend inbound domain setup.
+        </p>
+
+        <div className="space-y-4">
+          {workspaceSlug && (
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1.5">
+                Inbound Webhook URL
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/resend-inbound?source=${workspaceSlug}`}
+                  className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm font-mono text-zinc-400 select-all cursor-text"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = `${window.location.origin}/api/v1/resend-inbound?source=${workspaceSlug}`;
+                    navigator.clipboard.writeText(url);
+                  }}
+                  className="shrink-0 px-2.5 py-2 text-xs text-zinc-400 hover:text-white border border-zinc-700 rounded hover:border-zinc-600 transition-colors"
+                  title="Copy inbound webhook URL"
+                >
+                  Copy
+                </button>
+              </div>
+              <p className="text-xs text-zinc-600 mt-1">
+                Configure this URL in Resend Dashboard &rarr; Inbound &rarr; Webhook Destination
+              </p>
+            </div>
+          )}
+
+          <div className="p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg space-y-2">
+            <p className="text-xs text-zinc-300 font-medium">Setup Steps</p>
+            <ol className="text-[11px] text-zinc-400 space-y-1.5 list-decimal list-inside">
+              <li>Add an inbound domain in Resend (e.g., <span className="font-mono text-zinc-300">reply.yourdomain.com</span>)</li>
+              <li>Point MX records for that subdomain to Resend&apos;s inbound mail servers</li>
+              <li>Set the inbound webhook URL above as the destination</li>
+              <li>Uses the same <span className="font-mono text-zinc-500">Webhook Secret</span> from the delivery webhooks above</li>
+            </ol>
+          </div>
+
+          <div className="p-3 bg-indigo-500/5 border border-indigo-500/20 rounded-lg">
+            <p className="text-[11px] text-indigo-400">
+              Once configured, select <span className="font-medium">Email / RESEND</span> as the channel in the Agent Editor.
+              Inbound emails route to active agent conversations or fire the <span className="font-mono">resend.email_received</span> workflow trigger.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Preview Section */}
       {meta.fromEmail && (
         <div className="p-4 bg-indigo-500/5 border border-indigo-500/20 rounded-lg">

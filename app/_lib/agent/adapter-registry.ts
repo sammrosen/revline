@@ -9,7 +9,7 @@
  * - Extensible: new providers register here, not in engine.ts
  */
 
-import { OpenAIAdapter, AnthropicAdapter, TwilioAdapter } from '@/app/_lib/integrations';
+import { OpenAIAdapter, AnthropicAdapter, TwilioAdapter, ResendAdapter } from '@/app/_lib/integrations';
 import type { ChatCompletionParams, ChatCompletionResult } from '@/app/_lib/integrations';
 import type { IntegrationResult } from '@/app/_lib/types';
 
@@ -64,16 +64,41 @@ interface ChannelAdapterEntry {
   contactField: string;
 }
 
+export interface ChannelMessageMetadata {
+  subject?: string;
+  inReplyTo?: string;
+  references?: string;
+}
+
 interface ChannelAdapter {
-  sendMessage(fromAddress: string, toAddress: string, body: string): Promise<IntegrationResult<unknown>>;
+  sendMessage(fromAddress: string, toAddress: string, body: string, metadata?: ChannelMessageMetadata): Promise<IntegrationResult<unknown>>;
 }
 
 class TwilioChannelAdapter implements ChannelAdapter {
   constructor(private adapter: InstanceType<typeof TwilioAdapter>) {}
 
-  async sendMessage(fromAddress: string, toAddress: string, body: string): Promise<IntegrationResult<unknown>> {
+  async sendMessage(fromAddress: string, toAddress: string, body: string, _metadata?: ChannelMessageMetadata): Promise<IntegrationResult<unknown>> {
     const fromKey = this.adapter.getPhoneKeyByNumber(fromAddress);
     return this.adapter.sendSms({ to: toAddress, body, from: fromKey });
+  }
+}
+
+class ResendChannelAdapter implements ChannelAdapter {
+  constructor(private adapter: InstanceType<typeof ResendAdapter>) {}
+
+  async sendMessage(fromAddress: string, toAddress: string, body: string, metadata?: ChannelMessageMetadata): Promise<IntegrationResult<unknown>> {
+    const headers: Record<string, string> = {};
+    if (metadata?.inReplyTo) headers['In-Reply-To'] = metadata.inReplyTo;
+    if (metadata?.references) headers['References'] = metadata.references;
+
+    return this.adapter.sendEmail({
+      to: toAddress,
+      subject: metadata?.subject || 'New message',
+      html: body,
+      replyTo: fromAddress,
+      fromEmail: fromAddress,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+    });
   }
 }
 
@@ -86,6 +111,15 @@ const CHANNEL_REGISTRY: Record<string, ChannelAdapterEntry> = {
     },
     label: 'Twilio',
     contactField: 'phone',
+  },
+  RESEND: {
+    forWorkspace: async (workspaceId: string) => {
+      const adapter = await ResendAdapter.forWorkspace(workspaceId);
+      if (!adapter) return null;
+      return new ResendChannelAdapter(adapter);
+    },
+    label: 'Resend',
+    contactField: 'email',
   },
 };
 

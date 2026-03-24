@@ -27,6 +27,7 @@ import { logStructured } from '@/app/_lib/reliability';
 import type { InboundMessageParams, InitiateConversationParams, AgentResponse, AgentConfig, TurnLogEntry } from './types';
 import type { IntegrationResult } from '@/app/_lib/types';
 import { resolveAI, resolveChannel, getContactFieldForChannel } from './adapter-registry';
+import type { ChannelMessageMetadata } from './adapter-registry';
 import { resolveTools, executeTool } from './tool-registry';
 import type { ToolDefinition } from '@/app/_lib/integrations';
 import { checkSendWindow, shouldEnforceQuietHours } from './quiet-hours';
@@ -257,7 +258,7 @@ export async function handleInboundMessage(
       turnLog.push({ type: 'event', event: 'conversation_completed', ts: Date.now() });
 
       if (agent.fallbackMessage && !params.testMode) {
-        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, agent.fallbackMessage);
+        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, agent.fallbackMessage, 'reactive', conversation.id);
       }
 
       return {
@@ -370,7 +371,7 @@ export async function handleInboundMessage(
           if (shouldApplyDelay(params) && agent.responseDelaySeconds > 0) {
             await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
           }
-          await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, initialText);
+          await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, initialText, 'reactive', conversation.id);
         }
       }
     }
@@ -397,7 +398,7 @@ export async function handleInboundMessage(
           if (shouldApplyDelay(params) && agent.responseDelaySeconds > 0) {
             await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
           }
-          await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, faqMatch);
+          await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, faqMatch, 'reactive', conversation.id);
         }
         return {
           success: true,
@@ -489,7 +490,7 @@ export async function handleInboundMessage(
       });
 
       if (agent.fallbackMessage && !params.testMode) {
-        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, agent.fallbackMessage);
+        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, agent.fallbackMessage, 'reactive', conversation.id);
       }
 
       return {
@@ -675,7 +676,7 @@ export async function handleInboundMessage(
         if (shouldApplyDelay(params) && agent.responseDelaySeconds > 0) {
           await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
         }
-        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, cleanedReply);
+        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, cleanedReply, 'reactive', conversation.id);
       }
 
       await emitAgentEvent(params.workspaceId, 'escalation_requested', {
@@ -781,7 +782,9 @@ export async function handleInboundMessage(
         agent,
         params.channelAddress,
         params.contactAddress,
-        replyText
+        replyText,
+        'reactive',
+        conversation.id,
       );
     }
 
@@ -1054,7 +1057,8 @@ export async function initiateConversation(
         agent.channelAddress,
         contactAddress,
         outboundText,
-        'proactive'
+        'proactive',
+        conversation.id,
       );
     }
 
@@ -1268,7 +1272,8 @@ export async function sendReply(
   fromAddress: string,
   toAddress: string,
   body: string,
-  sendType: SendType = 'reactive'
+  sendType: SendType = 'reactive',
+  conversationId?: string,
 ): Promise<SendReplyResult> {
   if (!agent.channelIntegration) {
     logStructured({
@@ -1348,7 +1353,7 @@ export async function sendReply(
     return { sent: false };
   }
 
-  // SMS encoding sanitization
+  // SMS encoding sanitization (skipped for non-SMS channels)
   let sanitizedBody = body;
   if (shouldSanitizeSms(agent.channelType) && !agent.allowUnicode) {
     sanitizedBody = sanitizeForGsm7(body);
@@ -1369,9 +1374,27 @@ export async function sendReply(
     },
   });
 
-  let result;
+  // Build email threading metadata when using email channel
+  let metadata: ChannelMessageMetadata | undefined;
+  if (agent.channelType?.toUpperCase() === 'EMAIL' && conversationId) {
+    const convo = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { metadata: true, messageCount: true },
+    });
+    const convoMeta = (convo?.metadata as Record<string, unknown>) || {};
+    const lastMessageId = convoMeta.lastEmailMessageId as string | undefined;
+    const emailSubject = (convoMeta.emailSubject as string) || `Message from ${agent.name || 'Agent'}`;
+
+    metadata = {
+      subject: lastMessageId ? `Re: ${emailSubject}` : emailSubject,
+      inReplyTo: lastMessageId,
+      references: lastMessageId || undefined,
+    };
+  }
+
+  let result: IntegrationResult<unknown>;
   try {
-    result = await adapter.sendMessage(fromAddress, toAddress, sanitizedBody);
+    result = await adapter.sendMessage(fromAddress, toAddress, sanitizedBody, metadata);
   } catch (err) {
     logStructured({
       correlationId: crypto.randomUUID(),
@@ -1395,6 +1418,28 @@ export async function sendReply(
       metadata: { agentId: agent.id },
     });
     return { sent: false };
+  }
+
+  // Store outbound email message ID for threading
+  if (agent.channelType?.toUpperCase() === 'EMAIL' && conversationId && result.data) {
+    const sendResult = result.data as { messageId?: string };
+    if (sendResult.messageId) {
+      const convo = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { metadata: true },
+      });
+      const existingMeta = (convo?.metadata as Record<string, unknown>) || {};
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: {
+          metadata: {
+            ...existingMeta,
+            lastEmailMessageId: `<${sendResult.messageId}>`,
+            emailSubject: existingMeta.emailSubject || `Message from ${agent.name || 'Agent'}`,
+          } satisfies Prisma.JsonObject,
+        },
+      });
+    }
   }
 
   return { sent: true };

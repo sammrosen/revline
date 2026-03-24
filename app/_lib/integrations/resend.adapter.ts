@@ -44,6 +44,8 @@ export interface SendEmailParams {
   fromEmail?: string;
   /** Override from name (uses config default if not provided) */
   fromName?: string;
+  /** Custom email headers (e.g., In-Reply-To, References for threading) */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -179,7 +181,7 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
    * Send an email via Resend
    */
   async sendEmail(params: SendEmailParams): Promise<IntegrationResult<SendEmailResult>> {
-    const { to, subject, html, text, replyTo, fromEmail, fromName } = params;
+    const { to, subject, html, text, replyTo, fromEmail, fromName, headers } = params;
 
     try {
       // Build from address
@@ -196,6 +198,7 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
         html,
         text,
         replyTo: effectiveReplyTo,
+        ...(headers && Object.keys(headers).length > 0 ? { headers } : {}),
       });
 
       if (error) {
