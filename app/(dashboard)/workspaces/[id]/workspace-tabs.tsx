@@ -14,6 +14,7 @@ import { TestingTab } from './testing-tab';
 import { WorkspaceSettings } from './workspace-settings';
 import { EventsLog } from './_components/events-log';
 import { AgentList } from './agent-list';
+import { ReadinessPanel } from './readiness-panel';
 import { Workflow as WorkflowIcon, Plus, List } from 'lucide-react';
 import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
 
@@ -317,6 +318,7 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
 
         {activeTab === 'integrations' && (
           <div className="max-w-[1600px] mx-auto">
+            <ReadinessPanel workspaceId={workspaceId} />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
               {integrations.map((integration) => {
                 const dependentWorkflows = getDependentWorkflows(integration.integration);
@@ -324,11 +326,14 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
                 
                 const integrationStyle = getIntegrationStyle(integration.integration.toLowerCase());
                 const IntegrationIcon = integrationStyle.icon;
+                const secretsList = parseSecrets(integration.secrets);
+                const isRevlineType = integration.integration === 'REVLINE';
+                const isPendingSetup = !isRevlineType && secretsList.length === 0;
                 
                 return (
                   <div
                     key={integration.id}
-                    className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex flex-col gap-4 relative"
+                    className={`bg-zinc-900 border rounded-lg p-4 flex flex-col gap-4 relative ${isPendingSetup ? 'border-amber-500/30' : 'border-zinc-800'}`}
                   >
                     {/* Header: Title and Actions */}
                     <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center relative">
@@ -339,7 +344,11 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
                           <IntegrationIcon className={`w-4 h-4 ${integrationStyle.textClass}`} />
                         )}
                         <span className={`font-bold tracking-tight ${integrationStyle.textClass}`}>{integration.integration}</span>
-                        <HealthBadge status={integration.healthStatus} />
+                        {isPendingSetup ? (
+                          <span className="px-2 py-1 text-xs rounded bg-amber-500/20 text-amber-400">SETUP</span>
+                        ) : (
+                          <HealthBadge status={integration.healthStatus} />
+                        )}
                         {usedByCount > 0 && (
                           <span className="flex items-center gap-1 px-2 py-0.5 bg-zinc-800 text-zinc-400 text-xs rounded" title={dependentWorkflows.map(w => w.name).join(', ')}>
                             <WorkflowIcon className="w-3 h-3" />

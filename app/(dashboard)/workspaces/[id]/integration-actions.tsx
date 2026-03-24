@@ -670,14 +670,20 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
     );
   }
 
+  const needsCredentials = !isRevline && secrets.length === 0;
+
   // Main Actions
   return (
     <div className="flex items-center justify-end gap-1.5 sm:gap-2">
       <button
         onClick={() => setShowManageSecrets(true)}
-        className="px-2 sm:px-3 py-1 text-[10px] sm:text-xs border border-zinc-700 text-zinc-300 rounded hover:border-zinc-600 hover:text-white transition-colors whitespace-nowrap"
+        className={`px-2 sm:px-3 py-1 text-[10px] sm:text-xs border rounded transition-colors whitespace-nowrap ${
+          needsCredentials
+            ? 'border-amber-500/50 text-amber-400 hover:border-amber-400 hover:text-amber-300'
+            : 'border-zinc-700 text-zinc-300 hover:border-zinc-600 hover:text-white'
+        }`}
       >
-        Secrets ({secrets.length})
+        {needsCredentials ? 'Add Credentials' : `Secrets (${secrets.length})`}
       </button>
       <button
         onClick={() => setShowEditMeta(true)}
