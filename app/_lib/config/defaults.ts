@@ -13,6 +13,7 @@
 import { 
   BrandingConfig, 
   BookingCopyConfig, 
+  LandingCopyConfig,
   WorkspaceFeatures,
   SignupCopyConfig,
   SignupConfig,
@@ -203,6 +204,30 @@ export const DEFAULT_SIGNUP_CONFIG: SignupConfig = {
   copy: DEFAULT_SIGNUP_COPY,
   policies: DEFAULT_SIGNUP_POLICIES,
   features: DEFAULT_SIGNUP_FEATURES,
+};
+
+// =============================================================================
+// LANDING PAGE DEFAULTS
+// =============================================================================
+
+export const DEFAULT_LANDING_COPY: Required<LandingCopyConfig> = {
+  heroHeadline: 'Welcome to Our Business',
+  heroSubhead: 'We provide exceptional service tailored to your needs.',
+  heroCtaText: 'Get in Touch',
+  heroCtaLink: '#contact',
+  servicesTitle: 'What We Do',
+  services: [
+    { title: 'Service One', description: 'A brief description of this service and how it helps customers.' },
+    { title: 'Service Two', description: 'A brief description of this service and how it helps customers.' },
+    { title: 'Service Three', description: 'A brief description of this service and how it helps customers.' },
+  ],
+  images: [],
+  contactTitle: 'Get in Touch',
+  contactSubhead: 'Leave your info and we\'ll reach out.',
+  contactSubmitText: 'Send',
+  contactSuccessMessage: 'Thanks! We\'ll be in touch soon.',
+  footerText: 'Powered by RevLine',
+  footerEmail: '',
 };
 
 // =============================================================================

@@ -13,7 +13,7 @@
  * - placeholder: Input placeholder text
  */
 
-import { DEFAULT_BOOKING_COPY, DEFAULT_SIGNUP_COPY } from '@/app/_lib/config/defaults';
+import { DEFAULT_BOOKING_COPY, DEFAULT_SIGNUP_COPY, DEFAULT_LANDING_COPY } from '@/app/_lib/config/defaults';
 
 // =============================================================================
 // SCHEMA TYPES
@@ -283,6 +283,97 @@ export const BRANDING_SCHEMA: BrandingFieldSchema[] = [
 // SCHEMA REGISTRY
 // =============================================================================
 
+// =============================================================================
+// LANDING PAGE COPY SCHEMA
+// =============================================================================
+
+export const LANDING_COPY_SCHEMA: TemplateCopySchema = {
+  templateId: 'landing',
+  templateName: 'Landing Page',
+  fields: [
+    {
+      key: 'heroHeadline',
+      label: 'Hero Headline',
+      description: 'Main headline displayed in the hero section',
+      default: DEFAULT_LANDING_COPY.heroHeadline,
+      maxLength: 80,
+      placeholder: 'Welcome to Our Business',
+    },
+    {
+      key: 'heroSubhead',
+      label: 'Hero Subheadline',
+      description: 'Supporting text below the headline',
+      default: DEFAULT_LANDING_COPY.heroSubhead,
+      maxLength: 160,
+      placeholder: 'We provide exceptional service...',
+    },
+    {
+      key: 'heroCtaText',
+      label: 'Hero Button Text',
+      description: 'Call-to-action button text in the hero',
+      default: DEFAULT_LANDING_COPY.heroCtaText,
+      maxLength: 30,
+      placeholder: 'Get in Touch',
+    },
+    {
+      key: 'servicesTitle',
+      label: 'Services Section Title',
+      description: 'Heading for the services section',
+      default: DEFAULT_LANDING_COPY.servicesTitle,
+      maxLength: 60,
+      placeholder: 'What We Do',
+    },
+    {
+      key: 'contactTitle',
+      label: 'Contact Section Title',
+      description: 'Heading for the contact form',
+      default: DEFAULT_LANDING_COPY.contactTitle,
+      maxLength: 60,
+      placeholder: 'Get in Touch',
+    },
+    {
+      key: 'contactSubhead',
+      label: 'Contact Subheadline',
+      description: 'Supporting text above the contact form',
+      default: DEFAULT_LANDING_COPY.contactSubhead,
+      maxLength: 120,
+      placeholder: 'Leave your info and we\'ll reach out.',
+    },
+    {
+      key: 'contactSubmitText',
+      label: 'Submit Button Text',
+      description: 'Contact form submit button label',
+      default: DEFAULT_LANDING_COPY.contactSubmitText,
+      maxLength: 30,
+      placeholder: 'Send',
+    },
+    {
+      key: 'contactSuccessMessage',
+      label: 'Success Message',
+      description: 'Shown after the contact form is submitted',
+      default: DEFAULT_LANDING_COPY.contactSuccessMessage,
+      maxLength: 160,
+      placeholder: 'Thanks! We\'ll be in touch soon.',
+    },
+    {
+      key: 'footerText',
+      label: 'Footer Text',
+      description: 'Text in the page footer',
+      default: DEFAULT_LANDING_COPY.footerText,
+      maxLength: 80,
+      placeholder: 'Powered by RevLine',
+    },
+    {
+      key: 'footerEmail',
+      label: 'Footer Email',
+      description: 'Contact email shown in the footer',
+      default: DEFAULT_LANDING_COPY.footerEmail,
+      maxLength: 80,
+      placeholder: 'hello@yourbusiness.com',
+    },
+  ],
+};
+
 /**
  * Registry of all template copy schemas
  * Key is the template ID (matches form ID in Revline config)
@@ -290,6 +381,7 @@ export const BRANDING_SCHEMA: BrandingFieldSchema[] = [
 export const TEMPLATE_COPY_SCHEMAS: Record<string, TemplateCopySchema> = {
   booking: BOOKING_COPY_SCHEMA,
   signup: SIGNUP_COPY_SCHEMA,
+  landing: LANDING_COPY_SCHEMA,
 };
 
 /**

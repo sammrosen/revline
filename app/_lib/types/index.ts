@@ -371,6 +371,25 @@ export interface BookingCopyConfig {
 }
 
 /**
+ * Copy configuration for landing page template
+ */
+export interface LandingCopyConfig {
+  heroHeadline?: string;
+  heroSubhead?: string;
+  heroCtaText?: string;
+  heroCtaLink?: string;
+  servicesTitle?: string;
+  services?: Array<{ title: string; description: string }>;
+  images?: string[];
+  contactTitle?: string;
+  contactSubhead?: string;
+  contactSubmitText?: string;
+  contactSuccessMessage?: string;
+  footerText?: string;
+  footerEmail?: string;
+}
+
+/**
  * Copy configuration for all templates
  * Each template type has its own copy schema
  */
@@ -379,6 +398,8 @@ export interface CopyConfig {
   booking?: BookingCopyConfig;
   /** Signup template copy */
   signup?: SignupCopyConfig;
+  /** Landing page copy */
+  landing?: LandingCopyConfig;
 }
 
 /**
@@ -653,6 +674,12 @@ export interface RevlineMeta {
   features?: WorkspaceFeatures;
   /** Signup/membership template configuration */
   signup?: SignupConfig;
+  /** Webchat widget configuration for landing pages */
+  webchat?: {
+    agentId: string;
+    enabled: boolean;
+    collectEmail?: boolean;
+  };
 }
 
 /**
@@ -1017,6 +1044,7 @@ export const RATE_LIMITS = {
   // Booking write limits - stricter to prevent abuse
   BOOKING_BY_IDENTIFIER: { requests: 3, windowMs: 15 * 60_000 },  // 3 per 15 minutes per identifier
   BOOKING_BY_IP: { requests: 5, windowMs: 10 * 60_000 },          // 5 per 10 minutes per IP
+  CHAT: { requests: 10, windowMs: 60_000 },                       // 10 per minute (webchat messages)
 } as const;
 
 export const TIMEOUTS = {

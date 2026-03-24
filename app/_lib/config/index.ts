@@ -25,6 +25,8 @@ export {
   type ResolvedSignupFeatures,
   type ResolvedSignupPolicies,
   type ResolvedSignupConfig,
+  type ResolvedLandingCopy,
+  type ResolvedLandingConfig,
 } from './workspace-config.service';
 
 export {
@@ -33,6 +35,7 @@ export {
   DEFAULT_HEADER_STYLE,
   DEFAULT_TYPOGRAPHY,
   DEFAULT_BOOKING_COPY,
+  DEFAULT_LANDING_COPY,
   DEFAULT_FEATURES,
   DEFAULT_SIGNUP_CONFIG,
   DEFAULT_SIGNUP_COPY,

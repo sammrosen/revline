@@ -18,6 +18,7 @@ import { IntegrationType } from '@prisma/client';
 import { 
   BrandingConfig, 
   BookingCopyConfig, 
+  LandingCopyConfig,
   WorkspaceFeatures,
   RevlineMeta,
   ThemeMapping,
@@ -36,6 +37,7 @@ import {
   DEFAULT_HEADER_STYLE,
   DEFAULT_TYPOGRAPHY,
   DEFAULT_BOOKING_COPY,
+  DEFAULT_LANDING_COPY,
   DEFAULT_FEATURES,
   DEFAULT_SIGNUP_CONFIG,
   DEFAULT_SIGNUP_COPY,
@@ -144,6 +146,37 @@ export interface ResolvedWorkspaceConfig {
  */
 export interface ResolvedBookingConfig extends ResolvedWorkspaceConfig {
   copy: ResolvedBookingCopy;
+}
+
+/**
+ * Fully resolved landing page copy (no optional fields)
+ */
+export interface ResolvedLandingCopy {
+  heroHeadline: string;
+  heroSubhead: string;
+  heroCtaText: string;
+  heroCtaLink: string;
+  servicesTitle: string;
+  services: Array<{ title: string; description: string }>;
+  images: string[];
+  contactTitle: string;
+  contactSubhead: string;
+  contactSubmitText: string;
+  contactSuccessMessage: string;
+  footerText: string;
+  footerEmail: string;
+}
+
+/**
+ * Resolved config for landing page template
+ */
+export interface ResolvedLandingConfig extends ResolvedWorkspaceConfig {
+  copy: ResolvedLandingCopy;
+  webchat?: {
+    agentId: string;
+    enabled: boolean;
+    collectEmail?: boolean;
+  };
 }
 
 /**
@@ -312,6 +345,40 @@ export class WorkspaceConfigService {
       copy: this.resolveSignupCopy(mergedCopy),
       policies: this.resolveSignupPolicies(signupConfig?.policies),
       signupFeatures: this.resolveSignupFeatures(signupConfig?.features),
+    };
+  }
+
+  /**
+   * Resolve config for landing page template
+   * Includes branding, features, landing copy, and webchat config
+   * 
+   * Priority: code defaults -> org template defaults -> workspace overrides
+   */
+  static async resolveForLanding(workspaceId: string): Promise<ResolvedLandingConfig> {
+    const [orgTemplate, meta] = await Promise.all([
+      this.loadOrgTemplate(workspaceId, 'landing'),
+      this.loadRevlineMeta(workspaceId),
+    ]);
+
+    const orgBranding = orgTemplate?.defaultBranding || undefined;
+    const mergedBranding = orgBranding
+      ? { ...orgBranding, ...(meta?.branding || {}) }
+      : meta?.branding;
+
+    const orgCopy = orgTemplate?.defaultCopy as LandingCopyConfig | undefined;
+    const mergedCopy = orgCopy
+      ? { ...orgCopy, ...(meta?.copy?.landing || {}) }
+      : meta?.copy?.landing;
+
+    return {
+      workspaceId,
+      branding: this.resolveBranding(mergedBranding),
+      theme: this.resolveThemeMapping(meta?.theme),
+      headerStyle: this.resolveHeaderStyle(meta?.headerStyle),
+      typography: this.resolveTypography(meta?.typography),
+      features: this.resolveFeatures(meta?.features),
+      copy: this.resolveLandingCopy(mergedCopy),
+      webchat: meta?.webchat?.enabled ? meta.webchat : undefined,
     };
   }
 
@@ -763,6 +830,69 @@ export class WorkspaceConfigService {
     }
     if (typeof overrides.requireSmsConsent === 'boolean') {
       result.requireSmsConsent = overrides.requireSmsConsent;
+    }
+
+    return result;
+  }
+
+  /**
+   * Resolve landing page copy by merging with defaults
+   * Sanitizes text values and validates structured fields
+   */
+  private static resolveLandingCopy(overrides?: LandingCopyConfig): ResolvedLandingCopy {
+    const result: ResolvedLandingCopy = {
+      ...DEFAULT_LANDING_COPY,
+      services: DEFAULT_LANDING_COPY.services.map(s => ({ ...s })),
+      images: [...DEFAULT_LANDING_COPY.images],
+    };
+
+    if (!overrides) {
+      return result;
+    }
+
+    if (overrides.heroHeadline) {
+      result.heroHeadline = sanitizeCopyText(overrides.heroHeadline, 80);
+    }
+    if (overrides.heroSubhead) {
+      result.heroSubhead = sanitizeCopyText(overrides.heroSubhead, 160);
+    }
+    if (overrides.heroCtaText) {
+      result.heroCtaText = sanitizeCopyText(overrides.heroCtaText, 30);
+    }
+    if (overrides.heroCtaLink) {
+      result.heroCtaLink = sanitizeCopyText(overrides.heroCtaLink, 200);
+    }
+    if (overrides.servicesTitle) {
+      result.servicesTitle = sanitizeCopyText(overrides.servicesTitle, 60);
+    }
+    if (Array.isArray(overrides.services) && overrides.services.length > 0) {
+      result.services = overrides.services.slice(0, 12).map(s => ({
+        title: sanitizeCopyText(s.title || '', 60),
+        description: sanitizeCopyText(s.description || '', 200),
+      }));
+    }
+    if (Array.isArray(overrides.images) && overrides.images.length > 0) {
+      result.images = overrides.images
+        .slice(0, 6)
+        .filter(url => isValidLogoUrl(url));
+    }
+    if (overrides.contactTitle) {
+      result.contactTitle = sanitizeCopyText(overrides.contactTitle, 60);
+    }
+    if (overrides.contactSubhead) {
+      result.contactSubhead = sanitizeCopyText(overrides.contactSubhead, 120);
+    }
+    if (overrides.contactSubmitText) {
+      result.contactSubmitText = sanitizeCopyText(overrides.contactSubmitText, 30);
+    }
+    if (overrides.contactSuccessMessage) {
+      result.contactSuccessMessage = sanitizeCopyText(overrides.contactSuccessMessage, 160);
+    }
+    if (overrides.footerText) {
+      result.footerText = sanitizeCopyText(overrides.footerText, 80);
+    }
+    if (overrides.footerEmail) {
+      result.footerEmail = sanitizeCopyText(overrides.footerEmail, 80);
     }
 
     return result;

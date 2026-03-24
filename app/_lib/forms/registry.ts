@@ -57,7 +57,7 @@ export interface FormRegistryEntry {
   /** Path where the form is deployed (for reference) */
   path: string;
   /** Form type - helps categorize forms */
-  type: 'booking' | 'signup' | 'intake' | 'contact' | 'survey' | 'other';
+  type: 'booking' | 'signup' | 'intake' | 'contact' | 'survey' | 'landing' | 'other';
   /** 
    * Operations this form performs internally (baked-in workflow).
    * These are integration calls that happen automatically when the form runs.
@@ -128,6 +128,21 @@ export const FORM_REGISTRY: FormRegistryEntry[] = [
         id: 'signup-abandoned',
         label: 'Signup Abandoned',
         description: 'User abandoned signup before completion',
+      },
+    ],
+  },
+  {
+    id: 'landing-page',
+    name: 'Landing Page',
+    description: 'Configurable business landing page with contact capture and optional webchat',
+    path: '/public/{slug}/landing',
+    type: 'landing',
+    operations: [],
+    triggers: [
+      {
+        id: 'contact-submitted',
+        label: 'Contact Form Submitted',
+        description: 'Visitor submitted the contact form (reuses revline.email_captured)',
       },
     ],
   },
