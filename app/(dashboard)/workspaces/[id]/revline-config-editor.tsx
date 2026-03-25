@@ -2395,6 +2395,7 @@ function LandingBuildSection({
   updateMeta: (m: RevlineMeta) => void;
   agents?: Record<string, string>;
 }) {
+  const fieldIdCounter = useRef(0);
   const landingCopy = meta.copy?.landing || {};
   const sections = landingCopy.sections || { hero: true, services: true, gallery: true, footer: true };
   const fields = landingCopy.formFields || DEFAULT_LANDING_COPY.formFields;
@@ -2433,7 +2434,7 @@ function LandingBuildSection({
     if (fields.length >= MAX_FORM_FIELDS) return;
     updateFields([
       ...fields,
-      { id: `field_${Date.now()}`, label: 'New Field', type: 'text' as const, required: false, placeholder: '' },
+      { id: `field_${++fieldIdCounter.current}`, label: 'New Field', type: 'text' as const, required: false, placeholder: '' },
     ]);
   }
 
