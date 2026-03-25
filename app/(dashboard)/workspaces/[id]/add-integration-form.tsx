@@ -211,7 +211,7 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
                 onChange={(e) => handleIntegrationChange(e.target.value as IntegrationTypeId)}
                 className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
               >
-                {INTEGRATION_TYPES.map((type) => (
+                {INTEGRATION_TYPES.filter(t => t !== 'REVLINE').map((type) => (
                   <option key={type} value={type}>
                     {INTEGRATIONS[type]?.displayName || type}
                   </option>

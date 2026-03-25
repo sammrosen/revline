@@ -9,6 +9,7 @@ import {
   Users,
   Activity,
   Bot,
+  FileText,
   FlaskConical,
   Settings,
   Loader2,
@@ -41,7 +42,7 @@ interface WorkspaceListItem {
   slug: string;
 }
 
-type TabId = 'workflows' | 'integrations' | 'leads' | 'events' | 'agents' | 'testing' | 'settings';
+type TabId = 'workflows' | 'integrations' | 'leads' | 'events' | 'agents' | 'pages' | 'testing' | 'settings';
 
 const tabs: { id: TabId; label: string; icon: typeof Workflow; countKey?: keyof WorkspaceSummary['counts'] }[] = [
   { id: 'workflows', label: 'Workflows', icon: Workflow, countKey: 'workflows' },
@@ -49,6 +50,7 @@ const tabs: { id: TabId; label: string; icon: typeof Workflow; countKey?: keyof 
   { id: 'leads', label: 'Leads', icon: Users, countKey: 'leads' },
   { id: 'events', label: 'Events', icon: Activity, countKey: 'events' },
   { id: 'agents', label: 'Agents', icon: Bot },
+  { id: 'pages', label: 'Pages', icon: FileText },
   { id: 'testing', label: 'Testing', icon: FlaskConical },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];

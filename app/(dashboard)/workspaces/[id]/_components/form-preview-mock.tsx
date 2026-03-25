@@ -75,6 +75,11 @@ interface MockPreviewProps {
   workspaceName: string;
   formType: 'booking' | 'signup' | 'landing';
   signupConfig?: SignupConfig;
+  webchat?: {
+    agentId: string;
+    enabled: boolean;
+    collectEmail?: boolean;
+  };
 }
 
 // =============================================================================
@@ -91,6 +96,7 @@ export function FormPreviewMock({
   workspaceName,
   formType,
   signupConfig,
+  webchat,
 }: MockPreviewProps) {
   // Resolve branding with defaults (shared by both form types)
   const resolvedBranding: ResolvedBranding = {
@@ -157,10 +163,14 @@ export function FormPreviewMock({
       heroCtaText: landingCopy?.heroCtaText || DEFAULT_LANDING_COPY.heroCtaText,
       heroCtaLink: landingCopy?.heroCtaLink || DEFAULT_LANDING_COPY.heroCtaLink,
       heroBackgroundImage: landingCopy?.heroBackgroundImage || DEFAULT_LANDING_COPY.heroBackgroundImage,
+      heroBackgroundPosition: landingCopy?.heroBackgroundPosition || DEFAULT_LANDING_COPY.heroBackgroundPosition,
+      heroBackgroundSize: landingCopy?.heroBackgroundSize || DEFAULT_LANDING_COPY.heroBackgroundSize,
       phoneNumber: landingCopy?.phoneNumber || DEFAULT_LANDING_COPY.phoneNumber,
       servicesTitle: landingCopy?.servicesTitle || DEFAULT_LANDING_COPY.servicesTitle,
       services: landingCopy?.services?.length ? landingCopy.services : DEFAULT_LANDING_COPY.services,
-      images: landingCopy?.images?.length ? landingCopy.images : DEFAULT_LANDING_COPY.images,
+      images: (landingCopy?.images?.length ? landingCopy.images : DEFAULT_LANDING_COPY.images).map(
+        entry => typeof entry === 'string' ? { url: entry, position: 'center' } : { url: entry.url, position: entry.position || 'center' }
+      ),
       contactTitle: landingCopy?.contactTitle || DEFAULT_LANDING_COPY.contactTitle,
       contactSubhead: landingCopy?.contactSubhead || DEFAULT_LANDING_COPY.contactSubhead,
       contactSubmitText: landingCopy?.contactSubmitText || DEFAULT_LANDING_COPY.contactSubmitText,
@@ -189,6 +199,7 @@ export function FormPreviewMock({
         typography={resolvedTypography}
         copy={resolvedLandingCopy}
         features={DEFAULT_FEATURES}
+        webchat={webchat}
       />
     );
   }

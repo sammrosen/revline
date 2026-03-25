@@ -63,16 +63,23 @@ interface BookingCopyConfig {
   footerEmail?: string;
 }
 
+interface LandingImageEntry {
+  url: string;
+  position?: string;
+}
+
 interface LandingCopyConfig {
   heroHeadline?: string;
   heroSubhead?: string;
   heroCtaText?: string;
   heroCtaLink?: string;
   heroBackgroundImage?: string;
+  heroBackgroundPosition?: string;
+  heroBackgroundSize?: string;
   phoneNumber?: string;
   servicesTitle?: string;
-  services?: Array<{ title: string; description: string }>;
-  images?: string[];
+  services?: Array<{ title: string; description: string; image?: string; ctaLink?: string }>;
+  images?: Array<string | LandingImageEntry>;
   contactTitle?: string;
   contactSubhead?: string;
   contactSubmitText?: string;
@@ -124,6 +131,11 @@ interface TypographyConfig {
   caption?: TextRoleStyle;
 }
 
+interface PageStyleOverrides {
+  typography?: TypographyConfig;
+  headerStyle?: HeaderStyleConfig;
+}
+
 interface RevlineMeta {
   forms: Record<string, FormConfig>;
   settings: {
@@ -133,9 +145,15 @@ interface RevlineMeta {
   theme?: ThemeMapping;
   headerStyle?: HeaderStyleConfig;
   typography?: TypographyConfig;
+  pageStyles?: Record<string, PageStyleOverrides>;
   copy?: CopyConfig;
   features?: FeaturesConfig;
   signup?: SignupConfig;
+  webchat?: {
+    agentId: string;
+    enabled: boolean;
+    collectEmail?: boolean;
+  };
 }
 
 interface FormTrigger {
@@ -160,6 +178,7 @@ export interface RevlineConfigEditorProps {
   integrationId?: string;
   workspaceId?: string;
   workspaceSlug?: string;
+  agents?: Record<string, string>;
 }
 
 type TabType = 'settings' | 'forms' | 'branding' | 'build';
@@ -191,9 +210,14 @@ function parseMeta(value: string): RevlineMeta {
         defaultSource: parsed.settings?.defaultSource || '',
       },
       branding: parsed.branding || {},
+      theme: parsed.theme,
+      headerStyle: parsed.headerStyle,
+      typography: parsed.typography,
+      pageStyles: parsed.pageStyles,
       copy: parsed.copy || {},
       features: parsed.features || { showPoweredBy: true },
       signup: parsed.signup || undefined,
+      webchat: parsed.webchat,
     };
   } catch {
     return DEFAULT_CONFIG;
@@ -209,6 +233,7 @@ export function RevlineConfigEditor({
   onChange, 
   error,
   workspaceSlug,
+  agents,
 }: RevlineConfigEditorProps) {
   const [activeTab, setActiveTab] = useState<TabType>('settings');
   const [isJsonMode, setIsJsonMode] = useState(false);
@@ -409,6 +434,7 @@ export function RevlineConfigEditor({
                   registeredForms={registeredForms}
                   selectedForm={selectedBuildForm}
                   onSelectForm={setSelectedBuildForm}
+                  agents={agents}
                 />
               )}
               
@@ -528,23 +554,28 @@ export function RevlineConfigEditor({
                       height: `${10000 / previewZoom}%`,
                     }}
                   >
-                    <FormPreviewMock
-                      branding={meta.branding}
-                      theme={meta.theme}
-                      headerStyle={meta.headerStyle}
-                      typography={meta.typography}
-                      copy={meta.copy?.booking}
-                      landingCopy={meta.copy?.landing}
-                      workspaceName={workspaceSlug}
-                      formType={
-                        (previewForm || selectedBuildForm || '').includes('landing')
-                          ? 'landing'
-                          : (previewForm || selectedBuildForm || '').includes('signup')
-                            ? 'signup'
-                            : 'booking'
-                      }
-                      signupConfig={meta.signup}
-                    />
+                    {(() => {
+                      const pft = (previewForm || selectedBuildForm || '').includes('landing')
+                        ? 'landing'
+                        : (previewForm || selectedBuildForm || '').includes('signup')
+                          ? 'signup'
+                          : 'booking';
+                      const ps = meta.pageStyles?.[pft];
+                      return (
+                        <FormPreviewMock
+                          branding={meta.branding}
+                          theme={meta.theme}
+                          headerStyle={ps?.headerStyle ?? meta.headerStyle}
+                          typography={ps?.typography ?? meta.typography}
+                          copy={meta.copy?.booking}
+                          landingCopy={meta.copy?.landing}
+                          workspaceName={workspaceSlug}
+                          formType={pft}
+                          signupConfig={meta.signup}
+                          webchat={meta.webchat}
+                        />
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -817,60 +848,99 @@ function FormsTab({
 // LOGO UPLOAD FIELD
 // =============================================================================
 
-function LogoUploadField({ 
-  value, 
-  onChange 
-}: { 
-  value: string; 
+const IMAGE_ICON = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+  </svg>
+);
+
+const MAX_IMAGE_DIMENSION = 1920;
+const JPEG_QUALITY = 0.8;
+const MAX_UPLOAD_MB = 10;
+
+function compressImage(file: File, maxDim: number, quality: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const ratio = Math.min(maxDim / width, maxDim / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas not supported')); return; }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
+    img.src = url;
+  });
+}
+
+function ImageUploadField({
+  value,
+  onChange,
+  maxSizeKB: _unused,
+  previewHeight = 'h-10',
+  previewAspect,
+  label = 'image',
+}: {
+  value: string;
   onChange: (v: string) => void;
+  maxSizeKB?: number;
+  previewHeight?: string;
+  previewAspect?: string;
+  label?: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [compressing, setCompressing] = useState(false);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     setError(null);
-    
-    // Validate file type
+
     if (!file.type.startsWith('image/')) {
       setError('Please select an image file');
       return;
     }
-    
-    // Validate file size (500KB limit)
-    if (file.size > 500 * 1024) {
-      setError('Image must be under 500KB');
+
+    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+      setError(`Image must be under ${MAX_UPLOAD_MB}MB`);
       return;
     }
-    
-    // Convert to base64
-    const reader = new FileReader();
-    reader.onload = () => {
-      onChange(reader.result as string);
-    };
-    reader.onerror = () => {
-      setError('Failed to read file');
-    };
-    reader.readAsDataURL(file);
+
+    try {
+      setCompressing(true);
+      const dataUrl = await compressImage(file, MAX_IMAGE_DIMENSION, JPEG_QUALITY);
+      onChange(dataUrl);
+    } catch {
+      setError('Failed to process image');
+    } finally {
+      setCompressing(false);
+    }
   };
 
   const isDataUrl = value?.startsWith('data:');
 
   return (
     <div className="space-y-2">
-      {/* Preview thumbnail if logo exists */}
       {value && (
         <div className="flex items-center gap-3 p-2 bg-zinc-900 rounded border border-zinc-700">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img 
-            src={value} 
-            alt="Logo preview" 
-            className="h-10 w-auto max-w-[120px] object-contain rounded"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
+          <img
+            src={value}
+            alt={`${label} preview`}
+            className={`${previewHeight} ${previewAspect ?? 'w-auto max-w-[120px]'} object-cover rounded`}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
           <div className="flex-1 min-w-0">
             <p className="text-xs text-zinc-400 truncate">
@@ -881,7 +951,7 @@ function LogoUploadField({
             type="button"
             onClick={() => onChange('')}
             className="p-1 text-zinc-500 hover:text-red-400 transition-colors"
-            title="Remove logo"
+            title={`Remove ${label}`}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -889,31 +959,26 @@ function LogoUploadField({
           </button>
         </div>
       )}
-      
-      {/* Upload and URL input row */}
+
       <div className="flex gap-2">
-        {/* Hidden file input */}
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          accept="image/*" 
-          onChange={handleFileChange} 
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept="image/*"
+          onChange={handleFileChange}
           className="hidden"
         />
-        
-        {/* Upload button */}
+
         <button
           type="button"
+          disabled={compressing}
           onClick={() => fileInputRef.current?.click()}
-          className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-sm text-zinc-300 transition-colors flex items-center gap-2 shrink-0"
+          className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 border border-zinc-700 rounded text-sm text-zinc-300 transition-colors flex items-center gap-2 shrink-0"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          Upload
+          {IMAGE_ICON}
+          {compressing ? 'Compressing…' : 'Upload'}
         </button>
-        
-        {/* URL input */}
+
         <input
           type="text"
           value={isDataUrl ? '' : value}
@@ -926,11 +991,100 @@ function LogoUploadField({
           }`}
         />
       </div>
-      
-      {/* Error message */}
+
       {error && (
         <p className="text-xs text-red-400">{error}</p>
       )}
+    </div>
+  );
+}
+
+function LogoUploadField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return <ImageUploadField value={value} onChange={onChange} maxSizeKB={500} label="logo" />;
+}
+
+function GalleryAddImage({ onAdd }: { onAdd: (url: string) => void }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [urlInput, setUrlInput] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [compressing, setCompressing] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file');
+      return;
+    }
+    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+      setError(`Image must be under ${MAX_UPLOAD_MB}MB`);
+      return;
+    }
+
+    try {
+      setCompressing(true);
+      const dataUrl = await compressImage(file, MAX_IMAGE_DIMENSION, JPEG_QUALITY);
+      onAdd(dataUrl);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch {
+      setError('Failed to process image');
+    } finally {
+      setCompressing(false);
+    }
+  };
+
+  const handleUrlAdd = () => {
+    const trimmed = urlInput.trim();
+    if (!trimmed) return;
+    if (!isValidLogoUrl(trimmed)) {
+      setError('Enter a valid https:// URL');
+      return;
+    }
+    setError(null);
+    onAdd(trimmed);
+    setUrlInput('');
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept="image/*"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+        <button
+          type="button"
+          disabled={compressing}
+          onClick={() => fileInputRef.current?.click()}
+          className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 border border-zinc-700 rounded text-sm text-zinc-300 transition-colors flex items-center gap-2 shrink-0"
+        >
+          {IMAGE_ICON}
+          {compressing ? 'Compressing…' : 'Upload'}
+        </button>
+        <input
+          type="text"
+          value={urlInput}
+          onChange={(e) => setUrlInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleUrlAdd(); } }}
+          placeholder="Or paste https:// image URL"
+          className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm font-mono text-white focus:border-amber-500/50 outline-none transition-colors"
+        />
+        {urlInput.trim() && (
+          <button
+            type="button"
+            onClick={handleUrlAdd}
+            className="px-3 py-2 bg-amber-600 hover:bg-amber-500 rounded text-sm text-white transition-colors shrink-0"
+          >
+            Add
+          </button>
+        )}
+      </div>
+      {error && <p className="text-xs text-red-400">{error}</p>}
     </div>
   );
 }
@@ -1050,12 +1204,14 @@ function BuildTab({
   registeredForms,
   selectedForm,
   onSelectForm,
+  agents,
 }: { 
   meta: RevlineMeta; 
   updateMeta: (m: RevlineMeta) => void;
   registeredForms: RegisteredForm[];
   selectedForm: string;
   onSelectForm: (formId: string) => void;
+  agents?: Record<string, string>;
 }) {
   const enabledFormIds = Object.keys(meta.forms).filter(id => meta.forms[id]?.enabled);
   const selectedFormInfo = registeredForms.find(f => f.id === selectedForm);
@@ -1091,27 +1247,31 @@ function BuildTab({
         </div>
       </div>
 
-      {/* Form-specific Copy Section */}
+      {/* Form-specific Copy + Typography Section */}
       {isBookingForm && (
-        <BookingCopySection meta={meta} updateMeta={updateMeta} />
+        <>
+          <BookingCopySection meta={meta} updateMeta={updateMeta} />
+          <TypographySection meta={meta} updateMeta={updateMeta} formType="booking" />
+        </>
       )}
       
       {isSignupForm && (
         <>
           <SignupCopySection meta={meta} updateMeta={updateMeta} />
           <SignupConfigSection meta={meta} updateMeta={updateMeta} />
+          <TypographySection meta={meta} updateMeta={updateMeta} formType="signup" />
         </>
       )}
 
       {isLandingForm && (
-        <LandingBuildSection meta={meta} updateMeta={updateMeta} />
+        <>
+          <LandingBuildSection meta={meta} updateMeta={updateMeta} agents={agents} />
+          <TypographySection meta={meta} updateMeta={updateMeta} formType="landing" />
+        </>
       )}
       
       {/* Theme Mapping */}
       <ThemeSection meta={meta} updateMeta={updateMeta} />
-
-      {/* Typography (includes header style) */}
-      <TypographySection meta={meta} updateMeta={updateMeta} />
 
       {/* Fallback for unknown form types */}
       {!isBookingForm && !isSignupForm && !isLandingForm && selectedForm && (
@@ -1245,16 +1405,28 @@ const FONT_FAMILY_OPTIONS: { value: string; label: string }[] = [
 function TypographySection({
   meta,
   updateMeta,
+  formType,
 }: {
   meta: RevlineMeta;
   updateMeta: (m: RevlineMeta) => void;
+  formType: string;
 }) {
-  const typo = meta.typography ?? {};
-  const hs = meta.headerStyle || {};
+  const ps = meta.pageStyles?.[formType];
+  const typo = ps?.typography ?? {};
+  const hs = ps?.headerStyle || {};
 
-  const updateRole = (role: keyof TypographyConfig, field: keyof TextRoleStyle, value: string) => {
+  const updatePageStyle = (updates: Partial<PageStyleOverrides>) => {
     updateMeta({
       ...meta,
+      pageStyles: {
+        ...meta.pageStyles,
+        [formType]: { ...ps, ...updates },
+      },
+    });
+  };
+
+  const updateRole = (role: keyof TypographyConfig, field: keyof TextRoleStyle, value: string) => {
+    updatePageStyle({
       typography: {
         ...typo,
         [role]: { ...(typo[role] || {}), [field]: value },
@@ -1270,11 +1442,12 @@ function TypographySection({
   };
 
   const updateHeaderStyle = (field: keyof HeaderStyleConfig, value: string | boolean) => {
-    updateMeta({
-      ...meta,
+    updatePageStyle({
       headerStyle: { ...hs, [field]: value },
     });
   };
+
+  const showHeaderText = formType !== 'landing';
 
   return (
     <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
@@ -1332,7 +1505,7 @@ function TypographySection({
         })}
       </div>
 
-      {/* Header name style — divider */}
+      {/* Header name style */}
       <div className="border-t border-zinc-800 mt-4 pt-4">
         <h5 className="text-sm font-medium text-zinc-300 mb-1">Header Name</h5>
         <p className="text-xs text-zinc-500 mb-3">Workspace name in the top bar when no logo is set</p>
@@ -1382,34 +1555,35 @@ function TypographySection({
           </label>
         </div>
 
-        {/* Header right-side text */}
-        <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-zinc-800/50">
-          <div className="min-w-0 flex-1">
-            <span className="text-sm text-zinc-300">Header Text</span>
-            <span className="text-xs text-zinc-600 ml-2 hidden sm:inline">Right-side link/label</span>
+        {showHeaderText && (
+          <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-zinc-800/50">
+            <div className="min-w-0 flex-1">
+              <span className="text-sm text-zinc-300">Header Text</span>
+              <span className="text-xs text-zinc-600 ml-2 hidden sm:inline">Right-side link/label</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={hs.textSize || DEFAULT_HEADER_STYLE.textSize}
+                onChange={(e) => updateHeaderStyle('textSize', e.target.value)}
+                className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors"
+              >
+                <option value="xs">XS</option>
+                <option value="sm">SM</option>
+                <option value="base">Base</option>
+                <option value="lg">LG</option>
+              </select>
+              <select
+                value={hs.textWeight || DEFAULT_HEADER_STYLE.textWeight}
+                onChange={(e) => updateHeaderStyle('textWeight', e.target.value)}
+                className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors"
+              >
+                {WEIGHT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={hs.textSize || DEFAULT_HEADER_STYLE.textSize}
-              onChange={(e) => updateHeaderStyle('textSize', e.target.value)}
-              className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors"
-            >
-              <option value="xs">XS</option>
-              <option value="sm">SM</option>
-              <option value="base">Base</option>
-              <option value="lg">LG</option>
-            </select>
-            <select
-              value={hs.textWeight || DEFAULT_HEADER_STYLE.textWeight}
-              onChange={(e) => updateHeaderStyle('textWeight', e.target.value)}
-              className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors"
-            >
-              {WEIGHT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -2189,6 +2363,18 @@ const HERO_FIELDS = ['heroHeadline', 'heroSubhead', 'heroCtaText', 'phoneNumber'
 const FORM_FIELDS_KEYS = ['contactTitle', 'contactSubhead', 'contactSubmitText', 'contactSuccessMessage', 'consentText'];
 const FOOTER_FIELDS = ['footerText', 'footerEmail'];
 
+const IMAGE_POSITION_OPTIONS: { value: string; label: string }[] = [
+  { value: 'center', label: 'Center' },
+  { value: 'top', label: 'Top' },
+  { value: 'bottom', label: 'Bottom' },
+  { value: 'left', label: 'Left' },
+  { value: 'right', label: 'Right' },
+  { value: 'top left', label: 'Top Left' },
+  { value: 'top right', label: 'Top Right' },
+  { value: 'bottom left', label: 'Bottom Left' },
+  { value: 'bottom right', label: 'Bottom Right' },
+];
+
 const FIELD_TYPE_OPTIONS: { value: 'text' | 'email' | 'tel' | 'textarea'; label: string }[] = [
   { value: 'text', label: 'Text' },
   { value: 'email', label: 'Email' },
@@ -2197,17 +2383,24 @@ const FIELD_TYPE_OPTIONS: { value: 'text' | 'email' | 'tel' | 'textarea'; label:
 ];
 
 const MAX_FORM_FIELDS = 10;
+const MAX_GALLERY_IMAGES = 9;
+const MAX_SERVICES = 6;
 
 function LandingBuildSection({
   meta,
   updateMeta,
+  agents,
 }: {
   meta: RevlineMeta;
   updateMeta: (m: RevlineMeta) => void;
+  agents?: Record<string, string>;
 }) {
   const landingCopy = meta.copy?.landing || {};
   const sections = landingCopy.sections || { hero: true, services: true, gallery: true, footer: true };
   const fields = landingCopy.formFields || DEFAULT_LANDING_COPY.formFields;
+  const galleryImages: LandingImageEntry[] = (landingCopy.images || []).map(
+    entry => typeof entry === 'string' ? { url: entry } : entry
+  );
 
   function updateCopy(field: string, value: string) {
     updateMeta({
@@ -2256,10 +2449,119 @@ function LandingBuildSection({
     updateFields(next);
   }
 
+  function updateGalleryImages(images: LandingImageEntry[]) {
+    updateMeta({
+      ...meta,
+      copy: { ...meta.copy, landing: { ...landingCopy, images } },
+    });
+  }
+
+  function addGalleryImage(url: string) {
+    if (galleryImages.length >= MAX_GALLERY_IMAGES) return;
+    updateGalleryImages([...galleryImages, { url }]);
+  }
+
+  function removeGalleryImage(index: number) {
+    updateGalleryImages(galleryImages.filter((_, i) => i !== index));
+  }
+
+  function moveGalleryImage(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= galleryImages.length) return;
+    const next = [...galleryImages];
+    [next[index], next[target]] = [next[target], next[index]];
+    updateGalleryImages(next);
+  }
+
+  function updateGalleryImagePosition(index: number, position: string) {
+    const next = [...galleryImages];
+    next[index] = { ...next[index], position };
+    updateGalleryImages(next);
+  }
+
+  type ServiceEntry = { title: string; description: string; image?: string; ctaLink?: string };
+  const services: ServiceEntry[] = landingCopy.services || DEFAULT_LANDING_COPY.services;
+
+  function updateServices(next: ServiceEntry[]) {
+    updateMeta({
+      ...meta,
+      copy: { ...meta.copy, landing: { ...landingCopy, services: next } },
+    });
+  }
+
+  function updateServiceAt(index: number, updates: Partial<ServiceEntry>) {
+    const next = [...services];
+    next[index] = { ...next[index], ...updates };
+    updateServices(next);
+  }
+
+  function addService() {
+    if (services.length >= MAX_SERVICES) return;
+    updateServices([...services, { title: 'New Service', description: 'A brief description of this service.' }]);
+  }
+
+  function removeService(index: number) {
+    updateServices(services.filter((_, i) => i !== index));
+  }
+
+  function moveService(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= services.length) return;
+    const next = [...services];
+    [next[index], next[target]] = [next[target], next[index]];
+    updateServices(next);
+  }
+
   function renderCopyField(key: string) {
     const schema = LANDING_COPY_SCHEMA.fields.find(f => f.key === key);
     if (!schema) return null;
     const val = (landingCopy as Record<string, string>)[key] || '';
+
+    if (key === 'heroBackgroundImage') {
+      return (
+        <div key={key} className="space-y-3">
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1.5">{schema.label}</label>
+            <ImageUploadField
+              value={val}
+              onChange={(v) => updateCopy(key, v)}
+              maxSizeKB={2048}
+              previewHeight="h-20"
+              previewAspect="w-40 aspect-video"
+              label="hero background"
+            />
+            <p className="text-xs text-zinc-600 mt-1">{schema.description}</p>
+          </div>
+          {val && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-zinc-400 block mb-1">Position</label>
+                <select
+                  value={landingCopy.heroBackgroundPosition || 'center'}
+                  onChange={(e) => updateCopy('heroBackgroundPosition', e.target.value)}
+                  className="w-full px-2 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors"
+                >
+                  {IMAGE_POSITION_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-zinc-400 block mb-1">Size</label>
+                <select
+                  value={landingCopy.heroBackgroundSize || 'cover'}
+                  onChange={(e) => updateCopy('heroBackgroundSize', e.target.value)}
+                  className="w-full px-2 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors"
+                >
+                  <option value="cover">Cover (fill, may crop)</option>
+                  <option value="contain">Contain (fit, may letterbox)</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
 
     return (
       <div key={key}>
@@ -2399,7 +2701,86 @@ function LandingBuildSection({
       >
         <div className="space-y-4">
           {renderCopyField('servicesTitle')}
-          <p className="text-xs text-zinc-500">Service cards are configured via JSON for now. Toggle this section on/off to show or hide it on the landing page.</p>
+
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-zinc-500">
+              {services.length}/{MAX_SERVICES} services
+            </p>
+          </div>
+
+          {services.map((svc, i) => (
+            <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-500 font-mono w-5 shrink-0">{i + 1}</span>
+                <input
+                  type="text"
+                  value={svc.title}
+                  onChange={(e) => updateServiceAt(i, { title: e.target.value })}
+                  className="flex-1 bg-zinc-800 text-white text-sm rounded px-2 py-1 border border-zinc-700 focus:border-blue-500 focus:outline-none"
+                  placeholder="Service title"
+                />
+                <button type="button" onClick={() => moveService(i, -1)} disabled={i === 0}
+                  className="p-1 text-zinc-500 hover:text-white disabled:opacity-30 transition-colors" title="Move up">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7"/></svg>
+                </button>
+                <button type="button" onClick={() => moveService(i, 1)} disabled={i === services.length - 1}
+                  className="p-1 text-zinc-500 hover:text-white disabled:opacity-30 transition-colors" title="Move down">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <button type="button" onClick={() => removeService(i)}
+                  className="p-1 text-zinc-500 hover:text-red-400 transition-colors" title="Remove service">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              </div>
+
+              <textarea
+                value={svc.description}
+                onChange={(e) => updateServiceAt(i, { description: e.target.value })}
+                rows={2}
+                className="w-full bg-zinc-800 text-white text-sm rounded px-2 py-1 border border-zinc-700 focus:border-blue-500 focus:outline-none resize-none"
+                placeholder="Short description (shown on hover)"
+              />
+
+              <div className="space-y-1">
+                <label className="text-xs text-zinc-500">Image (optional)</label>
+                <ImageUploadField
+                  value={svc.image || ''}
+                  onChange={(v) => updateServiceAt(i, { image: v || undefined })}
+                  maxSizeKB={2048}
+                  previewHeight="h-16"
+                  previewAspect="aspect-video w-28"
+                  label="service image"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs text-zinc-500">CTA Link</label>
+                <input
+                  type="text"
+                  value={svc.ctaLink || ''}
+                  onChange={(e) => updateServiceAt(i, { ctaLink: e.target.value || undefined })}
+                  className="w-full bg-zinc-800 text-white text-sm rounded px-2 py-1 border border-zinc-700 focus:border-blue-500 focus:outline-none"
+                  placeholder="#contact (default)"
+                />
+              </div>
+            </div>
+          ))}
+
+          {services.length < MAX_SERVICES && (
+            <button type="button" onClick={addService}
+              className="w-full py-2 border border-dashed border-zinc-700 rounded-lg text-xs text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
+              + Add Service
+            </button>
+          )}
+
+          {services.length > 0 && (
+            <div className="pt-2 border-t border-zinc-800/50">
+              <button type="button" onClick={() => updateServices(DEFAULT_LANDING_COPY.services)}
+                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+                Reset services to defaults
+              </button>
+            </div>
+          )}
         </div>
       </CollapsibleSection>
 
@@ -2409,7 +2790,83 @@ function LandingBuildSection({
         enabled={sections.gallery}
         onToggle={(v) => updateSections({ gallery: v })}
       >
-        <p className="text-xs text-zinc-500">Image gallery management coming soon. Toggle this section on/off to show or hide it on the landing page.</p>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-zinc-500">
+              {galleryImages.length}/{MAX_GALLERY_IMAGES} images
+            </p>
+          </div>
+
+          {galleryImages.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {galleryImages.map((img, i) => (
+                <div key={i} className="group relative bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+                  <div className="aspect-video">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.url}
+                      alt={`Gallery ${i + 1}`}
+                      className="w-full h-full object-cover"
+                      style={{ objectPosition: img.position || 'center' }}
+                      onError={(e) => {
+                        const el = e.target as HTMLImageElement;
+                        el.style.display = 'none';
+                        el.parentElement!.classList.add('flex', 'items-center', 'justify-center');
+                        const span = document.createElement('span');
+                        span.className = 'text-xs text-zinc-600';
+                        span.textContent = 'Failed to load';
+                        el.parentElement!.appendChild(span);
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
+                      <button
+                        type="button"
+                        onClick={() => moveGalleryImage(i, -1)}
+                        disabled={i === 0}
+                        className="p-1.5 bg-zinc-800/90 rounded text-zinc-300 hover:text-white disabled:text-zinc-600 text-xs"
+                        title="Move left"
+                      >
+                        ←
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveGalleryImage(i, 1)}
+                        disabled={i === galleryImages.length - 1}
+                        className="p-1.5 bg-zinc-800/90 rounded text-zinc-300 hover:text-white disabled:text-zinc-600 text-xs"
+                        title="Move right"
+                      >
+                        →
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeGalleryImage(i)}
+                        className="p-1.5 bg-zinc-800/90 rounded text-red-400 hover:text-red-300 text-xs"
+                        title="Remove image"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                  <div className="px-2 py-1.5 border-t border-zinc-800">
+                    <select
+                      value={img.position || 'center'}
+                      onChange={(e) => updateGalleryImagePosition(i, e.target.value)}
+                      className="w-full px-1.5 py-1 bg-zinc-900 border border-zinc-700 rounded text-[10px] text-zinc-300 focus:border-amber-500/50 outline-none transition-colors"
+                    >
+                      {IMAGE_POSITION_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {galleryImages.length < MAX_GALLERY_IMAGES && (
+            <GalleryAddImage onAdd={addGalleryImage} />
+          )}
+        </div>
       </CollapsibleSection>
 
       {/* Footer Section */}
@@ -2420,6 +2877,43 @@ function LandingBuildSection({
       >
         <div className="space-y-4">
           {FOOTER_FIELDS.map(renderCopyField)}
+        </div>
+      </CollapsibleSection>
+
+      {/* Webchat Section */}
+      <CollapsibleSection
+        title="Webchat"
+        enabled={meta.webchat?.enabled ?? false}
+        onToggle={(v) => updateMeta({ ...meta, webchat: { ...meta.webchat, agentId: meta.webchat?.agentId || '', enabled: v } })}
+      >
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-400">Agent</label>
+            {agents && Object.keys(agents).length > 0 ? (
+              <select
+                value={meta.webchat?.agentId || ''}
+                onChange={(e) => updateMeta({ ...meta, webchat: { ...meta.webchat, agentId: e.target.value, enabled: meta.webchat?.enabled ?? false } })}
+                className="w-full bg-zinc-800 text-white text-sm rounded px-2 py-1.5 border border-zinc-700 focus:border-blue-500 focus:outline-none"
+              >
+                <option value="">Select an agent...</option>
+                {Object.entries(agents).map(([id, name]) => (
+                  <option key={id} value={id}>{name}</option>
+                ))}
+              </select>
+            ) : (
+              <p className="text-xs text-zinc-500">No agents configured. Create an agent in the Agents tab first.</p>
+            )}
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={meta.webchat?.collectEmail ?? false}
+              onChange={(e) => updateMeta({ ...meta, webchat: { ...meta.webchat, agentId: meta.webchat?.agentId || '', enabled: meta.webchat?.enabled ?? false, collectEmail: e.target.checked } })}
+              className="rounded bg-zinc-800 border-zinc-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+            />
+            <span className="text-sm text-zinc-300">Collect visitor email before chat</span>
+          </label>
         </div>
       </CollapsibleSection>
     </div>

@@ -1,5 +1,5 @@
 /**
- * Check if a formId is in use by another client
+ * Check if a formId is in use by another workspace
  * 
  * GET /api/v1/check-form-id?formId=xxx&excludeClientId=xxx
  */
@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
-import { IntegrationType } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { RevlineMeta } from '@/app/_lib/types';
 
 export async function GET(request: NextRequest) {
@@ -24,35 +24,27 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Find all RevLine integrations
-    const revlineIntegrations = await prisma.workspaceIntegration.findMany({
+    const workspaces = await prisma.workspace.findMany({
       where: {
-        integration: IntegrationType.REVLINE,
-        ...(excludeClientId && { workspaceId: { not: excludeClientId } }),
+        pagesConfig: { not: Prisma.JsonNull },
+        ...(excludeClientId && { id: { not: excludeClientId } }),
       },
-      include: {
-        workspace: {
-          select: { id: true, name: true, slug: true },
-        },
-      },
+      select: { id: true, name: true, slug: true, pagesConfig: true },
     });
 
-    // Find one that has this formId enabled
-    const matchingIntegration = revlineIntegrations.find(integration => {
-      const meta = integration.meta as RevlineMeta | null;
+    const match = workspaces.find(ws => {
+      const meta = ws.pagesConfig as unknown as RevlineMeta | null;
       if (!meta?.forms) return false;
-      
-      const formConfig = meta.forms[formId];
-      return formConfig?.enabled === true;
+      return meta.forms[formId]?.enabled === true;
     });
 
-    if (matchingIntegration) {
+    if (match) {
       return NextResponse.json({
         inUse: true,
         workspace: {
-          id: matchingIntegration.workspace.id,
-          name: matchingIntegration.workspace.name,
-          slug: matchingIntegration.workspace.slug,
+          id: match.id,
+          name: match.name,
+          slug: match.slug,
         },
       });
     }

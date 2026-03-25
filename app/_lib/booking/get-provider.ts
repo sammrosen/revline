@@ -6,7 +6,7 @@
  */
 
 import { prisma } from '@/app/_lib/db';
-import { IntegrationType, Workspace, WorkspaceStatus } from '@prisma/client';
+import { IntegrationType, Prisma, Workspace, WorkspaceStatus } from '@prisma/client';
 import { BookingProvider, BookingProviderCapabilities } from './types';
 import { AbcIgniteBookingProvider } from './providers';
 import { RevlineMeta } from '@/app/_lib/types';
@@ -136,46 +136,34 @@ export async function hasBookingProvider(workspaceId: string): Promise<boolean> 
  * if (!workspace) notFound();
  */
 export async function getWorkspaceByFormId(formId: string): Promise<Workspace | null> {
-  // Find all RevLine integrations
-  const revlineIntegrations = await prisma.workspaceIntegration.findMany({
-    where: {
-      integration: IntegrationType.REVLINE,
-    },
-    include: {
-      workspace: true,
-    },
+  const workspaces = await prisma.workspace.findMany({
+    where: { pagesConfig: { not: Prisma.JsonNull } },
   });
-  
-  // Filter to those that have this formId enabled
-  const matchingIntegrations = revlineIntegrations.filter(integration => {
-    const meta = integration.meta as RevlineMeta | null;
+
+  const matching = workspaces.filter(ws => {
+    const meta = ws.pagesConfig as unknown as RevlineMeta | null;
     if (!meta?.forms) return false;
-    
-    const formConfig = meta.forms[formId];
-    return formConfig?.enabled === true;
+    return meta.forms[formId]?.enabled === true;
   });
-  
-  // No matches
-  if (matchingIntegrations.length === 0) {
+
+  if (matching.length === 0) {
     return null;
   }
-  
-  // Multiple matches - this is a configuration error
-  if (matchingIntegrations.length > 1) {
-    const workspaceNames = matchingIntegrations.map(i => i.workspace.name).join(', ');
+
+  if (matching.length > 1) {
+    const workspaceNames = matching.map(w => w.name).join(', ');
     throw new Error(
       `FormId "${formId}" is enabled for multiple workspaces: ${workspaceNames}. ` +
       `Each formId should only be enabled for one workspace to prevent data cross-contamination.`
     );
   }
-  
-  // Single match - return the workspace if active
-  const workspace = matchingIntegrations[0].workspace;
-  
+
+  const workspace = matching[0];
+
   if (workspace.status !== WorkspaceStatus.ACTIVE) {
-    return null; // Workspace exists but is paused
+    return null;
   }
-  
+
   return workspace;
 }
 

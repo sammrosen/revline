@@ -160,6 +160,7 @@ export default async function WorkspaceDetailPage({
           }}
           leadStages={workspace.leadStages as Array<{ key: string; label: string; color: string }> | undefined}
           leadPropertySchema={workspace.leadPropertySchema as LeadPropertyDefinition[] | null}
+          pagesConfig={workspace.pagesConfig as Record<string, unknown> | null}
         />
     </div>
   );

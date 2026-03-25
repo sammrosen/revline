@@ -14,7 +14,6 @@
  */
 
 import { prisma } from '@/app/_lib/db';
-import { IntegrationType } from '@prisma/client';
 import { 
   BrandingConfig, 
   BookingCopyConfig, 
@@ -167,16 +166,23 @@ export interface ResolvedLandingSections {
   footer: boolean;
 }
 
+export interface ResolvedLandingImage {
+  url: string;
+  position: string;
+}
+
 export interface ResolvedLandingCopy {
   heroHeadline: string;
   heroSubhead: string;
   heroCtaText: string;
   heroCtaLink: string;
   heroBackgroundImage: string;
+  heroBackgroundPosition: string;
+  heroBackgroundSize: string;
   phoneNumber: string;
   servicesTitle: string;
-  services: Array<{ title: string; description: string }>;
-  images: string[];
+  services: Array<{ title: string; description: string; image?: string; ctaLink?: string }>;
+  images: ResolvedLandingImage[];
   contactTitle: string;
   contactSubhead: string;
   contactSubmitText: string;
@@ -315,12 +321,14 @@ export class WorkspaceConfigService {
       ? { ...orgCopy, ...(meta?.copy?.booking || {}) }
       : meta?.copy?.booking;
 
+    const ps = meta?.pageStyles?.booking;
+
     return {
       workspaceId,
       branding: this.resolveBranding(mergedBranding),
       theme: this.resolveThemeMapping(meta?.theme),
-      headerStyle: this.resolveHeaderStyle(meta?.headerStyle),
-      typography: this.resolveTypography(meta?.typography),
+      headerStyle: this.resolveHeaderStyle(ps?.headerStyle ?? meta?.headerStyle),
+      typography: this.resolveTypography(ps?.typography ?? meta?.typography),
       features: this.resolveFeatures(meta?.features),
       copy: this.resolveBookingCopy(mergedCopy),
     };
@@ -352,13 +360,15 @@ export class WorkspaceConfigService {
     const mergedCopy = orgCopy
       ? { ...orgCopy, ...(signupConfig?.copy || {}) }
       : signupConfig?.copy;
-    
+
+    const ps = meta?.pageStyles?.signup;
+
     return {
       workspaceId,
       branding: this.resolveBranding(mergedBranding),
       theme: this.resolveThemeMapping(meta?.theme),
-      headerStyle: this.resolveHeaderStyle(meta?.headerStyle),
-      typography: this.resolveTypography(meta?.typography),
+      headerStyle: this.resolveHeaderStyle(ps?.headerStyle ?? meta?.headerStyle),
+      typography: this.resolveTypography(ps?.typography ?? meta?.typography),
       features: this.resolveFeatures(meta?.features),
       enabled: signupConfig?.enabled ?? false,
       club: this.resolveSignupClub(signupConfig?.club),
@@ -391,12 +401,14 @@ export class WorkspaceConfigService {
       ? { ...orgCopy, ...(meta?.copy?.landing || {}) }
       : meta?.copy?.landing;
 
+    const ps = meta?.pageStyles?.landing;
+
     return {
       workspaceId,
       branding: this.resolveBranding(mergedBranding),
       theme: this.resolveThemeMapping(meta?.theme),
-      headerStyle: this.resolveHeaderStyle(meta?.headerStyle),
-      typography: this.resolveTypography(meta?.typography),
+      headerStyle: this.resolveHeaderStyle(ps?.headerStyle ?? meta?.headerStyle),
+      typography: this.resolveTypography(ps?.typography ?? meta?.typography),
       features: this.resolveFeatures(meta?.features),
       copy: this.resolveLandingCopy(mergedCopy),
       webchat: meta?.webchat?.enabled ? meta.webchat : undefined,
@@ -409,25 +421,18 @@ export class WorkspaceConfigService {
    */
   private static async loadRevlineMeta(workspaceId: string): Promise<RevlineMeta | null> {
     try {
-      const integration = await prisma.workspaceIntegration.findUnique({
-        where: {
-          workspaceId_integration: {
-            workspaceId,
-            integration: IntegrationType.REVLINE,
-          },
-        },
-        select: {
-          meta: true,
-        },
+      const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { pagesConfig: true },
       });
 
-      if (!integration?.meta) {
+      if (!workspace?.pagesConfig) {
         return null;
       }
 
-      return integration.meta as unknown as RevlineMeta;
+      return workspace.pagesConfig as unknown as RevlineMeta;
     } catch (error) {
-      console.error('Failed to load RevLine config:', {
+      console.error('Failed to load pages config:', {
         workspaceId,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -862,11 +867,19 @@ export class WorkspaceConfigService {
    */
   private static readonly VALID_FIELD_TYPES = new Set(['text', 'email', 'tel', 'textarea']);
 
+  private static normalizeImages(raw: Array<string | { url: string; position?: string }>): ResolvedLandingImage[] {
+    return raw.map(entry =>
+      typeof entry === 'string'
+        ? { url: entry, position: 'center' }
+        : { url: entry.url, position: entry.position || 'center' }
+    );
+  }
+
   private static resolveLandingCopy(overrides?: LandingCopyConfig): ResolvedLandingCopy {
     const result: ResolvedLandingCopy = {
       ...DEFAULT_LANDING_COPY,
       services: DEFAULT_LANDING_COPY.services.map(s => ({ ...s })),
-      images: [...DEFAULT_LANDING_COPY.images],
+      images: this.normalizeImages(DEFAULT_LANDING_COPY.images),
       formFields: DEFAULT_LANDING_COPY.formFields.map(f => ({
         ...f,
         required: f.required ?? false,
@@ -899,6 +912,12 @@ export class WorkspaceConfigService {
     if (overrides.heroBackgroundImage && isValidLogoUrl(overrides.heroBackgroundImage)) {
       result.heroBackgroundImage = overrides.heroBackgroundImage;
     }
+    if (overrides.heroBackgroundPosition) {
+      result.heroBackgroundPosition = overrides.heroBackgroundPosition;
+    }
+    if (overrides.heroBackgroundSize) {
+      result.heroBackgroundSize = overrides.heroBackgroundSize;
+    }
     if (overrides.phoneNumber) {
       result.phoneNumber = sanitizeCopyText(overrides.phoneNumber, 20);
     }
@@ -909,12 +928,14 @@ export class WorkspaceConfigService {
       result.services = overrides.services.slice(0, 12).map(s => ({
         title: sanitizeCopyText(s.title || '', 60),
         description: sanitizeCopyText(s.description || '', 200),
+        ...(s.image && isValidLogoUrl(s.image) ? { image: s.image } : {}),
+        ...(s.ctaLink ? { ctaLink: sanitizeCopyText(s.ctaLink, 200) } : {}),
       }));
     }
     if (Array.isArray(overrides.images) && overrides.images.length > 0) {
-      result.images = overrides.images
-        .slice(0, 6)
-        .filter(url => isValidLogoUrl(url));
+      result.images = this.normalizeImages(overrides.images)
+        .slice(0, 9)
+        .filter(img => isValidLogoUrl(img.url));
     }
     if (overrides.contactTitle) {
       result.contactTitle = sanitizeCopyText(overrides.contactTitle, 60);

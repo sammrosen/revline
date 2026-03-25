@@ -388,16 +388,23 @@ export interface LandingSections {
   footer?: boolean;
 }
 
+export interface LandingImageEntry {
+  url: string;
+  position?: string;
+}
+
 export interface LandingCopyConfig {
   heroHeadline?: string;
   heroSubhead?: string;
   heroCtaText?: string;
   heroCtaLink?: string;
   heroBackgroundImage?: string;
+  heroBackgroundPosition?: string;
+  heroBackgroundSize?: string;
   phoneNumber?: string;
   servicesTitle?: string;
-  services?: Array<{ title: string; description: string }>;
-  images?: string[];
+  services?: Array<{ title: string; description: string; image?: string; ctaLink?: string }>;
+  images?: Array<string | LandingImageEntry>;
   contactTitle?: string;
   contactSubhead?: string;
   contactSubmitText?: string;
@@ -635,7 +642,6 @@ export interface TextRoleStyle {
 
 /**
  * Typography config — maps semantic text roles to size/weight.
- * Stored on RevlineMeta so it's shared across form types.
  *
  * Roles:
  * - sectionHeader: colored bar headings ("SELECT YOUR TRAINER", "Personal Info")
@@ -654,7 +660,6 @@ export interface TypographyConfig {
 
 /**
  * Controls how the workspace name renders in the header when no logo is set.
- * Stored on RevlineMeta so it's shared across form types.
  */
 export interface HeaderStyle {
   /** pill = white badge (default), plain = just text on header bg */
@@ -671,6 +676,15 @@ export interface HeaderStyle {
   textWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
 }
 
+/**
+ * Per-page style overrides — typography and header style per form type.
+ * Takes priority over root-level typography/headerStyle when present.
+ */
+export interface PageStyleOverrides {
+  typography?: TypographyConfig;
+  headerStyle?: HeaderStyle;
+}
+
 export interface RevlineMeta {
   /** Enabled forms - each becomes a workflow trigger (formId = trigger operation) */
   forms: Record<string, { 
@@ -684,10 +698,12 @@ export interface RevlineMeta {
   branding?: BrandingConfig;
   /** Theme mapping — assigns palette colors to form elements */
   theme?: ThemeMapping;
-  /** Header name/logo style */
+  /** Header name/logo style (fallback when pageStyles not set) */
   headerStyle?: HeaderStyle;
-  /** Typography — size/weight per text role */
+  /** Typography — size/weight per text role (fallback when pageStyles not set) */
   typography?: TypographyConfig;
+  /** Per-page style overrides keyed by form type (landing, booking, signup) */
+  pageStyles?: Record<string, PageStyleOverrides>;
   /** Copy configuration per template */
   copy?: CopyConfig;
   /** Feature flags */

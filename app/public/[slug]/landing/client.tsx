@@ -165,33 +165,37 @@ export function LandingClient({
   const hasBackgroundImage = !!copy.heroBackgroundImage;
   const sections = copy.sections ?? { hero: true, services: true, gallery: true, footer: true };
 
-  const headerNameStyle: React.CSSProperties = {
-    ...(headerStyle?.bold ? { fontWeight: 700 } : { fontWeight: 700 }),
-    ...(headerStyle?.italic ? { fontStyle: 'italic' } : {}),
-  };
+  const hs = headerStyle || {};
+  const hsSizeClass = { sm: 'text-sm', base: 'text-base', lg: 'text-lg', xl: 'text-xl' }[hs.size || 'base'] || 'text-base';
+  const hsWeightClass = (hs.bold ?? true) ? 'font-bold' : 'font-normal';
+  const hsItalicClass = hs.italic ? 'italic' : '';
+  const hsVariant = hs.variant || 'plain';
 
   return (
     <div style={{ fontFamily }} className="min-h-screen">
       {/* Sticky Header */}
       <header
-        className="fixed top-0 left-0 right-0 z-50 transition-colors duration-300"
-        style={{ backgroundColor: scrolled ? brand.header : 'transparent' }}
+        className="fixed top-0 left-0 right-0 z-50 transition-all duration-300"
+        style={{
+          backgroundColor: brand.header,
+          boxShadow: scrolled ? '0 1px 3px rgba(0,0,0,.25)' : 'none',
+        }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            {branding.logo && (
+            {branding.logo ? (
               <img
                 src={branding.logo}
                 alt={workspaceName}
                 className="h-8 sm:h-10 w-auto object-contain shrink-0"
               />
+            ) : hsVariant === 'pill' ? (
+              <div className="bg-white px-3 py-2 rounded shrink-0">
+                <span className={`text-zinc-800 ${hsSizeClass} ${hsWeightClass} ${hsItalicClass}`}>{workspaceName.toUpperCase()}</span>
+              </div>
+            ) : (
+              <span className={`text-white ${hsSizeClass} ${hsWeightClass} ${hsItalicClass} truncate`}>{workspaceName}</span>
             )}
-            <span
-              className="text-white text-base sm:text-lg truncate"
-              style={headerNameStyle}
-            >
-              {workspaceName}
-            </span>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {copy.phoneNumber && (
@@ -224,8 +228,13 @@ export function LandingClient({
         >
           {hasBackgroundImage && (
             <div
-              className="absolute inset-0 bg-cover bg-center"
-              style={{ backgroundImage: `url(${copy.heroBackgroundImage})` }}
+              className="absolute inset-0"
+              style={{
+                backgroundImage: `url(${copy.heroBackgroundImage})`,
+                backgroundPosition: copy.heroBackgroundPosition || 'center',
+                backgroundSize: copy.heroBackgroundSize || 'cover',
+                backgroundRepeat: 'no-repeat',
+              }}
             >
               <div className="absolute inset-0 bg-black/60" />
             </div>
@@ -356,32 +365,76 @@ export function LandingClient({
             >
               {copy.servicesTitle}
             </h2>
-            <div className={`grid gap-8 ${
+            <div className={`grid gap-4 ${
               copy.services.length === 1 ? 'grid-cols-1 max-w-lg mx-auto' :
               copy.services.length === 2 ? 'grid-cols-1 sm:grid-cols-2 max-w-4xl mx-auto' :
+              copy.services.length <= 4 ? 'grid-cols-1 sm:grid-cols-2' :
               'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
             }`}>
               {copy.services.map((service, i) => (
-                <div
-                  key={i}
-                  style={{ backgroundColor: brand.card, borderColor: brand.border }}
-                  className="rounded-xl p-6 sm:p-8 border"
-                >
+                service.image ? (
                   <div
-                    style={{ backgroundColor: brand.primary + '15' }}
-                    className="w-12 h-12 rounded-lg flex items-center justify-center mb-4"
+                    key={i}
+                    className="group relative rounded-xl overflow-hidden"
+                    style={{ aspectRatio: '4/3' }}
                   >
-                    <svg className="w-6 h-6" style={{ color: brand.primary }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={service.image}
+                      alt={service.title}
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-linear-to-t from-black/70 via-black/20 to-transparent" />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center p-6">
+                      <p className="text-white text-sm sm:text-base text-center leading-relaxed">
+                        {service.description}
+                      </p>
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 p-4 flex items-center justify-between">
+                      <h3 className="text-white font-bold text-lg sm:text-xl uppercase tracking-wide drop-shadow-lg">
+                        {service.title}
+                      </h3>
+                      <a
+                        href={service.ctaLink || '#contact'}
+                        onClick={(e) => {
+                          const href = service.ctaLink || '#contact';
+                          if (href.startsWith('#')) {
+                            e.preventDefault();
+                            document.querySelector(href)?.scrollIntoView({ behavior: 'smooth' });
+                          }
+                        }}
+                        className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-transform group-hover:scale-110"
+                        style={{ backgroundColor: brand.primary }}
+                        aria-label={`Go to ${service.title}`}
+                      >
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </a>
+                    </div>
                   </div>
-                  <h3 style={{ color: brand.text }} className="text-xl font-semibold mb-2">
-                    {service.title}
-                  </h3>
-                  <p style={{ color: brand.textMuted }} className="leading-relaxed">
-                    {service.description}
-                  </p>
-                </div>
+                ) : (
+                  <div
+                    key={i}
+                    style={{ backgroundColor: brand.card, borderColor: brand.border }}
+                    className="rounded-xl p-6 sm:p-8 border"
+                  >
+                    <div
+                      style={{ backgroundColor: brand.primary + '15' }}
+                      className="w-12 h-12 rounded-lg flex items-center justify-center mb-4"
+                    >
+                      <svg className="w-6 h-6" style={{ color: brand.primary }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <h3 style={{ color: brand.text }} className="text-xl font-semibold mb-2">
+                      {service.title}
+                    </h3>
+                    <p style={{ color: brand.textMuted }} className="leading-relaxed">
+                      {service.description}
+                    </p>
+                  </div>
+                )
               ))}
             </div>
           </div>
@@ -397,12 +450,13 @@ export function LandingClient({
               copy.images.length === 2 ? 'grid-cols-1 sm:grid-cols-2' :
               'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
             }`}>
-              {copy.images.map((url, i) => (
+              {copy.images.map((img, i) => (
                 <div key={i} className="overflow-hidden rounded-xl aspect-video">
                   <img
-                    src={url}
+                    src={img.url}
                     alt=""
                     className="w-full h-full object-cover"
+                    style={{ objectPosition: img.position || 'center' }}
                     loading="lazy"
                   />
                 </div>

@@ -26,6 +26,7 @@ export {
   type ResolvedSignupPolicies,
   type ResolvedSignupConfig,
   type ResolvedLandingCopy,
+  type ResolvedLandingImage,
   type ResolvedLandingFormField,
   type ResolvedLandingSections,
   type ResolvedLandingConfig,

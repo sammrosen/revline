@@ -216,6 +216,8 @@ export const DEFAULT_LANDING_COPY: Required<LandingCopyConfig> = {
   heroCtaText: 'Book Today',
   heroCtaLink: '#contact',
   heroBackgroundImage: '',
+  heroBackgroundPosition: 'center',
+  heroBackgroundSize: 'cover',
   phoneNumber: '',
   servicesTitle: 'What We Do',
   services: [
