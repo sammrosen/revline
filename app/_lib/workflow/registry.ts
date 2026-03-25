@@ -533,6 +533,23 @@ export const RESEND_ADAPTER: AdapterDefinition = {
         subject: z.string().optional().describe('Original email subject'),
       }),
     },
+    email_received: {
+      name: 'email_received',
+      label: 'Email Received',
+      description: 'Fires when an inbound email arrives (via Resend inbound webhook). Use to route to an agent or start a workflow.',
+      payloadSchema: z.object({
+        from: z.string().email().describe('Sender email address'),
+        to: z.string().email().describe('Recipient email address (your inbound address)'),
+        body: z.string().describe('Plain text body of the email'),
+        subject: z.string().optional().describe('Email subject line'),
+      }),
+      testFields: [
+        { name: 'from', label: 'From Email', type: 'email' as const, required: true },
+        { name: 'to', label: 'To Email', type: 'email' as const, required: true },
+        { name: 'body', label: 'Body', type: 'text' as const, required: true, placeholder: 'Email body text' },
+        { name: 'subject', label: 'Subject', type: 'text' as const, required: false, placeholder: 'Re: Hello' },
+      ],
+    },
   },
   actions: {
     send_email: {

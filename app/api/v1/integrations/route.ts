@@ -5,7 +5,6 @@ import { encryptSecret } from '@/app/_lib/crypto';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { IntegrationType, Prisma } from '@prisma/client';
 import { IntegrationSecret, SecretInput } from '@/app/_lib/types';
-import { INTEGRATIONS, type IntegrationTypeId } from '@/app/_lib/integrations/config';
 import { randomUUID } from 'crypto';
 import { getWorkspaceAccess, WorkspaceRole } from '@/app/_lib/workspace-access';
 
@@ -62,21 +61,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if this integration requires secrets (from config)
-    const integrationConfig = INTEGRATIONS[integration as IntegrationTypeId];
-    const requiresSecrets = integrationConfig?.secrets && integrationConfig.secrets.length > 0;
-
-    // Validate secrets only if required
+    // Filter to valid secret inputs (secrets are optional — draft integrations can be added without credentials)
     const validSecretInputs = secretInputs?.filter(
       (s: SecretInput) => s.name?.trim() && s.plaintextValue?.trim()
     ) || [];
-
-    if (requiresSecrets && validSecretInputs.length === 0) {
-      return NextResponse.json(
-        { error: 'secrets array is required with at least one secret' },
-        { status: 400 }
-      );
-    }
 
     // Validate each secret input (if any provided)
     for (const secret of validSecretInputs) {
@@ -135,7 +123,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Emit event
+    // Emit event (configured = has at least one secret for types that need them)
     await emitEvent({
       workspaceId,
       system: EventSystem.BACKEND,

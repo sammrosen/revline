@@ -371,6 +371,52 @@ export interface BookingCopyConfig {
 }
 
 /**
+ * Copy configuration for landing page template
+ */
+export interface LandingFormField {
+  id: string;
+  label: string;
+  type: 'text' | 'email' | 'tel' | 'textarea';
+  required?: boolean;
+  placeholder?: string;
+}
+
+export interface LandingSections {
+  hero?: boolean;
+  services?: boolean;
+  gallery?: boolean;
+  footer?: boolean;
+}
+
+export interface LandingImageEntry {
+  url: string;
+  position?: string;
+}
+
+export interface LandingCopyConfig {
+  heroHeadline?: string;
+  heroSubhead?: string;
+  heroCtaText?: string;
+  heroCtaLink?: string;
+  heroBackgroundImage?: string;
+  heroBackgroundPosition?: string;
+  heroBackgroundSize?: string;
+  phoneNumber?: string;
+  servicesTitle?: string;
+  services?: Array<{ title: string; description: string; image?: string; ctaLink?: string }>;
+  images?: Array<string | LandingImageEntry>;
+  contactTitle?: string;
+  contactSubhead?: string;
+  contactSubmitText?: string;
+  contactSuccessMessage?: string;
+  consentText?: string;
+  formFields?: LandingFormField[];
+  footerText?: string;
+  footerEmail?: string;
+  sections?: LandingSections;
+}
+
+/**
  * Copy configuration for all templates
  * Each template type has its own copy schema
  */
@@ -379,6 +425,8 @@ export interface CopyConfig {
   booking?: BookingCopyConfig;
   /** Signup template copy */
   signup?: SignupCopyConfig;
+  /** Landing page copy */
+  landing?: LandingCopyConfig;
 }
 
 /**
@@ -594,7 +642,6 @@ export interface TextRoleStyle {
 
 /**
  * Typography config — maps semantic text roles to size/weight.
- * Stored on RevlineMeta so it's shared across form types.
  *
  * Roles:
  * - sectionHeader: colored bar headings ("SELECT YOUR TRAINER", "Personal Info")
@@ -613,7 +660,6 @@ export interface TypographyConfig {
 
 /**
  * Controls how the workspace name renders in the header when no logo is set.
- * Stored on RevlineMeta so it's shared across form types.
  */
 export interface HeaderStyle {
   /** pill = white badge (default), plain = just text on header bg */
@@ -630,6 +676,15 @@ export interface HeaderStyle {
   textWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
 }
 
+/**
+ * Per-page style overrides — typography and header style per form type.
+ * Takes priority over root-level typography/headerStyle when present.
+ */
+export interface PageStyleOverrides {
+  typography?: TypographyConfig;
+  headerStyle?: HeaderStyle;
+}
+
 export interface RevlineMeta {
   /** Enabled forms - each becomes a workflow trigger (formId = trigger operation) */
   forms: Record<string, { 
@@ -643,16 +698,24 @@ export interface RevlineMeta {
   branding?: BrandingConfig;
   /** Theme mapping — assigns palette colors to form elements */
   theme?: ThemeMapping;
-  /** Header name/logo style */
+  /** Header name/logo style (fallback when pageStyles not set) */
   headerStyle?: HeaderStyle;
-  /** Typography — size/weight per text role */
+  /** Typography — size/weight per text role (fallback when pageStyles not set) */
   typography?: TypographyConfig;
+  /** Per-page style overrides keyed by form type (landing, booking, signup) */
+  pageStyles?: Record<string, PageStyleOverrides>;
   /** Copy configuration per template */
   copy?: CopyConfig;
   /** Feature flags */
   features?: WorkspaceFeatures;
   /** Signup/membership template configuration */
   signup?: SignupConfig;
+  /** Webchat widget configuration for landing pages */
+  webchat?: {
+    agentId: string;
+    enabled: boolean;
+    collectEmail?: boolean;
+  };
 }
 
 /**
@@ -1017,6 +1080,7 @@ export const RATE_LIMITS = {
   // Booking write limits - stricter to prevent abuse
   BOOKING_BY_IDENTIFIER: { requests: 3, windowMs: 15 * 60_000 },  // 3 per 15 minutes per identifier
   BOOKING_BY_IP: { requests: 5, windowMs: 10 * 60_000 },          // 5 per 10 minutes per IP
+  CHAT: { requests: 10, windowMs: 60_000 },                       // 10 per minute (webchat messages)
 } as const;
 
 export const TIMEOUTS = {

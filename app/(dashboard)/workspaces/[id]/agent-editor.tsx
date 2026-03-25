@@ -75,10 +75,14 @@ interface AgentEditorProps {
 
 const CHANNEL_TYPES = [
   { value: 'SMS', label: 'SMS' },
+  { value: 'EMAIL', label: 'Email' },
+  { value: 'WEB_CHAT', label: 'Web Chat' },
 ];
 
 const CHANNEL_INTEGRATIONS: Record<string, string[]> = {
   SMS: ['TWILIO'],
+  EMAIL: ['RESEND'],
+  WEB_CHAT: ['BUILT_IN'],
 };
 
 const AI_INTEGRATIONS = ['OPENAI', 'ANTHROPIC'];
@@ -487,7 +491,7 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
     }
   };
 
-  const hasChannelIntegration = integrations.some(
+  const hasChannelIntegration = data.channelType === 'WEB_CHAT' || integrations.some(
     (i) => i.integration === data.channelIntegration
   );
   const availableChannelIntegrations = CHANNEL_INTEGRATIONS[data.channelType] || [];
@@ -614,27 +618,63 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
                     ))}
                   </select>
                 </Field>
-                <Field label="Channel Integration" required>
-                  <select
-                    value={data.channelIntegration}
-                    onChange={(e) => setData({ ...data, channelIntegration: e.target.value })}
-                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
-                  >
-                    {availableChannelIntegrations.map((ci) => (
-                      <option key={ci} value={ci}>
-                        {ci}
-                      </option>
-                    ))}
-                  </select>
-                  {!hasChannelIntegration && data.channelIntegration && (
-                    <p className="text-xs text-amber-400 mt-1">
-                      {data.channelIntegration} is not configured for this workspace. Add it in Integrations first.
-                    </p>
-                  )}
-                </Field>
+                {data.channelType !== 'WEB_CHAT' && (
+                  <Field label="Channel Integration" required>
+                    <select
+                      value={data.channelIntegration}
+                      onChange={(e) => setData({ ...data, channelIntegration: e.target.value })}
+                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+                    >
+                      {availableChannelIntegrations.map((ci) => (
+                        <option key={ci} value={ci}>
+                          {ci}
+                        </option>
+                      ))}
+                    </select>
+                    {!hasChannelIntegration && data.channelIntegration && (
+                      <p className="text-xs text-amber-400 mt-1">
+                        {data.channelIntegration} is not configured for this workspace. Add it in Integrations first.
+                      </p>
+                    )}
+                  </Field>
+                )}
                 {hasChannelIntegration && (() => {
                   const channelInt = integrations.find((i) => i.integration === data.channelIntegration);
                   const meta = channelInt?.meta as Record<string, unknown> | null;
+
+                  if (data.channelType === 'WEB_CHAT') {
+                    return (
+                      <Field label="Channel" hint="Web Chat uses the built-in /api/v1/chat endpoint">
+                        <p className="text-xs text-zinc-400 bg-zinc-800/50 border border-zinc-700 rounded p-2">
+                          No external integration required. Messages are handled via the embedded webchat widget on your landing page.
+                        </p>
+                      </Field>
+                    );
+                  }
+
+                  if (data.channelType === 'EMAIL') {
+                    const configuredEmail = meta && typeof meta === 'object' && 'fromEmail' in meta
+                      ? (meta.fromEmail as string)
+                      : '';
+
+                    return (
+                      <Field label="Send From" required hint="Email address the agent sends from (must match Resend verified domain)">
+                        <input
+                          type="email"
+                          value={data.channelAddress || configuredEmail}
+                          onChange={(e) => setData({ ...data, channelAddress: e.target.value })}
+                          placeholder={configuredEmail || 'agent@yourdomain.com'}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+                        />
+                        {configuredEmail && !data.channelAddress && (
+                          <p className="text-xs text-zinc-500 mt-1">
+                            Using configured from-address: {configuredEmail}
+                          </p>
+                        )}
+                      </Field>
+                    );
+                  }
+
                   const phoneNumbers = meta && typeof meta === 'object' && 'phoneNumbers' in meta
                     ? (meta.phoneNumbers as Record<string, { number: string; label: string }>)
                     : null;
@@ -759,7 +799,7 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
             <textarea
               value={data.systemPrompt}
               onChange={(e) => setData({ ...data, systemPrompt: e.target.value })}
-              placeholder="You are a friendly sales assistant for [Business Name]. Your goal is to answer questions about our services, schedule appointments, and help leads become customers. Be concise since responses are sent via SMS."
+              placeholder="You are a friendly sales assistant for [Business Name]. Your goal is to answer questions about our services, schedule appointments, and help leads become customers."
               rows={8}
               className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder:text-zinc-600 focus:border-violet-500 focus:outline-none resize-y font-mono"
             />

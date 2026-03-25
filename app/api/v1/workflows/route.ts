@@ -119,6 +119,7 @@ export async function GET(request: NextRequest) {
           triggerAdapter: workflow.triggerAdapter,
           triggerOperation: workflow.triggerOperation,
           triggerFilter: workflow.triggerFilter,
+          actions: workflow.actions ?? [],
           actionsCount: (workflow.actions as unknown[])?.length || 0,
           totalExecutions: workflow._count.executions,
           recentStats: {

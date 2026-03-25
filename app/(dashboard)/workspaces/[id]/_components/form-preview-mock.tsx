@@ -1,15 +1,17 @@
 'use client';
 
-import type { SignupConfig, BookingCopyConfig } from '@/app/_lib/types';
+import type { SignupConfig, BookingCopyConfig, LandingCopyConfig } from '@/app/_lib/types';
 import { MagicLinkBookingClient } from '@/app/public/[slug]/book/client';
 import { SignupClient } from '@/app/public/[slug]/signup/client';
-import type { ResolvedBranding, ResolvedThemeMapping, ResolvedTypography, ResolvedBookingCopy, ResolvedFeatures } from '@/app/_lib/config';
+import { LandingClient } from '@/app/public/[slug]/landing/client';
+import type { ResolvedBranding, ResolvedThemeMapping, ResolvedTypography, ResolvedBookingCopy, ResolvedFeatures, ResolvedLandingCopy } from '@/app/_lib/config';
 import {
   DEFAULT_BRANDING,
   DEFAULT_THEME_MAPPING,
   DEFAULT_HEADER_STYLE,
   DEFAULT_TYPOGRAPHY,
   DEFAULT_BOOKING_COPY,
+  DEFAULT_LANDING_COPY,
   DEFAULT_FEATURES,
   DEFAULT_SIGNUP_COPY,
   DEFAULT_SIGNUP_CLUB,
@@ -69,9 +71,15 @@ interface MockPreviewProps {
   headerStyle?: HeaderStyleConfig;
   typography?: TypographyConfig;
   copy?: BookingCopyConfig;
+  landingCopy?: LandingCopyConfig;
   workspaceName: string;
-  formType: 'booking' | 'signup';
+  formType: 'booking' | 'signup' | 'landing';
   signupConfig?: SignupConfig;
+  webchat?: {
+    agentId: string;
+    enabled: boolean;
+    collectEmail?: boolean;
+  };
 }
 
 // =============================================================================
@@ -84,9 +92,11 @@ export function FormPreviewMock({
   headerStyle,
   typography,
   copy,
+  landingCopy,
   workspaceName,
   formType,
   signupConfig,
+  webchat,
 }: MockPreviewProps) {
   // Resolve branding with defaults (shared by both form types)
   const resolvedBranding: ResolvedBranding = {
@@ -139,6 +149,60 @@ export function FormPreviewMock({
       weight: typography?.caption?.weight || DEFAULT_TYPOGRAPHY.caption.weight,
     },
   };
+
+  if (formType === 'landing') {
+    const defaultFields = DEFAULT_LANDING_COPY.formFields.map(f => ({
+      ...f,
+      required: f.required ?? false,
+      placeholder: f.placeholder ?? '',
+    }));
+
+    const resolvedLandingCopy: ResolvedLandingCopy = {
+      heroHeadline: landingCopy?.heroHeadline || DEFAULT_LANDING_COPY.heroHeadline,
+      heroSubhead: landingCopy?.heroSubhead || DEFAULT_LANDING_COPY.heroSubhead,
+      heroCtaText: landingCopy?.heroCtaText || DEFAULT_LANDING_COPY.heroCtaText,
+      heroCtaLink: landingCopy?.heroCtaLink || DEFAULT_LANDING_COPY.heroCtaLink,
+      heroBackgroundImage: landingCopy?.heroBackgroundImage || DEFAULT_LANDING_COPY.heroBackgroundImage,
+      heroBackgroundPosition: landingCopy?.heroBackgroundPosition || DEFAULT_LANDING_COPY.heroBackgroundPosition,
+      heroBackgroundSize: landingCopy?.heroBackgroundSize || DEFAULT_LANDING_COPY.heroBackgroundSize,
+      phoneNumber: landingCopy?.phoneNumber || DEFAULT_LANDING_COPY.phoneNumber,
+      servicesTitle: landingCopy?.servicesTitle || DEFAULT_LANDING_COPY.servicesTitle,
+      services: landingCopy?.services?.length ? landingCopy.services : DEFAULT_LANDING_COPY.services,
+      images: (landingCopy?.images?.length ? landingCopy.images : DEFAULT_LANDING_COPY.images).map(
+        entry => typeof entry === 'string' ? { url: entry, position: 'center' } : { url: entry.url, position: entry.position || 'center' }
+      ),
+      contactTitle: landingCopy?.contactTitle || DEFAULT_LANDING_COPY.contactTitle,
+      contactSubhead: landingCopy?.contactSubhead || DEFAULT_LANDING_COPY.contactSubhead,
+      contactSubmitText: landingCopy?.contactSubmitText || DEFAULT_LANDING_COPY.contactSubmitText,
+      contactSuccessMessage: landingCopy?.contactSuccessMessage || DEFAULT_LANDING_COPY.contactSuccessMessage,
+      consentText: landingCopy?.consentText || DEFAULT_LANDING_COPY.consentText,
+      formFields: landingCopy?.formFields?.length
+        ? landingCopy.formFields.map(f => ({ ...f, required: f.required ?? false, placeholder: f.placeholder ?? '' }))
+        : defaultFields,
+      footerText: landingCopy?.footerText || DEFAULT_LANDING_COPY.footerText,
+      footerEmail: landingCopy?.footerEmail || DEFAULT_LANDING_COPY.footerEmail,
+      sections: {
+        hero: landingCopy?.sections?.hero ?? true,
+        services: landingCopy?.sections?.services ?? true,
+        gallery: landingCopy?.sections?.gallery ?? true,
+        footer: landingCopy?.sections?.footer ?? true,
+      },
+    };
+
+    return (
+      <LandingClient
+        workspaceSlug={workspaceName}
+        workspaceName={workspaceName}
+        branding={resolvedBranding}
+        theme={resolvedTheme}
+        headerStyle={resolvedHeaderStyle}
+        typography={resolvedTypography}
+        copy={resolvedLandingCopy}
+        features={DEFAULT_FEATURES}
+        webchat={webchat}
+      />
+    );
+  }
 
   if (formType === 'signup') {
     const plans = signupConfig?.plans?.length ? signupConfig.plans : [EXAMPLE_SIGNUP_PLAN];

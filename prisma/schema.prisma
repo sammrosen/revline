@@ -90,6 +90,10 @@ model Workspace {
   // Defines what custom properties leads in this workspace can have
   leadPropertySchema Json?    @map("lead_property_schema")
 
+  // Pages configuration (forms, branding, copy, theme, etc.)
+  // Replaces the old REVLINE integration meta -- pages are a built-in feature, not an integration
+  pagesConfig        Json?    @map("pages_config")
+
   organization       Organization?          @relation(fields: [organizationId], references: [id])
   members            WorkspaceMember[]
   assignments        WorkspaceAssignment[]

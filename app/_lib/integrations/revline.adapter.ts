@@ -1,11 +1,9 @@
 /**
- * RevLine Integration Adapter
+ * RevLine Pages Adapter
  * 
- * Handles RevLine internal configuration for a specific workspace.
- * Unlike other adapters, RevLine has no external API - it manages
- * internal configuration like forms and settings.
- * 
- * Secret names: None (internal system)
+ * Handles pages configuration for a specific workspace.
+ * Pages are a built-in platform feature (not an external integration).
+ * Config is stored directly on the workspace.pagesConfig column.
  * 
  * STANDARDS:
  * - Returns structured IntegrationResult for all operations
@@ -16,9 +14,10 @@
 import { IntegrationType } from '@prisma/client';
 import { BaseIntegrationAdapter } from './base';
 import { RevlineMeta, IntegrationResult } from '@/app/_lib/types';
+import { prisma } from '@/app/_lib/db';
 
 /**
- * Form configuration from RevLine meta
+ * Form configuration from pages meta
  * Note: formId IS the workflow trigger operation
  */
 export interface FormConfig {
@@ -26,46 +25,35 @@ export interface FormConfig {
   enabled: boolean;
 }
 
-/**
- * RevLine adapter for workspace-scoped configuration
- * 
- * @example
- * const adapter = await RevlineAdapter.forClient(workspaceId);
- * if (!adapter) {
- *   // RevLine not configured for this workspace
- * }
- * 
- * // Check if form is enabled (form submission will use formId as trigger)
- * if (adapter.isFormEnabled('prospect-intake')) {
- *   // Workflow triggers on { adapter: 'revline', operation: 'prospect-intake' }
- * }
- */
 export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
   readonly type = IntegrationType.REVLINE;
 
   /**
-   * Load RevLine adapter for a workspace
+   * Load pages adapter for a workspace.
+   * Reads from workspace.pagesConfig instead of the integration table.
    */
   static async forClient(workspaceId: string): Promise<RevlineAdapter | null> {
-    const data = await BaseIntegrationAdapter.loadAdapter<RevlineMeta>(
-      workspaceId,
-      IntegrationType.REVLINE
-    );
-    
-    if (!data) {
+    try {
+      const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { pagesConfig: true },
+      });
+
+      if (!workspace?.pagesConfig) {
+        return null;
+      }
+
+      const meta = workspace.pagesConfig as unknown as RevlineMeta;
+      return new RevlineAdapter(workspaceId, [], meta);
+    } catch {
       return null;
     }
-    
-    return new RevlineAdapter(workspaceId, data.secrets, data.meta);
   }
 
   // ===========================================================================
   // FORM CONFIGURATION
   // ===========================================================================
 
-  /**
-   * Get all enabled form IDs
-   */
   getEnabledForms(): string[] {
     if (!this.meta?.forms) {
       return [];
@@ -76,17 +64,10 @@ export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
       .map(([formId]) => formId);
   }
 
-  /**
-   * Check if a specific form is enabled
-   */
   isFormEnabled(formId: string): boolean {
     return this.meta?.forms?.[formId]?.enabled ?? false;
   }
 
-  /**
-   * Get full form configuration
-   * Note: The formId IS the workflow trigger operation
-   */
   getFormConfig(formId: string): FormConfig | null {
     const formMeta = this.meta?.forms?.[formId];
     if (!formMeta) {
@@ -99,9 +80,6 @@ export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
     };
   }
 
-  /**
-   * Get all form configurations
-   */
   getAllFormConfigs(): FormConfig[] {
     if (!this.meta?.forms) {
       return [];
@@ -117,9 +95,6 @@ export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
   // SETTINGS
   // ===========================================================================
 
-  /**
-   * Get the default source identifier for this workspace
-   */
   getDefaultSource(): string | undefined {
     return this.meta?.settings?.defaultSource;
   }
@@ -128,14 +103,11 @@ export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
   // VALIDATION
   // ===========================================================================
 
-  /**
-   * Validate a form ID is enabled and return its config
-   */
   validateForm(formId: string): IntegrationResult<FormConfig> {
     const config = this.getFormConfig(formId);
     
     if (!config) {
-      return this.error(`Form '${formId}' not found in RevLine configuration`);
+      return this.error(`Form '${formId}' not found in pages configuration`);
     }
 
     if (!config.enabled) {
@@ -145,9 +117,6 @@ export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
     return this.success(config);
   }
 
-  /**
-   * Check if RevLine is configured with at least one form
-   */
   isConfigured(): { valid: boolean; missing: string[] } {
     const missing: string[] = [];
     

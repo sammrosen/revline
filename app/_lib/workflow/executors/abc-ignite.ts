@@ -53,6 +53,18 @@ const lookupMember: ActionExecutor = {
   ): Promise<ActionResult> {
     const barcode = (ctx.trigger.payload.barcode as string) || (params.barcode as string);
 
+    if (ctx.isTest) {
+      return {
+        success: true,
+        data: {
+          dryRun: true,
+          action: 'lookup_member',
+          summary: `Would look up ABC Ignite member by barcode "${barcode || 'unknown'}"`,
+          params: { barcode },
+        },
+      };
+    }
+
     if (!barcode) {
       return { success: false, error: 'Missing barcode in payload or params' };
     }
@@ -106,6 +118,18 @@ const checkAvailability: ActionExecutor = {
     ctx: WorkflowContext,
     params: Record<string, unknown>
   ): Promise<ActionResult> {
+    if (ctx.isTest) {
+      return {
+        success: true,
+        data: {
+          dryRun: true,
+          action: 'check_availability',
+          summary: `Would check ABC Ignite availability for employee "${(params.employeeId as string) || 'default'}" event type "${(params.eventTypeId as string) || 'default'}"`,
+          params: { employeeId: params.employeeId, eventTypeId: params.eventTypeId },
+        },
+      };
+    }
+
     const adapter = await AbcIgniteAdapter.forClient(ctx.workspaceId);
     if (!adapter) {
       return { success: false, error: 'ABC Ignite not configured for this client' };
@@ -173,6 +197,21 @@ const enrollMember: ActionExecutor = {
     params: Record<string, unknown>
   ): Promise<ActionResult> {
     const eventId = params.eventId as string;
+
+    if (ctx.isTest) {
+      const memberId = (ctx.trigger.payload.memberId as string) || (params.memberId as string);
+      const barcode = (ctx.trigger.payload.barcode as string) || (params.barcode as string);
+      return {
+        success: true,
+        data: {
+          dryRun: true,
+          action: 'enroll_member',
+          summary: `Would enroll member ${memberId || barcode || 'unknown'} in event "${eventId || 'unknown'}"`,
+          params: { eventId, memberId, barcode },
+        },
+      };
+    }
+
     if (!eventId) {
       return { success: false, error: 'Missing eventId parameter' };
     }
@@ -232,6 +271,21 @@ const unenrollMember: ActionExecutor = {
     params: Record<string, unknown>
   ): Promise<ActionResult> {
     const eventId = params.eventId as string;
+
+    if (ctx.isTest) {
+      const memberId = (ctx.trigger.payload.memberId as string) || (params.memberId as string);
+      const barcode = (ctx.trigger.payload.barcode as string) || (params.barcode as string);
+      return {
+        success: true,
+        data: {
+          dryRun: true,
+          action: 'unenroll_member',
+          summary: `Would unenroll member ${memberId || barcode || 'unknown'} from event "${eventId || 'unknown'}"`,
+          params: { eventId, memberId, barcode },
+        },
+      };
+    }
+
     if (!eventId) {
       return { success: false, error: 'Missing eventId parameter' };
     }
@@ -288,6 +342,21 @@ const addToWaitlist: ActionExecutor = {
     params: Record<string, unknown>
   ): Promise<ActionResult> {
     const eventId = params.eventId as string;
+
+    if (ctx.isTest) {
+      const memberId = (ctx.trigger.payload.memberId as string) || (params.memberId as string);
+      const barcode = (ctx.trigger.payload.barcode as string) || (params.barcode as string);
+      return {
+        success: true,
+        data: {
+          dryRun: true,
+          action: 'add_to_waitlist',
+          summary: `Would add member ${memberId || barcode || 'unknown'} to waitlist for event "${eventId || 'unknown'}"`,
+          params: { eventId, memberId, barcode },
+        },
+      };
+    }
+
     if (!eventId) {
       return { success: false, error: 'Missing eventId parameter' };
     }
@@ -341,6 +410,21 @@ const removeFromWaitlist: ActionExecutor = {
     params: Record<string, unknown>
   ): Promise<ActionResult> {
     const eventId = params.eventId as string;
+
+    if (ctx.isTest) {
+      const memberId = (ctx.trigger.payload.memberId as string) || (params.memberId as string);
+      const barcode = (ctx.trigger.payload.barcode as string) || (params.barcode as string);
+      return {
+        success: true,
+        data: {
+          dryRun: true,
+          action: 'remove_from_waitlist',
+          summary: `Would remove member ${memberId || barcode || 'unknown'} from waitlist for event "${eventId || 'unknown'}"`,
+          params: { eventId, memberId, barcode },
+        },
+      };
+    }
+
     if (!eventId) {
       return { success: false, error: 'Missing eventId parameter' };
     }

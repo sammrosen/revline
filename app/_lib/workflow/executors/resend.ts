@@ -109,6 +109,19 @@ const sendEmail: ActionExecutor = {
     const templateKey = params.template as string | undefined;
     const replyTo = params.replyTo as string | undefined;
 
+    if (ctx.isTest) {
+      const template = templateKey || params.templateId || 'inline';
+      return {
+        success: true,
+        data: {
+          dryRun: true,
+          action: 'send_email',
+          summary: `Would send email template "${template}" to ${ctx.email || 'unknown'}`,
+          params: { template, to: ctx.email, replyTo },
+        },
+      };
+    }
+
     // ctx.email is the recipient from the trigger payload
     if (!ctx.email) {
       return { success: false, error: 'No recipient email in workflow context' };

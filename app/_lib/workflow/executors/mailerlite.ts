@@ -31,6 +31,18 @@ const addToGroup: ActionExecutor = {
   ): Promise<ActionResult> {
     const groupKey = params.group as string;
 
+    if (ctx.isTest) {
+      return {
+        success: true,
+        data: {
+          dryRun: true,
+          action: 'add_to_group',
+          summary: `Would add ${ctx.email || 'unknown'} to MailerLite group "${groupKey || 'unknown'}"`,
+          params: { group: groupKey, email: ctx.email },
+        },
+      };
+    }
+
     if (!groupKey) {
       return { success: false, error: 'Missing group parameter' };
     }
@@ -122,6 +134,18 @@ const removeFromGroup: ActionExecutor = {
   ): Promise<ActionResult> {
     const groupKey = params.group as string;
 
+    if (ctx.isTest) {
+      return {
+        success: true,
+        data: {
+          dryRun: true,
+          action: 'remove_from_group',
+          summary: `Would remove ${ctx.email || 'unknown'} from MailerLite group "${groupKey || 'unknown'}"`,
+          params: { group: groupKey, email: ctx.email },
+        },
+      };
+    }
+
     if (!groupKey) {
       return { success: false, error: 'Missing group parameter' };
     }
@@ -177,6 +201,18 @@ const addTag: ActionExecutor = {
     params: Record<string, unknown>
   ): Promise<ActionResult> {
     const tag = params.tag as string;
+
+    if (ctx.isTest) {
+      return {
+        success: true,
+        data: {
+          dryRun: true,
+          action: 'add_tag',
+          summary: `Would add tag "${tag || 'unknown'}" to ${ctx.email || 'unknown'} in MailerLite`,
+          params: { tag, email: ctx.email },
+        },
+      };
+    }
 
     if (!tag) {
       return { success: false, error: 'Missing tag parameter' };

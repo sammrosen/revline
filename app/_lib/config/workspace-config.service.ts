@@ -14,10 +14,11 @@
  */
 
 import { prisma } from '@/app/_lib/db';
-import { IntegrationType } from '@prisma/client';
 import { 
   BrandingConfig, 
   BookingCopyConfig, 
+  LandingCopyConfig,
+  LandingFormField,
   WorkspaceFeatures,
   RevlineMeta,
   ThemeMapping,
@@ -36,6 +37,7 @@ import {
   DEFAULT_HEADER_STYLE,
   DEFAULT_TYPOGRAPHY,
   DEFAULT_BOOKING_COPY,
+  DEFAULT_LANDING_COPY,
   DEFAULT_FEATURES,
   DEFAULT_SIGNUP_CONFIG,
   DEFAULT_SIGNUP_COPY,
@@ -144,6 +146,64 @@ export interface ResolvedWorkspaceConfig {
  */
 export interface ResolvedBookingConfig extends ResolvedWorkspaceConfig {
   copy: ResolvedBookingCopy;
+}
+
+/**
+ * Fully resolved landing page copy (no optional fields)
+ */
+export interface ResolvedLandingFormField {
+  id: string;
+  label: string;
+  type: 'text' | 'email' | 'tel' | 'textarea';
+  required: boolean;
+  placeholder: string;
+}
+
+export interface ResolvedLandingSections {
+  hero: boolean;
+  services: boolean;
+  gallery: boolean;
+  footer: boolean;
+}
+
+export interface ResolvedLandingImage {
+  url: string;
+  position: string;
+}
+
+export interface ResolvedLandingCopy {
+  heroHeadline: string;
+  heroSubhead: string;
+  heroCtaText: string;
+  heroCtaLink: string;
+  heroBackgroundImage: string;
+  heroBackgroundPosition: string;
+  heroBackgroundSize: string;
+  phoneNumber: string;
+  servicesTitle: string;
+  services: Array<{ title: string; description: string; image?: string; ctaLink?: string }>;
+  images: ResolvedLandingImage[];
+  contactTitle: string;
+  contactSubhead: string;
+  contactSubmitText: string;
+  contactSuccessMessage: string;
+  consentText: string;
+  formFields: ResolvedLandingFormField[];
+  footerText: string;
+  footerEmail: string;
+  sections: ResolvedLandingSections;
+}
+
+/**
+ * Resolved config for landing page template
+ */
+export interface ResolvedLandingConfig extends ResolvedWorkspaceConfig {
+  copy: ResolvedLandingCopy;
+  webchat?: {
+    agentId: string;
+    enabled: boolean;
+    collectEmail?: boolean;
+  };
 }
 
 /**
@@ -261,12 +321,14 @@ export class WorkspaceConfigService {
       ? { ...orgCopy, ...(meta?.copy?.booking || {}) }
       : meta?.copy?.booking;
 
+    const ps = meta?.pageStyles?.booking;
+
     return {
       workspaceId,
       branding: this.resolveBranding(mergedBranding),
       theme: this.resolveThemeMapping(meta?.theme),
-      headerStyle: this.resolveHeaderStyle(meta?.headerStyle),
-      typography: this.resolveTypography(meta?.typography),
+      headerStyle: this.resolveHeaderStyle(ps?.headerStyle ?? meta?.headerStyle),
+      typography: this.resolveTypography(ps?.typography ?? meta?.typography),
       features: this.resolveFeatures(meta?.features),
       copy: this.resolveBookingCopy(mergedCopy),
     };
@@ -298,13 +360,15 @@ export class WorkspaceConfigService {
     const mergedCopy = orgCopy
       ? { ...orgCopy, ...(signupConfig?.copy || {}) }
       : signupConfig?.copy;
-    
+
+    const ps = meta?.pageStyles?.signup;
+
     return {
       workspaceId,
       branding: this.resolveBranding(mergedBranding),
       theme: this.resolveThemeMapping(meta?.theme),
-      headerStyle: this.resolveHeaderStyle(meta?.headerStyle),
-      typography: this.resolveTypography(meta?.typography),
+      headerStyle: this.resolveHeaderStyle(ps?.headerStyle ?? meta?.headerStyle),
+      typography: this.resolveTypography(ps?.typography ?? meta?.typography),
       features: this.resolveFeatures(meta?.features),
       enabled: signupConfig?.enabled ?? false,
       club: this.resolveSignupClub(signupConfig?.club),
@@ -316,30 +380,59 @@ export class WorkspaceConfigService {
   }
 
   /**
+   * Resolve config for landing page template
+   * Includes branding, features, landing copy, and webchat config
+   * 
+   * Priority: code defaults -> org template defaults -> workspace overrides
+   */
+  static async resolveForLanding(workspaceId: string): Promise<ResolvedLandingConfig> {
+    const [orgTemplate, meta] = await Promise.all([
+      this.loadOrgTemplate(workspaceId, 'landing'),
+      this.loadRevlineMeta(workspaceId),
+    ]);
+
+    const orgBranding = orgTemplate?.defaultBranding || undefined;
+    const mergedBranding = orgBranding
+      ? { ...orgBranding, ...(meta?.branding || {}) }
+      : meta?.branding;
+
+    const orgCopy = orgTemplate?.defaultCopy as LandingCopyConfig | undefined;
+    const mergedCopy = orgCopy
+      ? { ...orgCopy, ...(meta?.copy?.landing || {}) }
+      : meta?.copy?.landing;
+
+    const ps = meta?.pageStyles?.landing;
+
+    return {
+      workspaceId,
+      branding: this.resolveBranding(mergedBranding),
+      theme: this.resolveThemeMapping(meta?.theme),
+      headerStyle: this.resolveHeaderStyle(ps?.headerStyle ?? meta?.headerStyle),
+      typography: this.resolveTypography(ps?.typography ?? meta?.typography),
+      features: this.resolveFeatures(meta?.features),
+      copy: this.resolveLandingCopy(mergedCopy),
+      webchat: meta?.webchat?.enabled ? meta.webchat : undefined,
+    };
+  }
+
+  /**
    * Get raw RevlineMeta for a workspace
    * Returns null if not found or on error
    */
   private static async loadRevlineMeta(workspaceId: string): Promise<RevlineMeta | null> {
     try {
-      const integration = await prisma.workspaceIntegration.findUnique({
-        where: {
-          workspaceId_integration: {
-            workspaceId,
-            integration: IntegrationType.REVLINE,
-          },
-        },
-        select: {
-          meta: true,
-        },
+      const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { pagesConfig: true },
       });
 
-      if (!integration?.meta) {
+      if (!workspace?.pagesConfig) {
         return null;
       }
 
-      return integration.meta as unknown as RevlineMeta;
+      return workspace.pagesConfig as unknown as RevlineMeta;
     } catch (error) {
-      console.error('Failed to load RevLine config:', {
+      console.error('Failed to load pages config:', {
         workspaceId,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -766,5 +859,127 @@ export class WorkspaceConfigService {
     }
 
     return result;
+  }
+
+  /**
+   * Resolve landing page copy by merging with defaults
+   * Sanitizes text values and validates structured fields
+   */
+  private static readonly VALID_FIELD_TYPES = new Set(['text', 'email', 'tel', 'textarea']);
+
+  private static normalizeImages(raw: Array<string | { url: string; position?: string }>): ResolvedLandingImage[] {
+    return raw.map(entry =>
+      typeof entry === 'string'
+        ? { url: entry, position: 'center' }
+        : { url: entry.url, position: entry.position || 'center' }
+    );
+  }
+
+  private static resolveLandingCopy(overrides?: LandingCopyConfig): ResolvedLandingCopy {
+    const result: ResolvedLandingCopy = {
+      ...DEFAULT_LANDING_COPY,
+      services: DEFAULT_LANDING_COPY.services.map(s => ({ ...s })),
+      images: this.normalizeImages(DEFAULT_LANDING_COPY.images),
+      formFields: DEFAULT_LANDING_COPY.formFields.map(f => ({
+        ...f,
+        required: f.required ?? false,
+        placeholder: f.placeholder ?? '',
+      })),
+      sections: {
+        hero: DEFAULT_LANDING_COPY.sections?.hero ?? true,
+        services: DEFAULT_LANDING_COPY.sections?.services ?? true,
+        gallery: DEFAULT_LANDING_COPY.sections?.gallery ?? true,
+        footer: DEFAULT_LANDING_COPY.sections?.footer ?? true,
+      },
+    };
+
+    if (!overrides) {
+      return result;
+    }
+
+    if (overrides.heroHeadline) {
+      result.heroHeadline = sanitizeCopyText(overrides.heroHeadline, 80);
+    }
+    if (overrides.heroSubhead) {
+      result.heroSubhead = sanitizeCopyText(overrides.heroSubhead, 160);
+    }
+    if (overrides.heroCtaText) {
+      result.heroCtaText = sanitizeCopyText(overrides.heroCtaText, 30);
+    }
+    if (overrides.heroCtaLink) {
+      result.heroCtaLink = sanitizeCopyText(overrides.heroCtaLink, 200);
+    }
+    if (overrides.heroBackgroundImage && isValidLogoUrl(overrides.heroBackgroundImage)) {
+      result.heroBackgroundImage = overrides.heroBackgroundImage;
+    }
+    if (overrides.heroBackgroundPosition) {
+      result.heroBackgroundPosition = overrides.heroBackgroundPosition;
+    }
+    if (overrides.heroBackgroundSize) {
+      result.heroBackgroundSize = overrides.heroBackgroundSize;
+    }
+    if (overrides.phoneNumber) {
+      result.phoneNumber = sanitizeCopyText(overrides.phoneNumber, 20);
+    }
+    if (overrides.servicesTitle) {
+      result.servicesTitle = sanitizeCopyText(overrides.servicesTitle, 60);
+    }
+    if (Array.isArray(overrides.services) && overrides.services.length > 0) {
+      result.services = overrides.services.slice(0, 12).map(s => ({
+        title: sanitizeCopyText(s.title || '', 60),
+        description: sanitizeCopyText(s.description || '', 200),
+        ...(s.image && isValidLogoUrl(s.image) ? { image: s.image } : {}),
+        ...(s.ctaLink ? { ctaLink: sanitizeCopyText(s.ctaLink, 200) } : {}),
+      }));
+    }
+    if (Array.isArray(overrides.images) && overrides.images.length > 0) {
+      result.images = this.normalizeImages(overrides.images)
+        .slice(0, 9)
+        .filter(img => isValidLogoUrl(img.url));
+    }
+    if (overrides.contactTitle) {
+      result.contactTitle = sanitizeCopyText(overrides.contactTitle, 60);
+    }
+    if (overrides.contactSubhead) {
+      result.contactSubhead = sanitizeCopyText(overrides.contactSubhead, 120);
+    }
+    if (overrides.contactSubmitText) {
+      result.contactSubmitText = sanitizeCopyText(overrides.contactSubmitText, 30);
+    }
+    if (overrides.contactSuccessMessage) {
+      result.contactSuccessMessage = sanitizeCopyText(overrides.contactSuccessMessage, 160);
+    }
+    if (overrides.consentText) {
+      result.consentText = sanitizeCopyText(overrides.consentText, 500);
+    }
+    if (Array.isArray(overrides.formFields) && overrides.formFields.length > 0) {
+      result.formFields = this.resolveFormFields(overrides.formFields);
+    }
+    if (overrides.footerText) {
+      result.footerText = sanitizeCopyText(overrides.footerText, 80);
+    }
+    if (overrides.footerEmail) {
+      result.footerEmail = sanitizeCopyText(overrides.footerEmail, 80);
+    }
+    if (overrides.sections) {
+      result.sections = {
+        hero: overrides.sections.hero ?? result.sections.hero,
+        services: overrides.sections.services ?? result.sections.services,
+        gallery: overrides.sections.gallery ?? result.sections.gallery,
+        footer: overrides.sections.footer ?? result.sections.footer,
+      };
+    }
+
+    return result;
+  }
+
+  private static resolveFormFields(fields: LandingFormField[]): ResolvedLandingFormField[] {
+    return fields.slice(0, 10).map(f => ({
+      id: sanitizeCopyText(f.id || '', 30).replace(/\s+/g, '_').toLowerCase(),
+      label: sanitizeCopyText(f.label || '', 50),
+      type: this.VALID_FIELD_TYPES.has(f.type) ? f.type : 'text' as const,
+      required: f.required ?? false,
+      placeholder: sanitizeCopyText(f.placeholder || '', 80),
+    })).filter(f => f.id && f.label);
   }
 }

@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { email, name, source } = validation.data!;
+    const { email, name, phone, source, metadata } = validation.data!;
 
     // 4. Get active client
     const client = await getActiveClient(source);
@@ -119,8 +119,10 @@ export async function POST(request: NextRequest) {
       { 
         email, 
         name, 
+        phone,
         source,
         correlationId: registration.correlationId,
+        ...(metadata && { metadata }),
       }
     );
 

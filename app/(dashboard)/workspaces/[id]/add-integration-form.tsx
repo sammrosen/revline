@@ -49,13 +49,8 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
     e.preventDefault();
     setError('');
 
-    // Validate secrets (RevLine doesn't require secrets)
+    // Filter to secrets that have both name and value (empty secrets = draft integration)
     const validSecrets = secrets.filter(s => s.name.trim() && s.value.trim());
-    const requiresSecrets = integration !== 'REVLINE';
-    if (requiresSecrets && validSecrets.length === 0) {
-      setError('At least one secret is required');
-      return;
-    }
 
     // Check for duplicate names
     const names = validSecrets.map(s => s.name.trim());
@@ -172,6 +167,8 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
 
   // Get the first secret's description as hint
   const secretHint = config?.secrets[0]?.description;
+  const hasFilledSecrets = isRevline || secrets.some(s => s.value.trim().length > 0);
+  const isDraft = !isRevline && !hasFilledSecrets;
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 z-50" onClick={() => setIsOpen(false)}>
@@ -214,7 +211,7 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
                 onChange={(e) => handleIntegrationChange(e.target.value as IntegrationTypeId)}
                 className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
               >
-                {INTEGRATION_TYPES.map((type) => (
+                {INTEGRATION_TYPES.filter(t => t !== 'REVLINE').map((type) => (
                   <option key={type} value={type}>
                     {INTEGRATIONS[type]?.displayName || type}
                   </option>
@@ -226,9 +223,14 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
           {/* Secrets Section - hidden for RevLine */}
           {!isRevline && (
             <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
-              <label className="block text-sm font-semibold text-zinc-300 mb-3">
-                Secrets
-              </label>
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-sm font-semibold text-zinc-300">
+                  Secrets
+                </label>
+                {isDraft && (
+                  <span className="text-xs text-amber-400/80">Optional</span>
+                )}
+              </div>
               <div className="space-y-3">
                 {secrets.map((secret, index) => (
                   <div key={index} className="flex gap-2">
@@ -278,7 +280,14 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
               {secretHint && (
                 <div className="mt-3 pt-3 border-t border-zinc-800/50">
                   <p className="text-xs text-zinc-500">
-                    💡 {secretHint}
+                    {secretHint}
+                  </p>
+                </div>
+              )}
+              {isDraft && (
+                <div className={`${secretHint ? 'mt-2' : 'mt-3 pt-3 border-t border-zinc-800/50'}`}>
+                  <p className="text-xs text-amber-400/70">
+                    Don&apos;t have credentials yet? Save now and add them later from the Secrets panel.
                   </p>
                 </div>
               )}
@@ -348,7 +357,7 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
               disabled={loading}
               className="flex-1 py-2.5 bg-white text-black rounded-md font-bold hover:bg-zinc-200 transition-colors disabled:opacity-50 shadow-lg"
             >
-              {loading ? 'Saving Integration...' : 'Save Integration'}
+              {loading ? 'Saving...' : isDraft ? 'Save as Draft' : 'Save Integration'}
             </button>
             <button
               type="button"

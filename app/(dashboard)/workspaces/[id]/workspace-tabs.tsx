@@ -14,10 +14,12 @@ import { TestingTab } from './testing-tab';
 import { WorkspaceSettings } from './workspace-settings';
 import { EventsLog } from './_components/events-log';
 import { AgentList } from './agent-list';
+import { PagesEditor } from './pages-editor';
+import { ReadinessPanel } from './readiness-panel';
 import { Workflow as WorkflowIcon, Plus, List } from 'lucide-react';
 import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
 
-type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'agents' | 'testing' | 'settings';
+type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'agents' | 'pages' | 'testing' | 'settings';
 
 interface SecretSummary {
   id: string;
@@ -94,6 +96,7 @@ interface WorkspaceTabsProps {
   };
   leadStages?: Array<{ key: string; label: string; color: string }>;
   leadPropertySchema?: LeadPropertyDefinition[] | null;
+  pagesConfig?: Record<string, unknown> | null;
 }
 
 // Parse secrets from JSON, returning only id and name (never values)
@@ -135,9 +138,9 @@ interface IntegrationDependency {
   usedBy: Array<{ workflowId: string; workflowName: string }>;
 }
 
-const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'agents', 'testing', 'settings'];
+const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'agents', 'pages', 'testing', 'settings'];
 
-export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, resendTemplates = {}, stripeProducts = {}, agents = {}, timezone = 'America/New_York', domainConfig, leadStages, leadPropertySchema }: WorkspaceTabsProps) {
+export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, resendTemplates = {}, stripeProducts = {}, agents = {}, timezone = 'America/New_York', domainConfig, leadStages, leadPropertySchema, pagesConfig }: WorkspaceTabsProps) {
   // Initialize with default to avoid hydration mismatch, then sync from hash in useEffect
   const [activeTab, setActiveTab] = useState<TabType>('workflows');
   const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
@@ -317,18 +320,22 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
 
         {activeTab === 'integrations' && (
           <div className="max-w-[1600px] mx-auto">
+            <ReadinessPanel workspaceId={workspaceId} />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-              {integrations.map((integration) => {
+              {integrations.filter(i => i.integration !== 'REVLINE').map((integration) => {
                 const dependentWorkflows = getDependentWorkflows(integration.integration);
                 const usedByCount = dependentWorkflows.length;
                 
                 const integrationStyle = getIntegrationStyle(integration.integration.toLowerCase());
                 const IntegrationIcon = integrationStyle.icon;
+                const secretsList = parseSecrets(integration.secrets);
+                const isRevlineType = integration.integration === 'REVLINE';
+                const isPendingSetup = !isRevlineType && secretsList.length === 0;
                 
                 return (
                   <div
                     key={integration.id}
-                    className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex flex-col gap-4 relative"
+                    className={`bg-zinc-900 border rounded-lg p-4 flex flex-col gap-4 relative ${isPendingSetup ? 'border-amber-500/30' : 'border-zinc-800'}`}
                   >
                     {/* Header: Title and Actions */}
                     <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center relative">
@@ -339,7 +346,11 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
                           <IntegrationIcon className={`w-4 h-4 ${integrationStyle.textClass}`} />
                         )}
                         <span className={`font-bold tracking-tight ${integrationStyle.textClass}`}>{integration.integration}</span>
-                        <HealthBadge status={integration.healthStatus} />
+                        {isPendingSetup ? (
+                          <span className="px-2 py-1 text-xs rounded bg-amber-500/20 text-amber-400">SETUP</span>
+                        ) : (
+                          <HealthBadge status={integration.healthStatus} />
+                        )}
                         {usedByCount > 0 && (
                           <span className="flex items-center gap-1 px-2 py-0.5 bg-zinc-800 text-zinc-400 text-xs rounded" title={dependentWorkflows.map(w => w.name).join(', ')}>
                             <WorkflowIcon className="w-3 h-3" />
@@ -419,6 +430,17 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
         {activeTab === 'agents' && (
           <div className="max-w-[1600px] mx-auto">
             <AgentList workspaceId={workspaceId} />
+          </div>
+        )}
+
+        {activeTab === 'pages' && (
+          <div className="max-w-[1600px] mx-auto">
+            <PagesEditor
+              workspaceId={workspaceId}
+              workspaceSlug={workspaceSlug}
+              pagesConfig={pagesConfig}
+              agents={agents}
+            />
           </div>
         )}
 

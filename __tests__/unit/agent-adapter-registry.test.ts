@@ -69,9 +69,19 @@ describe('Agent Adapter Registry — Channel', () => {
     expect(typeof entry!.forWorkspace).toBe('function');
   });
 
+  it('resolves RESEND with correct contactField', () => {
+    const entry = resolveChannel('RESEND');
+    expect(entry).not.toBeNull();
+    expect(entry!.label).toBe('Resend');
+    expect(entry!.contactField).toBe('email');
+    expect(typeof entry!.forWorkspace).toBe('function');
+  });
+
   it('is case-insensitive', () => {
     expect(resolveChannel('twilio')).not.toBeNull();
     expect(resolveChannel('Twilio')).not.toBeNull();
+    expect(resolveChannel('resend')).not.toBeNull();
+    expect(resolveChannel('Resend')).not.toBeNull();
   });
 
   it('returns null for unknown channel provider', () => {
@@ -81,12 +91,14 @@ describe('Agent Adapter Registry — Channel', () => {
 
   it('getContactFieldForChannel returns correct field', () => {
     expect(getContactFieldForChannel('TWILIO')).toBe('phone');
+    expect(getContactFieldForChannel('RESEND')).toBe('email');
     expect(getContactFieldForChannel('unknown')).toBeNull();
   });
 
-  it('getRegisteredChannelProviders returns Twilio', () => {
+  it('getRegisteredChannelProviders returns Twilio and Resend', () => {
     const providers = getRegisteredChannelProviders();
     expect(providers).toContain('TWILIO');
-    expect(providers.length).toBe(1);
+    expect(providers).toContain('RESEND');
+    expect(providers.length).toBe(2);
   });
 });

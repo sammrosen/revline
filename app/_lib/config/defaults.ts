@@ -13,6 +13,7 @@
 import { 
   BrandingConfig, 
   BookingCopyConfig, 
+  LandingCopyConfig,
   WorkspaceFeatures,
   SignupCopyConfig,
   SignupConfig,
@@ -203,6 +204,43 @@ export const DEFAULT_SIGNUP_CONFIG: SignupConfig = {
   copy: DEFAULT_SIGNUP_COPY,
   policies: DEFAULT_SIGNUP_POLICIES,
   features: DEFAULT_SIGNUP_FEATURES,
+};
+
+// =============================================================================
+// LANDING PAGE DEFAULTS
+// =============================================================================
+
+export const DEFAULT_LANDING_COPY: Required<LandingCopyConfig> = {
+  heroHeadline: 'Welcome to Our Business',
+  heroSubhead: 'We provide exceptional service tailored to your needs.',
+  heroCtaText: 'Book Today',
+  heroCtaLink: '#contact',
+  heroBackgroundImage: '',
+  heroBackgroundPosition: 'center',
+  heroBackgroundSize: 'cover',
+  phoneNumber: '',
+  servicesTitle: 'What We Do',
+  services: [
+    { title: 'Service One', description: 'A brief description of this service and how it helps customers.' },
+    { title: 'Service Two', description: 'A brief description of this service and how it helps customers.' },
+    { title: 'Service Three', description: 'A brief description of this service and how it helps customers.' },
+  ],
+  images: [],
+  contactTitle: 'Schedule Today',
+  contactSubhead: 'Leave your info and we\'ll reach out.',
+  contactSubmitText: 'Send',
+  contactSuccessMessage: 'Thanks! We\'ll be in touch soon.',
+  consentText: 'I agree to terms & conditions provided by the company. By providing my phone number, I agree to receive text messages from the business.',
+  formFields: [
+    { id: 'name', label: 'Full Name', type: 'text', required: true, placeholder: 'John Smith' },
+    { id: 'email', label: 'Email', type: 'email', required: true, placeholder: 'you@example.com' },
+    { id: 'phone', label: 'Phone', type: 'tel', required: true, placeholder: '(555) 123-4567' },
+    { id: 'address', label: 'Address', type: 'text', required: false, placeholder: 'Your address' },
+    { id: 'message', label: 'Message', type: 'textarea', required: false, placeholder: 'How can we help?' },
+  ],
+  footerText: 'Powered by RevLine',
+  footerEmail: '',
+  sections: { hero: true, services: true, gallery: true, footer: true },
 };
 
 // =============================================================================

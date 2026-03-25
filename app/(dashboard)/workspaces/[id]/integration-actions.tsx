@@ -6,7 +6,6 @@ import { IntegrationHelp, IntegrationTemplateButton } from './integration-help';
 import { MailerLiteConfigEditor } from './mailerlite-config-editor';
 import { StripeConfigEditor } from './stripe-config-editor';
 import { AbcIgniteConfigEditor } from './abc-ignite-config-editor';
-import { RevlineConfigEditor } from './revline-config-editor';
 import { ResendConfigEditor } from './resend-config-editor';
 import { TwilioConfigEditor } from './twilio-config-editor';
 import { OpenAIConfigEditor } from './openai-config-editor';
@@ -76,7 +75,6 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
   const isMailerLite = integrationType === 'MAILERLITE';
   const isStripe = integrationType === 'STRIPE';
   const isAbcIgnite = integrationType === 'ABC_IGNITE';
-  const isRevline = integrationType === 'REVLINE';
   const isResend = integrationType === 'RESEND';
   const isTwilio = integrationType === 'TWILIO';
   const isOpenAI = integrationType === 'OPENAI';
@@ -169,10 +167,7 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
         return;
       }
 
-      // Keep RevLine modal open so user can see preview update
-      if (!isRevline) {
-        setShowEditMeta(false);
-      }
+      setShowEditMeta(false);
       router.refresh();
     } catch {
       setError('Network error');
@@ -280,16 +275,14 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
 
   // Edit Meta Modal
   if (showEditMeta) {
-    const hasStructuredEditor = isMailerLite || isStripe || isAbcIgnite || isRevline || isResend || isTwilio || isOpenAI || isAnthropic;
+    const hasStructuredEditor = isMailerLite || isStripe || isAbcIgnite || isResend || isTwilio || isOpenAI || isAnthropic;
     const modalTitle = isMailerLite 
       ? 'MailerLite Configuration' 
       : isStripe 
         ? 'Stripe Configuration' 
         : isAbcIgnite
           ? 'ABC Ignite Configuration'
-          : isRevline
-            ? 'RevLine Configuration'
-            : isResend
+          : isResend
               ? 'Resend Configuration'
               : isTwilio
                 ? 'Twilio Configuration'
@@ -304,9 +297,7 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
         ? 'Configure product mappings for payment routing.'
         : isAbcIgnite
           ? 'Configure club settings and sync event types from ABC Ignite.'
-          : isRevline
-            ? 'Enable forms and configure trigger operations for this client.'
-            : isResend
+          : isResend
               ? 'Configure sender settings for transactional emails.'
               : isTwilio
                 ? 'Configure phone numbers and webhooks for SMS messaging.'
@@ -317,7 +308,7 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
                     : 'Update non-sensitive configuration (group IDs, product maps, etc.)';
 
     // Use fullscreen mode for RevLine editor (has preview panel)
-    const useFullscreen = isRevline && isFullscreen;
+    const useFullscreen = false;
     
     return (
       <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-0 sm:p-4 z-50">
@@ -337,7 +328,7 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
                 />
               )}
             </div>
-            {isRevline && (
+            {false && (
               <button
                 type="button"
                 onClick={() => setIsFullscreen(!isFullscreen)}
@@ -377,15 +368,6 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
               error={error}
               integrationId={integration.id}
               workspaceId={workspaceId}
-            />
-          ) : isRevline ? (
-            <RevlineConfigEditor
-              value={metaText}
-              onChange={setMetaText}
-              error={error}
-              integrationId={integration.id}
-              workspaceId={workspaceId}
-              workspaceSlug={workspaceSlug}
             />
           ) : isResend ? (
             <ResendConfigEditor
@@ -452,7 +434,7 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
               }}
               className="px-4 py-2 text-zinc-400 hover:text-white text-sm"
             >
-              {isRevline ? 'Close' : 'Cancel'}
+              Cancel
             </button>
           </div>
         </div>
@@ -670,14 +652,20 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
     );
   }
 
+  const needsCredentials = secrets.length === 0;
+
   // Main Actions
   return (
     <div className="flex items-center justify-end gap-1.5 sm:gap-2">
       <button
         onClick={() => setShowManageSecrets(true)}
-        className="px-2 sm:px-3 py-1 text-[10px] sm:text-xs border border-zinc-700 text-zinc-300 rounded hover:border-zinc-600 hover:text-white transition-colors whitespace-nowrap"
+        className={`px-2 sm:px-3 py-1 text-[10px] sm:text-xs border rounded transition-colors whitespace-nowrap ${
+          needsCredentials
+            ? 'border-amber-500/50 text-amber-400 hover:border-amber-400 hover:text-amber-300'
+            : 'border-zinc-700 text-zinc-300 hover:border-zinc-600 hover:text-white'
+        }`}
       >
-        Secrets ({secrets.length})
+        {needsCredentials ? 'Add Credentials' : `Secrets (${secrets.length})`}
       </button>
       <button
         onClick={() => setShowEditMeta(true)}
