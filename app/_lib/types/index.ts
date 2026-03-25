@@ -373,11 +373,28 @@ export interface BookingCopyConfig {
 /**
  * Copy configuration for landing page template
  */
+export interface LandingFormField {
+  id: string;
+  label: string;
+  type: 'text' | 'email' | 'tel' | 'textarea';
+  required?: boolean;
+  placeholder?: string;
+}
+
+export interface LandingSections {
+  hero?: boolean;
+  services?: boolean;
+  gallery?: boolean;
+  footer?: boolean;
+}
+
 export interface LandingCopyConfig {
   heroHeadline?: string;
   heroSubhead?: string;
   heroCtaText?: string;
   heroCtaLink?: string;
+  heroBackgroundImage?: string;
+  phoneNumber?: string;
   servicesTitle?: string;
   services?: Array<{ title: string; description: string }>;
   images?: string[];
@@ -385,8 +402,11 @@ export interface LandingCopyConfig {
   contactSubhead?: string;
   contactSubmitText?: string;
   contactSuccessMessage?: string;
+  consentText?: string;
+  formFields?: LandingFormField[];
   footerText?: string;
   footerEmail?: string;
+  sections?: LandingSections;
 }
 
 /**

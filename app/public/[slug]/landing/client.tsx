@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import type { ResolvedBranding, ResolvedThemeMapping, ResolvedTypography, ResolvedFeatures, ResolvedLandingCopy } from '@/app/_lib/config';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import type { ResolvedBranding, ResolvedThemeMapping, ResolvedTypography, ResolvedFeatures, ResolvedLandingCopy, ResolvedLandingFormField } from '@/app/_lib/config';
 import type { HeaderStyle } from '@/app/_lib/types';
-import { DEFAULT_THEME_MAPPING, DEFAULT_TYPOGRAPHY } from '@/app/_lib/config';
+import { DEFAULT_THEME_MAPPING } from '@/app/_lib/config';
 import { WebchatWidget } from '@/app/_components/WebchatWidget';
 
 // =============================================================================
@@ -21,7 +21,7 @@ interface DerivedBrand {
   header: string;
 }
 
-interface LandingClientProps {
+export interface LandingClientProps {
   workspaceSlug: string;
   workspaceName: string;
   branding: ResolvedBranding;
@@ -64,6 +64,25 @@ const FONT_FAMILY_MAP: Record<string, string> = {
   system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
 };
 
+const SIZE_MAP: Record<string, string> = {
+  xs: '0.75rem', sm: '0.875rem', base: '1rem', lg: '1.125rem',
+  xl: '1.25rem', '2xl': '1.5rem', '3xl': '1.875rem',
+};
+
+const WEIGHT_MAP: Record<string, number> = {
+  normal: 400, medium: 500, semibold: 600, bold: 700,
+};
+
+function typoStyle(role?: { size?: string; weight?: string }): React.CSSProperties {
+  if (!role) return {};
+  return {
+    ...(role.size && SIZE_MAP[role.size] ? { fontSize: SIZE_MAP[role.size] } : {}),
+    ...(role.weight && WEIGHT_MAP[role.weight] ? { fontWeight: WEIGHT_MAP[role.weight] } : {}),
+  };
+}
+
+const KNOWN_FIELDS = new Set(['name', 'email', 'phone']);
+
 // =============================================================================
 // COMPONENT
 // =============================================================================
@@ -74,7 +93,7 @@ export function LandingClient({
   branding,
   theme,
   headerStyle,
-  typography: _typography,
+  typography,
   copy,
   features,
   webchat,
@@ -83,28 +102,50 @@ export function LandingClient({
   const brand = useMemo(() => deriveBrandColors(branding, resolvedTheme), [branding, resolvedTheme]);
   const fontFamily = FONT_FAMILY_MAP[branding.fontFamily] || FONT_FAMILY_MAP.system;
 
-  // Contact form state
-  const [formData, setFormData] = useState({ name: '', email: '', phone: '' });
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const [consentChecked, setConsentChecked] = useState(false);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formSuccess, setFormSuccess] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 80);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const updateField = useCallback((id: string, value: string) => {
+    setFormValues(prev => ({ ...prev, [id]: value }));
+  }, []);
 
   const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.email) return;
+
+    const emailField = copy.formFields.find(f => f.type === 'email');
+    const emailValue = emailField ? formValues[emailField.id] : formValues['email'];
+    if (!emailValue) return;
 
     setFormSubmitting(true);
     setFormError(null);
 
     try {
+      const metadata: Record<string, string> = {};
+      for (const field of copy.formFields) {
+        if (!KNOWN_FIELDS.has(field.id) && formValues[field.id]) {
+          metadata[field.id] = formValues[field.id];
+        }
+      }
+
       const res = await fetch('/api/v1/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: formData.email,
-          name: formData.name || undefined,
-          phone: formData.phone || undefined,
+          email: emailValue,
+          name: formValues['name'] || undefined,
+          phone: formValues['phone'] || undefined,
           source: workspaceSlug,
+          ...(Object.keys(metadata).length > 0 && { metadata }),
         }),
       });
 
@@ -121,68 +162,197 @@ export function LandingClient({
     }
   };
 
-  const headerVariant = headerStyle?.variant || 'pill';
+  const hasBackgroundImage = !!copy.heroBackgroundImage;
+  const sections = copy.sections ?? { hero: true, services: true, gallery: true, footer: true };
+
+  const headerNameStyle: React.CSSProperties = {
+    ...(headerStyle?.bold ? { fontWeight: 700 } : { fontWeight: 700 }),
+    ...(headerStyle?.italic ? { fontStyle: 'italic' } : {}),
+  };
 
   return (
-    <div style={{ fontFamily, color: brand.text, backgroundColor: brand.background }} className="min-h-screen">
-      {/* Header */}
-      <header style={{ backgroundColor: brand.header }} className="py-4 px-6">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
+    <div style={{ fontFamily }} className="min-h-screen">
+      {/* Sticky Header */}
+      <header
+        className="fixed top-0 left-0 right-0 z-50 transition-colors duration-300"
+        style={{ backgroundColor: scrolled ? brand.header : 'transparent' }}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {branding.logo && (
               <img
                 src={branding.logo}
                 alt={workspaceName}
-                className="h-10 w-auto object-contain"
+                className="h-8 sm:h-10 w-auto object-contain shrink-0"
               />
             )}
-            {headerVariant === 'pill' ? (
-              <span className="bg-white/90 text-gray-900 px-3 py-1 rounded-full text-sm font-semibold">
-                {workspaceName}
-              </span>
-            ) : (
-              <span className="text-white font-semibold text-lg">{workspaceName}</span>
-            )}
+            <span
+              className="text-white text-base sm:text-lg truncate"
+              style={headerNameStyle}
+            >
+              {workspaceName}
+            </span>
           </div>
-          <a
-            href={copy.heroCtaLink}
-            style={{ backgroundColor: brand.primary }}
-            className="hidden sm:inline-block text-white text-sm font-medium px-4 py-2 rounded-lg hover:opacity-90 transition-opacity"
-          >
-            {copy.heroCtaText}
-          </a>
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {copy.phoneNumber && (
+              <a
+                href={`tel:${copy.phoneNumber.replace(/[^\d+]/g, '')}`}
+                className="flex items-center gap-2 border border-white/40 text-white text-sm font-medium p-2.5 sm:px-4 sm:py-2.5 rounded hover:bg-white/10 transition-colors"
+              >
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+                <span className="hidden sm:inline">{copy.phoneNumber}</span>
+              </a>
+            )}
+            <a
+              href={copy.heroCtaLink}
+              style={{ backgroundColor: brand.primary }}
+              className="text-white text-xs sm:text-sm font-bold px-3 py-2 sm:px-5 sm:py-2.5 rounded hover:opacity-90 transition-opacity uppercase tracking-wide"
+            >
+              {copy.heroCtaText}
+            </a>
+          </div>
         </div>
       </header>
 
-      {/* Hero */}
-      <section
-        style={{ backgroundColor: brand.primary }}
-        className="py-20 px-6 text-center"
-      >
-        <div className="max-w-3xl mx-auto">
-          <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4 leading-tight">
-            {copy.heroHeadline}
-          </h1>
-          <p className="text-lg sm:text-xl text-white/80 mb-8 max-w-2xl mx-auto">
-            {copy.heroSubhead}
-          </p>
-          <a
-            href={copy.heroCtaLink}
-            style={{ color: brand.primary }}
-            className="inline-block bg-white font-semibold px-8 py-3 rounded-lg text-lg hover:bg-white/90 transition-colors"
-          >
-            {copy.heroCtaText}
-          </a>
-        </div>
-      </section>
+      {/* Hero -- split layout: text left, form right */}
+      {sections.hero !== false && (
+        <section
+          className="relative min-h-dvh flex items-center"
+          style={{ backgroundColor: hasBackgroundImage ? '#111' : brand.header }}
+        >
+          {hasBackgroundImage && (
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: `url(${copy.heroBackgroundImage})` }}
+            >
+              <div className="absolute inset-0 bg-black/60" />
+            </div>
+          )}
+
+          <div className="relative z-10 max-w-7xl mx-auto w-full px-4 sm:px-6 py-20 pt-24 sm:pt-28">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center">
+              {/* Left: headline + description */}
+              <div className="order-2 md:order-1 text-center md:text-left">
+                <h1
+                  className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-4 sm:mb-6"
+                  style={typoStyle(typography?.pageTitle)}
+                >
+                  {copy.heroHeadline}
+                </h1>
+                <p
+                  className="text-base sm:text-lg md:text-xl text-white/80 leading-relaxed max-w-lg mx-auto md:mx-0"
+                  style={typoStyle(typography?.body)}
+                >
+                  {copy.heroSubhead}
+                </p>
+              </div>
+
+              {/* Right: form card */}
+              <div className="order-1 md:order-2 bg-white rounded-xl shadow-2xl p-6 sm:p-8 w-full max-w-full sm:max-w-md mx-auto md:ml-auto">
+                {formSuccess ? (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <p className="text-gray-800 text-lg font-medium">
+                      {copy.contactSuccessMessage}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {branding.logo && (
+                      <div className="flex justify-center mb-4">
+                        <img src={branding.logo} alt="" className="h-14 w-auto object-contain" />
+                      </div>
+                    )}
+                    <h2
+                      style={{ color: brand.header, ...typoStyle(typography?.sectionHeader) }}
+                      className="text-xl font-bold text-center mb-6 uppercase tracking-wide"
+                    >
+                      {copy.contactTitle}
+                    </h2>
+
+                    <form onSubmit={handleContactSubmit} className="space-y-4">
+                      {copy.formFields.map((field: ResolvedLandingFormField) => (
+                        <div key={field.id}>
+                          <label
+                            className="block text-sm font-semibold text-gray-700 mb-1"
+                            style={typoStyle(typography?.label)}
+                          >
+                            {field.label} {field.required && <span className="text-red-500">*</span>}
+                          </label>
+                          {field.type === 'textarea' ? (
+                            <textarea
+                              value={formValues[field.id] || ''}
+                              onChange={(e) => updateField(field.id, e.target.value)}
+                              placeholder={field.placeholder}
+                              required={field.required}
+                              rows={3}
+                              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:border-transparent transition-colors resize-none"
+                              style={{ '--tw-ring-color': brand.primary + '40' } as React.CSSProperties}
+                            />
+                          ) : (
+                            <input
+                              type={field.type}
+                              value={formValues[field.id] || ''}
+                              onChange={(e) => updateField(field.id, e.target.value)}
+                              placeholder={field.placeholder}
+                              required={field.required}
+                              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:border-transparent transition-colors"
+                              style={{ '--tw-ring-color': brand.primary + '40' } as React.CSSProperties}
+                            />
+                          )}
+                        </div>
+                      ))}
+
+                      {copy.consentText && (
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={consentChecked}
+                            onChange={(e) => setConsentChecked(e.target.checked)}
+                            className="mt-1 rounded border-gray-300"
+                            style={{ accentColor: brand.primary }}
+                            required
+                          />
+                          <span className="text-xs text-gray-500 leading-relaxed">
+                            {copy.consentText}
+                          </span>
+                        </label>
+                      )}
+
+                      {formError && (
+                        <p className="text-sm text-red-500">{formError}</p>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={formSubmitting}
+                        style={{ backgroundColor: brand.primary }}
+                        className="w-full text-white font-bold py-3.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60 uppercase tracking-wide text-sm"
+                      >
+                        {formSubmitting ? 'Sending...' : copy.contactSubmitText}
+                      </button>
+                    </form>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Services */}
-      {copy.services.length > 0 && (
-        <section className="py-16 px-6">
+      {sections.services !== false && copy.services.length > 0 && (
+        <section className="py-12 sm:py-16 px-4 sm:px-6" style={{ backgroundColor: brand.background }}>
           <div className="max-w-6xl mx-auto">
             <h2
-              style={{ color: brand.text }}
-              className="text-3xl font-bold text-center mb-12"
+              style={{ color: brand.text, ...typoStyle(typography?.sectionHeader) }}
+              className="text-2xl sm:text-3xl font-bold text-center mb-8 sm:mb-12"
             >
               {copy.servicesTitle}
             </h2>
@@ -195,7 +365,7 @@ export function LandingClient({
                 <div
                   key={i}
                   style={{ backgroundColor: brand.card, borderColor: brand.border }}
-                  className="rounded-xl p-8 border"
+                  className="rounded-xl p-6 sm:p-8 border"
                 >
                   <div
                     style={{ backgroundColor: brand.primary + '15' }}
@@ -219,8 +389,8 @@ export function LandingClient({
       )}
 
       {/* Images */}
-      {copy.images.length > 0 && (
-        <section className="py-12 px-6">
+      {sections.gallery !== false && copy.images.length > 0 && (
+        <section className="py-10 sm:py-12 px-4 sm:px-6" style={{ backgroundColor: brand.background }}>
           <div className="max-w-6xl mx-auto">
             <div className={`grid gap-4 ${
               copy.images.length === 1 ? 'grid-cols-1 max-w-2xl mx-auto' :
@@ -242,103 +412,21 @@ export function LandingClient({
         </section>
       )}
 
-      {/* Contact Form */}
-      <section id="contact" className="py-16 px-6">
-        <div className="max-w-xl mx-auto">
-          <h2 style={{ color: brand.text }} className="text-3xl font-bold text-center mb-2">
-            {copy.contactTitle}
-          </h2>
-          <p style={{ color: brand.textMuted }} className="text-center mb-8">
-            {copy.contactSubhead}
-          </p>
-
-          {formSuccess ? (
-            <div
-              style={{ backgroundColor: brand.card, borderColor: brand.border }}
-              className="rounded-xl p-8 text-center border"
-            >
-              <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <p style={{ color: brand.text }} className="text-lg font-medium">
-                {copy.contactSuccessMessage}
-              </p>
-            </div>
-          ) : (
-            <form onSubmit={handleContactSubmit} className="space-y-4">
-              <div>
-                <label style={{ color: brand.textMuted }} className="block text-sm font-medium mb-1.5">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Your name"
-                  style={{ backgroundColor: brand.card, borderColor: brand.border, color: brand.text }}
-                  className="w-full rounded-lg border px-4 py-3 focus:outline-none focus:ring-2 transition-colors"
-                />
-              </div>
-              <div>
-                <label style={{ color: brand.textMuted }} className="block text-sm font-medium mb-1.5">
-                  Email <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="you@example.com"
-                  style={{ backgroundColor: brand.card, borderColor: brand.border, color: brand.text }}
-                  className="w-full rounded-lg border px-4 py-3 focus:outline-none focus:ring-2 transition-colors"
-                />
-              </div>
-              <div>
-                <label style={{ color: brand.textMuted }} className="block text-sm font-medium mb-1.5">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                  placeholder="(555) 123-4567"
-                  style={{ backgroundColor: brand.card, borderColor: brand.border, color: brand.text }}
-                  className="w-full rounded-lg border px-4 py-3 focus:outline-none focus:ring-2 transition-colors"
-                />
-              </div>
-
-              {formError && (
-                <p className="text-sm text-red-500">{formError}</p>
-              )}
-
-              <button
-                type="submit"
-                disabled={formSubmitting}
-                style={{ backgroundColor: brand.primary }}
-                className="w-full text-white font-semibold py-3 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
-              >
-                {formSubmitting ? 'Sending...' : copy.contactSubmitText}
-              </button>
-            </form>
-          )}
-        </div>
-      </section>
-
       {/* Footer */}
-      <footer style={{ backgroundColor: brand.header }} className="py-8 px-6">
-        <div className="max-w-6xl mx-auto text-center">
-          {features.showPoweredBy && copy.footerText && (
-            <p className="text-white/70 text-sm">{copy.footerText}</p>
-          )}
-          {copy.footerEmail && (
-            <a href={`mailto:${copy.footerEmail}`} className="text-white/80 text-sm hover:text-white transition-colors">
-              {copy.footerEmail}
-            </a>
-          )}
-        </div>
-      </footer>
+      {sections.footer !== false && (
+        <footer style={{ backgroundColor: brand.header }} className="py-6 sm:py-8 px-4 sm:px-6">
+          <div className="max-w-6xl mx-auto text-center">
+            {features.showPoweredBy && copy.footerText && (
+              <p className="text-white/70 text-sm">{copy.footerText}</p>
+            )}
+            {copy.footerEmail && (
+              <a href={`mailto:${copy.footerEmail}`} className="text-white/80 text-sm hover:text-white transition-colors">
+                {copy.footerEmail}
+              </a>
+            )}
+          </div>
+        </footer>
+      )}
 
       {/* Webchat Widget */}
       {webchat?.enabled && webchat.agentId && (

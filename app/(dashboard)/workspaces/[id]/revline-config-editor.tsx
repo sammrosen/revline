@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { BRANDING_SCHEMA, BOOKING_COPY_SCHEMA, SIGNUP_COPY_SCHEMA } from '@/app/_lib/templates';
+import { BRANDING_SCHEMA, BOOKING_COPY_SCHEMA, SIGNUP_COPY_SCHEMA, LANDING_COPY_SCHEMA } from '@/app/_lib/templates';
 import { 
   DEFAULT_SIGNUP_CONFIG,
   DEFAULT_THEME_MAPPING,
   DEFAULT_HEADER_STYLE,
   DEFAULT_TYPOGRAPHY,
   DEFAULT_BRANDING,
+  DEFAULT_LANDING_COPY,
   EXAMPLE_SIGNUP_PLAN,
   isValidHexColor, 
   isValidLogoUrl,
@@ -67,6 +68,8 @@ interface LandingCopyConfig {
   heroSubhead?: string;
   heroCtaText?: string;
   heroCtaLink?: string;
+  heroBackgroundImage?: string;
+  phoneNumber?: string;
   servicesTitle?: string;
   services?: Array<{ title: string; description: string }>;
   images?: string[];
@@ -74,8 +77,11 @@ interface LandingCopyConfig {
   contactSubhead?: string;
   contactSubmitText?: string;
   contactSuccessMessage?: string;
+  consentText?: string;
+  formFields?: Array<{ id: string; label: string; type: 'text' | 'email' | 'tel' | 'textarea'; required?: boolean; placeholder?: string }>;
   footerText?: string;
   footerEmail?: string;
+  sections?: { hero?: boolean; services?: boolean; gallery?: boolean; footer?: boolean };
 }
 
 interface CopyConfig {
@@ -1057,6 +1063,7 @@ function BuildTab({
   // Determine the form type for showing appropriate sections
   const isBookingForm = selectedForm.includes('booking') || selectedFormInfo?.type === 'booking';
   const isSignupForm = selectedForm.includes('signup') || selectedFormInfo?.type === 'signup';
+  const isLandingForm = selectedForm.includes('landing') || selectedFormInfo?.type === 'landing';
 
   return (
     <div className="space-y-4">
@@ -1095,6 +1102,10 @@ function BuildTab({
           <SignupConfigSection meta={meta} updateMeta={updateMeta} />
         </>
       )}
+
+      {isLandingForm && (
+        <LandingBuildSection meta={meta} updateMeta={updateMeta} />
+      )}
       
       {/* Theme Mapping */}
       <ThemeSection meta={meta} updateMeta={updateMeta} />
@@ -1103,7 +1114,7 @@ function BuildTab({
       <TypographySection meta={meta} updateMeta={updateMeta} />
 
       {/* Fallback for unknown form types */}
-      {!isBookingForm && !isSignupForm && selectedForm && (
+      {!isBookingForm && !isSignupForm && !isLandingForm && selectedForm && (
         <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
           <p className="text-sm text-zinc-500 text-center py-4">
             No configuration options available for this form type.
@@ -2108,3 +2119,309 @@ function SignupConfigSection({
   );
 }
 
+// =============================================================================
+// COLLAPSIBLE SECTION (shared helper for Build tab)
+// =============================================================================
+
+function CollapsibleSection({
+  title,
+  enabled,
+  onToggle,
+  defaultOpen = false,
+  alwaysOn = false,
+  children,
+}: {
+  title: string;
+  enabled?: boolean;
+  onToggle?: (v: boolean) => void;
+  defaultOpen?: boolean;
+  alwaysOn?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const isEnabled = alwaysOn || enabled !== false;
+
+  return (
+    <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-900/30 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <svg
+            className={`w-3.5 h-3.5 text-zinc-500 transition-transform ${open ? 'rotate-90' : ''}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+          <span className="text-sm font-medium text-zinc-300">{title}</span>
+        </div>
+        {!alwaysOn && onToggle && (
+          <div
+            onClick={(e) => { e.stopPropagation(); onToggle(!isEnabled); }}
+            className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${
+              isEnabled ? 'bg-amber-500' : 'bg-zinc-700'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                isEnabled ? 'left-4' : 'left-0.5'
+              }`}
+            />
+          </div>
+        )}
+      </button>
+      {open && (
+        <div className={`px-4 pb-4 ${!isEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// LANDING BUILD SECTION (for Build tab -- collapsible groups)
+// =============================================================================
+
+const HERO_FIELDS = ['heroHeadline', 'heroSubhead', 'heroCtaText', 'phoneNumber', 'heroBackgroundImage'];
+const FORM_FIELDS_KEYS = ['contactTitle', 'contactSubhead', 'contactSubmitText', 'contactSuccessMessage', 'consentText'];
+const FOOTER_FIELDS = ['footerText', 'footerEmail'];
+
+const FIELD_TYPE_OPTIONS: { value: 'text' | 'email' | 'tel' | 'textarea'; label: string }[] = [
+  { value: 'text', label: 'Text' },
+  { value: 'email', label: 'Email' },
+  { value: 'tel', label: 'Phone' },
+  { value: 'textarea', label: 'Long Text' },
+];
+
+const MAX_FORM_FIELDS = 10;
+
+function LandingBuildSection({
+  meta,
+  updateMeta,
+}: {
+  meta: RevlineMeta;
+  updateMeta: (m: RevlineMeta) => void;
+}) {
+  const landingCopy = meta.copy?.landing || {};
+  const sections = landingCopy.sections || { hero: true, services: true, gallery: true, footer: true };
+  const fields = landingCopy.formFields || DEFAULT_LANDING_COPY.formFields;
+
+  function updateCopy(field: string, value: string) {
+    updateMeta({
+      ...meta,
+      copy: { ...meta.copy, landing: { ...landingCopy, [field]: value } },
+    });
+  }
+
+  function updateSections(updates: Partial<NonNullable<LandingCopyConfig['sections']>>) {
+    updateMeta({
+      ...meta,
+      copy: { ...meta.copy, landing: { ...landingCopy, sections: { ...sections, ...updates } } },
+    });
+  }
+
+  function updateFields(newFields: LandingCopyConfig['formFields']) {
+    updateMeta({
+      ...meta,
+      copy: { ...meta.copy, landing: { ...landingCopy, formFields: newFields } },
+    });
+  }
+
+  function updateFieldAt(index: number, updates: Partial<NonNullable<LandingCopyConfig['formFields']>[number]>) {
+    const next = [...fields];
+    next[index] = { ...next[index], ...updates };
+    updateFields(next);
+  }
+
+  function addField() {
+    if (fields.length >= MAX_FORM_FIELDS) return;
+    updateFields([
+      ...fields,
+      { id: `field_${Date.now()}`, label: 'New Field', type: 'text' as const, required: false, placeholder: '' },
+    ]);
+  }
+
+  function removeField(index: number) {
+    updateFields(fields.filter((_, i) => i !== index));
+  }
+
+  function moveField(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= fields.length) return;
+    const next = [...fields];
+    [next[index], next[target]] = [next[target], next[index]];
+    updateFields(next);
+  }
+
+  function renderCopyField(key: string) {
+    const schema = LANDING_COPY_SCHEMA.fields.find(f => f.key === key);
+    if (!schema) return null;
+    const val = (landingCopy as Record<string, string>)[key] || '';
+
+    return (
+      <div key={key}>
+        <label className="text-xs text-zinc-400 block mb-1.5">{schema.label}</label>
+        {schema.multiline ? (
+          <textarea
+            value={val}
+            onChange={(e) => updateCopy(key, e.target.value)}
+            placeholder={schema.placeholder || schema.default}
+            maxLength={schema.maxLength}
+            rows={3}
+            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none transition-colors resize-none"
+          />
+        ) : (
+          <input
+            type="text"
+            value={val}
+            onChange={(e) => updateCopy(key, e.target.value)}
+            placeholder={schema.placeholder || schema.default}
+            maxLength={schema.maxLength}
+            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-amber-500/50 outline-none transition-colors"
+          />
+        )}
+        <div className="flex justify-between mt-1">
+          <p className="text-xs text-zinc-600">{schema.description}</p>
+          {schema.maxLength && (
+            <span className="text-xs text-zinc-600">{val.length}/{schema.maxLength}</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Hero Section */}
+      <CollapsibleSection
+        title="Hero"
+        enabled={sections.hero}
+        onToggle={(v) => updateSections({ hero: v })}
+        defaultOpen={true}
+      >
+        <div className="space-y-4">
+          {HERO_FIELDS.map(renderCopyField)}
+        </div>
+      </CollapsibleSection>
+
+      {/* Form Section */}
+      <CollapsibleSection title="Contact Form" alwaysOn defaultOpen={true}>
+        <div className="space-y-4 mb-4">
+          {FORM_FIELDS_KEYS.map(renderCopyField)}
+        </div>
+
+        {/* Form field editor */}
+        <div className="border-t border-zinc-800/50 pt-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h4 className="text-xs font-medium text-zinc-400">Form Fields</h4>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                {fields.length}/{MAX_FORM_FIELDS} fields
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={addField}
+              disabled={fields.length >= MAX_FORM_FIELDS}
+              className="text-xs bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white px-3 py-1.5 rounded transition-colors"
+            >
+              + Add Field
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {fields.map((field, i) => (
+              <div key={i} className="bg-zinc-900/60 border border-zinc-800 rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="flex flex-col gap-0.5">
+                    <button type="button" onClick={() => moveField(i, -1)} disabled={i === 0}
+                      className="text-zinc-500 hover:text-zinc-300 disabled:text-zinc-700 text-xs leading-none" title="Move up">▲</button>
+                    <button type="button" onClick={() => moveField(i, 1)} disabled={i === fields.length - 1}
+                      className="text-zinc-500 hover:text-zinc-300 disabled:text-zinc-700 text-xs leading-none" title="Move down">▼</button>
+                  </div>
+                  <span className="text-xs text-zinc-500 font-mono">{field.id}</span>
+                  <div className="ml-auto flex items-center gap-2">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <span className="text-xs text-zinc-400">Required</span>
+                      <input type="checkbox" checked={field.required ?? false}
+                        onChange={(e) => updateFieldAt(i, { required: e.target.checked })}
+                        className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500/50" />
+                    </label>
+                    <button type="button" onClick={() => removeField(i)}
+                      className="text-zinc-500 hover:text-red-400 transition-colors text-sm" title="Remove field">✕</button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-zinc-500 block mb-1">Label</label>
+                    <input type="text" value={field.label} onChange={(e) => updateFieldAt(i, { label: e.target.value })}
+                      maxLength={50} className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-500 block mb-1">Type</label>
+                    <select value={field.type} onChange={(e) => updateFieldAt(i, { type: e.target.value as 'text' | 'email' | 'tel' | 'textarea' })}
+                      className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors">
+                      {FIELD_TYPE_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-500 block mb-1">Placeholder</label>
+                    <input type="text" value={field.placeholder || ''} onChange={(e) => updateFieldAt(i, { placeholder: e.target.value })}
+                      maxLength={80} className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-white focus:border-amber-500/50 outline-none transition-colors" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-500 block mb-1">Field ID</label>
+                    <input type="text" value={field.id} onChange={(e) => updateFieldAt(i, { id: e.target.value.replace(/\s+/g, '_').toLowerCase() })}
+                      maxLength={30} className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-white font-mono focus:border-amber-500/50 outline-none transition-colors" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 pt-3 border-t border-zinc-800/50">
+            <button type="button" onClick={() => updateFields(DEFAULT_LANDING_COPY.formFields)}
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+              Reset fields to defaults
+            </button>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* Services Section */}
+      <CollapsibleSection
+        title="Services"
+        enabled={sections.services}
+        onToggle={(v) => updateSections({ services: v })}
+      >
+        <div className="space-y-4">
+          {renderCopyField('servicesTitle')}
+          <p className="text-xs text-zinc-500">Service cards are configured via JSON for now. Toggle this section on/off to show or hide it on the landing page.</p>
+        </div>
+      </CollapsibleSection>
+
+      {/* Gallery Section */}
+      <CollapsibleSection
+        title="Gallery"
+        enabled={sections.gallery}
+        onToggle={(v) => updateSections({ gallery: v })}
+      >
+        <p className="text-xs text-zinc-500">Image gallery management coming soon. Toggle this section on/off to show or hide it on the landing page.</p>
+      </CollapsibleSection>
+
+      {/* Footer Section */}
+      <CollapsibleSection
+        title="Footer"
+        enabled={sections.footer}
+        onToggle={(v) => updateSections({ footer: v })}
+      >
+        <div className="space-y-4">
+          {FOOTER_FIELDS.map(renderCopyField)}
+        </div>
+      </CollapsibleSection>
+    </div>
+  );
+}

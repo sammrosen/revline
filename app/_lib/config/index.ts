@@ -26,6 +26,8 @@ export {
   type ResolvedSignupPolicies,
   type ResolvedSignupConfig,
   type ResolvedLandingCopy,
+  type ResolvedLandingFormField,
+  type ResolvedLandingSections,
   type ResolvedLandingConfig,
 } from './workspace-config.service';
 

@@ -145,11 +145,19 @@ export function FormPreviewMock({
   };
 
   if (formType === 'landing') {
+    const defaultFields = DEFAULT_LANDING_COPY.formFields.map(f => ({
+      ...f,
+      required: f.required ?? false,
+      placeholder: f.placeholder ?? '',
+    }));
+
     const resolvedLandingCopy: ResolvedLandingCopy = {
       heroHeadline: landingCopy?.heroHeadline || DEFAULT_LANDING_COPY.heroHeadline,
       heroSubhead: landingCopy?.heroSubhead || DEFAULT_LANDING_COPY.heroSubhead,
       heroCtaText: landingCopy?.heroCtaText || DEFAULT_LANDING_COPY.heroCtaText,
       heroCtaLink: landingCopy?.heroCtaLink || DEFAULT_LANDING_COPY.heroCtaLink,
+      heroBackgroundImage: landingCopy?.heroBackgroundImage || DEFAULT_LANDING_COPY.heroBackgroundImage,
+      phoneNumber: landingCopy?.phoneNumber || DEFAULT_LANDING_COPY.phoneNumber,
       servicesTitle: landingCopy?.servicesTitle || DEFAULT_LANDING_COPY.servicesTitle,
       services: landingCopy?.services?.length ? landingCopy.services : DEFAULT_LANDING_COPY.services,
       images: landingCopy?.images?.length ? landingCopy.images : DEFAULT_LANDING_COPY.images,
@@ -157,8 +165,18 @@ export function FormPreviewMock({
       contactSubhead: landingCopy?.contactSubhead || DEFAULT_LANDING_COPY.contactSubhead,
       contactSubmitText: landingCopy?.contactSubmitText || DEFAULT_LANDING_COPY.contactSubmitText,
       contactSuccessMessage: landingCopy?.contactSuccessMessage || DEFAULT_LANDING_COPY.contactSuccessMessage,
+      consentText: landingCopy?.consentText || DEFAULT_LANDING_COPY.consentText,
+      formFields: landingCopy?.formFields?.length
+        ? landingCopy.formFields.map(f => ({ ...f, required: f.required ?? false, placeholder: f.placeholder ?? '' }))
+        : defaultFields,
       footerText: landingCopy?.footerText || DEFAULT_LANDING_COPY.footerText,
       footerEmail: landingCopy?.footerEmail || DEFAULT_LANDING_COPY.footerEmail,
+      sections: {
+        hero: landingCopy?.sections?.hero ?? true,
+        services: landingCopy?.sections?.services ?? true,
+        gallery: landingCopy?.sections?.gallery ?? true,
+        footer: landingCopy?.sections?.footer ?? true,
+      },
     };
 
     return (

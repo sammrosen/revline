@@ -101,17 +101,28 @@ The `services` array (`Array<{ title, description }>`) and `images` array don't 
   "branding": { "color1": "#1e40af", "color2": "#1e3a8a", "color3": "#f8fafc", "color4": "#ffffff", "color5": "#1e293b", "logo": "https://..." },
   "copy": {
     "landing": {
-      "heroHeadline": "Your Custom Headline",
-      "heroSubhead": "Your subhead text",
+      "heroHeadline": "Dave's Appliance Repair",
+      "heroSubhead": "We provide expert in-home appliance repair services.",
+      "heroCtaText": "Book Today",
+      "heroBackgroundImage": "https://example.com/hero-bg.jpg",
+      "phoneNumber": "(530) 662-2911",
       "servicesTitle": "Our Services",
       "services": [
-        { "title": "Personal Training", "description": "One-on-one coaching." },
-        { "title": "Group Classes", "description": "High-energy group sessions." }
+        { "title": "Refrigerator Repair", "description": "Keep your refrigerator running smoothly." },
+        { "title": "Washer Repair", "description": "Get your laundry back on track." }
       ],
       "images": ["https://example.com/photo1.jpg", "https://example.com/photo2.jpg"],
-      "contactTitle": "Contact Us",
-      "contactSubmitText": "Send Message",
-      "footerEmail": "hello@yourgym.com"
+      "contactTitle": "Schedule an Appointment",
+      "contactSubmitText": "Send",
+      "consentText": "I agree to terms & conditions. By providing my phone number, I agree to receive text messages.",
+      "formFields": [
+        { "id": "name", "label": "Full Name", "type": "text", "required": true, "placeholder": "John Smith" },
+        { "id": "email", "label": "Email", "type": "email", "required": true },
+        { "id": "phone", "label": "Phone", "type": "tel", "required": true },
+        { "id": "address", "label": "Address", "type": "text" },
+        { "id": "message", "label": "What can we help with?", "type": "textarea" }
+      ],
+      "footerEmail": "hello@yourbusiness.com"
     }
   },
   "webchat": {

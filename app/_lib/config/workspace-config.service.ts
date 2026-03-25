@@ -19,6 +19,7 @@ import {
   BrandingConfig, 
   BookingCopyConfig, 
   LandingCopyConfig,
+  LandingFormField,
   WorkspaceFeatures,
   RevlineMeta,
   ThemeMapping,
@@ -151,11 +152,28 @@ export interface ResolvedBookingConfig extends ResolvedWorkspaceConfig {
 /**
  * Fully resolved landing page copy (no optional fields)
  */
+export interface ResolvedLandingFormField {
+  id: string;
+  label: string;
+  type: 'text' | 'email' | 'tel' | 'textarea';
+  required: boolean;
+  placeholder: string;
+}
+
+export interface ResolvedLandingSections {
+  hero: boolean;
+  services: boolean;
+  gallery: boolean;
+  footer: boolean;
+}
+
 export interface ResolvedLandingCopy {
   heroHeadline: string;
   heroSubhead: string;
   heroCtaText: string;
   heroCtaLink: string;
+  heroBackgroundImage: string;
+  phoneNumber: string;
   servicesTitle: string;
   services: Array<{ title: string; description: string }>;
   images: string[];
@@ -163,8 +181,11 @@ export interface ResolvedLandingCopy {
   contactSubhead: string;
   contactSubmitText: string;
   contactSuccessMessage: string;
+  consentText: string;
+  formFields: ResolvedLandingFormField[];
   footerText: string;
   footerEmail: string;
+  sections: ResolvedLandingSections;
 }
 
 /**
@@ -839,11 +860,24 @@ export class WorkspaceConfigService {
    * Resolve landing page copy by merging with defaults
    * Sanitizes text values and validates structured fields
    */
+  private static readonly VALID_FIELD_TYPES = new Set(['text', 'email', 'tel', 'textarea']);
+
   private static resolveLandingCopy(overrides?: LandingCopyConfig): ResolvedLandingCopy {
     const result: ResolvedLandingCopy = {
       ...DEFAULT_LANDING_COPY,
       services: DEFAULT_LANDING_COPY.services.map(s => ({ ...s })),
       images: [...DEFAULT_LANDING_COPY.images],
+      formFields: DEFAULT_LANDING_COPY.formFields.map(f => ({
+        ...f,
+        required: f.required ?? false,
+        placeholder: f.placeholder ?? '',
+      })),
+      sections: {
+        hero: DEFAULT_LANDING_COPY.sections?.hero ?? true,
+        services: DEFAULT_LANDING_COPY.sections?.services ?? true,
+        gallery: DEFAULT_LANDING_COPY.sections?.gallery ?? true,
+        footer: DEFAULT_LANDING_COPY.sections?.footer ?? true,
+      },
     };
 
     if (!overrides) {
@@ -861,6 +895,12 @@ export class WorkspaceConfigService {
     }
     if (overrides.heroCtaLink) {
       result.heroCtaLink = sanitizeCopyText(overrides.heroCtaLink, 200);
+    }
+    if (overrides.heroBackgroundImage && isValidLogoUrl(overrides.heroBackgroundImage)) {
+      result.heroBackgroundImage = overrides.heroBackgroundImage;
+    }
+    if (overrides.phoneNumber) {
+      result.phoneNumber = sanitizeCopyText(overrides.phoneNumber, 20);
     }
     if (overrides.servicesTitle) {
       result.servicesTitle = sanitizeCopyText(overrides.servicesTitle, 60);
@@ -888,13 +928,37 @@ export class WorkspaceConfigService {
     if (overrides.contactSuccessMessage) {
       result.contactSuccessMessage = sanitizeCopyText(overrides.contactSuccessMessage, 160);
     }
+    if (overrides.consentText) {
+      result.consentText = sanitizeCopyText(overrides.consentText, 500);
+    }
+    if (Array.isArray(overrides.formFields) && overrides.formFields.length > 0) {
+      result.formFields = this.resolveFormFields(overrides.formFields);
+    }
     if (overrides.footerText) {
       result.footerText = sanitizeCopyText(overrides.footerText, 80);
     }
     if (overrides.footerEmail) {
       result.footerEmail = sanitizeCopyText(overrides.footerEmail, 80);
     }
+    if (overrides.sections) {
+      result.sections = {
+        hero: overrides.sections.hero ?? result.sections.hero,
+        services: overrides.sections.services ?? result.sections.services,
+        gallery: overrides.sections.gallery ?? result.sections.gallery,
+        footer: overrides.sections.footer ?? result.sections.footer,
+      };
+    }
 
     return result;
+  }
+
+  private static resolveFormFields(fields: LandingFormField[]): ResolvedLandingFormField[] {
+    return fields.slice(0, 10).map(f => ({
+      id: sanitizeCopyText(f.id || '', 30).replace(/\s+/g, '_').toLowerCase(),
+      label: sanitizeCopyText(f.label || '', 50),
+      type: this.VALID_FIELD_TYPES.has(f.type) ? f.type : 'text' as const,
+      required: f.required ?? false,
+      placeholder: sanitizeCopyText(f.placeholder || '', 80),
+    })).filter(f => f.id && f.label);
   }
 }

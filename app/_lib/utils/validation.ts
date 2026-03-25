@@ -96,7 +96,9 @@ export function validateName(name: unknown): ValidationResult<string | undefined
 export interface CaptureInputValidation {
   email: string;
   name?: string;
+  phone?: string;
   source: string;
+  metadata?: Record<string, string>;
 }
 
 export function validateCaptureInput(body: unknown): ValidationResult<CaptureInputValidation> {
@@ -118,6 +120,13 @@ export function validateCaptureInput(body: unknown): ValidationResult<CaptureInp
     return { success: false, error: nameResult.error, field: nameResult.field };
   }
 
+  // Validate phone (optional, basic sanitization)
+  let phone: string | undefined;
+  if (input.phone && typeof input.phone === 'string') {
+    const trimmed = input.phone.trim().slice(0, 20);
+    if (trimmed) phone = trimmed;
+  }
+
   // Validate source (use 'default' if not provided)
   const sourceInput = input.source || 'default';
   const sourceResult = validateSlug(sourceInput);
@@ -125,12 +134,27 @@ export function validateCaptureInput(body: unknown): ValidationResult<CaptureInp
     return { success: false, error: sourceResult.error, field: sourceResult.field };
   }
 
+  // Validate metadata (optional, string values only, capped)
+  let metadata: Record<string, string> | undefined;
+  if (input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)) {
+    metadata = {};
+    const entries = Object.entries(input.metadata as Record<string, unknown>).slice(0, 20);
+    for (const [key, val] of entries) {
+      if (typeof val === 'string') {
+        metadata[key.slice(0, 50).replace(/[<>]/g, '')] = val.slice(0, 1000).replace(/[<>]/g, '');
+      }
+    }
+    if (Object.keys(metadata).length === 0) metadata = undefined;
+  }
+
   return {
     success: true,
     data: {
       email: emailResult.data!,
       name: nameResult.data,
+      phone,
       source: sourceResult.data!,
+      metadata,
     },
   };
 }
