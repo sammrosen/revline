@@ -8,7 +8,7 @@
 // WEBHOOK PROCESSOR TYPES
 // =============================================================================
 
-export type WebhookProvider = 'stripe' | 'calendly' | 'revline' | 'resend' | 'twilio';
+export type WebhookProvider = 'stripe' | 'calendly' | 'revline' | 'resend' | 'twilio' | 'pipedrive';
 
 export type WebhookEventStatus = 'PENDING' | 'PROCESSING' | 'PROCESSED' | 'FAILED';
 

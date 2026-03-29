@@ -37,7 +37,7 @@ export class CaptureService {
    * ```typescript
    * await emitTrigger(workspaceId, {
    *   adapter: 'revline',
-   *   operation: 'email_captured',
+   *   operation: 'contact-submitted',
    * }, { email, name, source });
    * ```
    */
@@ -63,7 +63,7 @@ export class CaptureService {
           workspaceId,
           leadId: lead,
           system: EventSystem.BACKEND,
-          eventType: 'email_captured',
+          eventType: 'contact-submitted',
           success: true,
           tx,
         });
@@ -84,7 +84,7 @@ export class CaptureService {
     // Step 3: Emit trigger to workflow engine
     const result = await emitTrigger(
       workspaceId,
-      { adapter: 'revline', operation: 'email_captured' },
+      { adapter: 'revline', operation: 'contact-submitted' },
       { email, name, source }
     );
 

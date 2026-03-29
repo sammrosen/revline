@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, ChevronDown, Filter } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronRight, Filter } from 'lucide-react';
 
 // =============================================================================
 // TYPES
@@ -13,6 +13,7 @@ interface EventItem {
   eventType: string;
   success: boolean;
   errorMessage: string | null;
+  metadata: Record<string, unknown> | null;
   createdAt: string;
   leadId?: string | null;
 }
@@ -23,12 +24,14 @@ interface GroupedEvent {
   eventType: string;
   success: boolean;
   errorMessage: string | null;
+  metadata: Record<string, unknown> | null;
   count: number;
   latestAt: string;
   earliestAt: string;
 }
 
 const EVENT_SYSTEMS = [
+  'AGENT',
   'BACKEND',
   'MAILERLITE',
   'STRIPE',
@@ -36,6 +39,10 @@ const EVENT_SYSTEMS = [
   'MANYCHAT',
   'ABC_IGNITE',
   'RESEND',
+  'TWILIO',
+  'OPENAI',
+  'ANTHROPIC',
+  'PIPEDRIVE',
   'CRON',
   'WORKFLOW',
 ] as const;
@@ -58,6 +65,29 @@ function formatDate(date: string | Date | null) {
   }).format(new Date(date));
 }
 
+const METADATA_LABELS: Record<string, string> = {
+  agentId: 'Agent ID',
+  conversationId: 'Conversation',
+  channel: 'Channel',
+  channelIntegration: 'Integration',
+  provider: 'AI Provider',
+  correlationId: 'Correlation ID',
+  configId: 'Config ID',
+  sessionId: 'Session ID',
+  latencyMs: 'Latency',
+  tokensUsed: 'Tokens',
+  iteration: 'Iteration',
+  contactAddress: 'Contact',
+  reason: 'Reason',
+};
+
+function formatMetaValue(key: string, value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  if (key === 'latencyMs' && typeof value === 'number') return `${value}ms`;
+  if (key === 'tokensUsed' && typeof value === 'number') return value.toLocaleString();
+  return String(value);
+}
+
 const TARGET_ROWS = 50;
 const MAX_RAW_EVENTS = 500;
 
@@ -71,6 +101,7 @@ function groupConsecutiveEvents(events: EventItem[]): GroupedEvent[] {
     eventType: events[0].eventType,
     success: events[0].success,
     errorMessage: events[0].errorMessage,
+    metadata: events[0].metadata,
     count: 1,
     latestAt: events[0].createdAt,
     earliestAt: events[0].createdAt,
@@ -94,6 +125,7 @@ function groupConsecutiveEvents(events: EventItem[]): GroupedEvent[] {
         eventType: event.eventType,
         success: event.success,
         errorMessage: event.errorMessage,
+        metadata: event.metadata,
         count: 1,
         latestAt: event.createdAt,
         earliestAt: event.createdAt,
@@ -121,6 +153,7 @@ export function EventsLog({ workspaceId }: EventsLogProps) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [systemFilter, setSystemFilter] = useState<string>('');
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const fetchEvents = useCallback(async (cursor?: string, append = false) => {
     if (append) {
@@ -161,12 +194,10 @@ export function EventsLog({ workspaceId }: EventsLogProps) {
 
   const grouped = useMemo(() => groupConsecutiveEvents(events), [events]);
 
-  // Fetch on mount and when filter changes
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
 
-  // Auto-fetch until we have enough grouped rows to fill the page
   useEffect(() => {
     if (
       !loading &&
@@ -183,6 +214,14 @@ export function EventsLog({ workspaceId }: EventsLogProps) {
     if (nextCursor && !loadingMore) {
       fetchEvents(nextCursor, true);
     }
+  };
+
+  const toggleExpand = (key: string) => {
+    setExpandedKey(prev => prev === key ? null : key);
+  };
+
+  const hasDetail = (group: GroupedEvent): boolean => {
+    return !!(group.errorMessage || (group.metadata && Object.keys(group.metadata).length > 0));
   };
 
   return (
@@ -229,6 +268,7 @@ export function EventsLog({ workspaceId }: EventsLogProps) {
           <table className="w-full text-sm min-w-[600px]">
             <thead>
               <tr className="border-b border-zinc-800 text-left text-zinc-400">
+                <th className="px-4 py-2 font-medium w-8"></th>
                 <th className="px-4 py-2 font-medium">Time</th>
                 <th className="px-4 py-2 font-medium">System</th>
                 <th className="px-4 py-2 font-medium">Event</th>
@@ -239,58 +279,31 @@ export function EventsLog({ workspaceId }: EventsLogProps) {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center">
+                  <td colSpan={6} className="px-4 py-8 text-center">
                     <Loader2 className="w-5 h-5 text-zinc-500 animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : grouped.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
                     {systemFilter ? `No events for ${formatSystemLabel(systemFilter)}` : 'No events yet'}
                   </td>
                 </tr>
               ) : (
-                grouped.map((group) => (
-                  <tr
-                    key={group.key}
-                    className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50"
-                  >
-                    <td className="px-4 py-2 text-zinc-400 whitespace-nowrap">
-                      {group.count > 1 ? (
-                        <span>{formatDate(group.earliestAt)} — {formatDate(group.latestAt)}</span>
-                      ) : (
-                        formatDate(group.latestAt)
-                      )}
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap">
-                      <span className={`font-mono text-xs px-1.5 py-0.5 rounded ${
-                        getSystemColor(group.system)
-                      }`}>
-                        {group.system}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1.5">
-                        {group.eventType}
-                        {group.count > 1 && (
-                          <span className="text-[10px] font-medium text-zinc-400 bg-zinc-800 border border-zinc-700 rounded-full px-1.5 py-px">
-                            ×{group.count}
-                          </span>
-                        )}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2">
-                      {group.success ? (
-                        <span className="text-green-400">✓</span>
-                      ) : (
-                        <span className="text-red-400">✗</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-red-400 text-xs truncate max-w-xs">
-                      {group.errorMessage || '—'}
-                    </td>
-                  </tr>
-                ))
+                grouped.map((group) => {
+                  const isExpanded = expandedKey === group.key;
+                  const expandable = hasDetail(group);
+
+                  return (
+                    <EventRow
+                      key={group.key}
+                      group={group}
+                      isExpanded={isExpanded}
+                      expandable={expandable}
+                      onToggle={() => toggleExpand(group.key)}
+                    />
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -321,11 +334,131 @@ export function EventsLog({ workspaceId }: EventsLogProps) {
 }
 
 // =============================================================================
+// EVENT ROW (with expandable detail)
+// =============================================================================
+
+function EventRow({
+  group,
+  isExpanded,
+  expandable,
+  onToggle,
+}: {
+  group: GroupedEvent;
+  isExpanded: boolean;
+  expandable: boolean;
+  onToggle: () => void;
+}) {
+  const metaEntries = group.metadata
+    ? Object.entries(group.metadata).filter(([, v]) => v !== null && v !== undefined)
+    : [];
+
+  return (
+    <>
+      <tr
+        className={`border-b border-zinc-800 last:border-0 ${
+          expandable ? 'cursor-pointer hover:bg-zinc-800/50' : ''
+        } ${isExpanded ? 'bg-zinc-800/30' : ''}`}
+        onClick={expandable ? onToggle : undefined}
+      >
+        <td className="pl-4 pr-1 py-2 w-8">
+          {expandable && (
+            <span className="text-zinc-500">
+              {isExpanded
+                ? <ChevronDown className="w-3.5 h-3.5" />
+                : <ChevronRight className="w-3.5 h-3.5" />
+              }
+            </span>
+          )}
+        </td>
+        <td className="px-4 py-2 text-zinc-400 whitespace-nowrap">
+          {group.count > 1 ? (
+            <span>{formatDate(group.earliestAt)} — {formatDate(group.latestAt)}</span>
+          ) : (
+            formatDate(group.latestAt)
+          )}
+        </td>
+        <td className="px-4 py-2 whitespace-nowrap">
+          <span className={`font-mono text-xs px-1.5 py-0.5 rounded ${
+            getSystemColor(group.system)
+          }`}>
+            {group.system}
+          </span>
+        </td>
+        <td className="px-4 py-2 whitespace-nowrap">
+          <span className="inline-flex items-center gap-1.5">
+            {group.eventType}
+            {group.count > 1 && (
+              <span className="text-[10px] font-medium text-zinc-400 bg-zinc-800 border border-zinc-700 rounded-full px-1.5 py-px">
+                ×{group.count}
+              </span>
+            )}
+          </span>
+        </td>
+        <td className="px-4 py-2">
+          {group.success ? (
+            <span className="text-green-400">✓</span>
+          ) : (
+            <span className="text-red-400">✗</span>
+          )}
+        </td>
+        <td className="px-4 py-2 text-red-400 text-xs truncate max-w-xs">
+          {group.errorMessage || '—'}
+        </td>
+      </tr>
+
+      {isExpanded && (
+        <tr className="border-b border-zinc-800">
+          <td colSpan={6} className="px-4 py-3 bg-zinc-800/20">
+            <div className="space-y-2">
+              {group.errorMessage && (
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">Error</span>
+                  <p className="text-xs text-red-400 mt-0.5 whitespace-pre-wrap break-all font-mono leading-relaxed">
+                    {group.errorMessage}
+                  </p>
+                </div>
+              )}
+
+              {metaEntries.length > 0 && (
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">Details</span>
+                  <div className="mt-1 grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1">
+                    {metaEntries.map(([key, value]) => (
+                      <div key={key} className="flex items-baseline gap-1.5 min-w-0">
+                        <span className="text-[11px] text-zinc-500 shrink-0">
+                          {METADATA_LABELS[key] || key}:
+                        </span>
+                        <span className="text-[11px] text-zinc-300 font-mono truncate" title={String(value)}>
+                          {formatMetaValue(key, value)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!group.errorMessage && metaEntries.length === 0 && (
+                <p className="text-xs text-zinc-500">No additional details</p>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+// =============================================================================
 // HELPERS
 // =============================================================================
 
 function getSystemColor(system: string): string {
   switch (system) {
+    case 'AGENT': return 'bg-teal-500/10 text-teal-400';
+    case 'TWILIO': return 'bg-red-500/10 text-red-400';
+    case 'OPENAI': return 'bg-emerald-500/10 text-emerald-400';
+    case 'ANTHROPIC': return 'bg-amber-500/10 text-amber-400';
+    case 'PIPEDRIVE': return 'bg-indigo-500/10 text-indigo-400';
     case 'MAILERLITE': return 'bg-green-500/10 text-green-400';
     case 'STRIPE': return 'bg-purple-500/10 text-purple-400';
     case 'CALENDLY': return 'bg-blue-500/10 text-blue-400';

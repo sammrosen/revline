@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
     // 9. Emit trigger to workflow engine
     const result = await emitTrigger(
       client.id,
-      { adapter: 'revline', operation: 'email_captured' },
+      { adapter: 'revline', operation: 'contact-submitted' },
       { 
         email, 
         name, 

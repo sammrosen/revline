@@ -78,6 +78,7 @@ export async function GET(
         eventType: true,
         success: true,
         errorMessage: true,
+        metadata: true,
         createdAt: true,
         leadId: true,
       },

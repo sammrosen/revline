@@ -16,7 +16,7 @@
 import { prisma } from '@/app/_lib/db';
 import { ConversationStatus, FollowUpStatus } from '@prisma/client';
 import { logStructured } from '@/app/_lib/reliability';
-import type { AgentConfig } from './types';
+import type { AgentConfig, SendChannelContext } from './types';
 import type { ChatMessage } from '@/app/_lib/integrations';
 import { retryWithBackoff } from './retry';
 import { sendReply, callAI } from './engine';
@@ -129,7 +129,7 @@ export async function processFollowUp(
   // Pre-send check 1: conversation still ACTIVE?
   const conversation = await prisma.conversation.findUnique({
     where: { id: followUp.conversationId },
-    select: { status: true, lastMessageAt: true },
+    select: { status: true, lastMessageAt: true, channel: true, channelIntegration: true },
   });
 
   if (!conversation || conversation.status !== ConversationStatus.ACTIVE) {
@@ -198,14 +198,19 @@ export async function processFollowUp(
     return { action: 'skipped', reason: 'no_message_generated' };
   }
 
-  // Send via engine's sendReply (handles quiet hours, SMS sanitization, retry)
+  const channelCtx = conversation.channelIntegration
+    ? { channel: conversation.channel, channelIntegration: conversation.channelIntegration, channelAddress: followUp.channelAddress }
+    : undefined;
+
   const sendResult = await sendReply(
     followUp.workspaceId,
     agent,
     followUp.channelAddress,
     followUp.contactAddress,
     messageText,
-    'proactive'
+    'proactive',
+    followUp.conversationId,
+    channelCtx
   );
 
   if (!sendResult.sent) {

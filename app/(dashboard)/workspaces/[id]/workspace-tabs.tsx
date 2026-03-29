@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { HealthStatus } from '@prisma/client';
-import { LeadPropertyDefinition } from '@/app/_lib/types';
+import { LeadPropertyDefinition, IntegrationReference } from '@/app/_lib/types';
 import { IntegrationActions } from './integration-actions';
+import { IntegrationReferenceDialog } from './integration-reference-dialog';
 import { AddIntegrationForm } from './add-integration-form';
 import { LeadsView } from './leads-view';
 import { WorkflowList } from './workflows/workflow-list';
@@ -14,12 +15,14 @@ import { TestingTab } from './testing-tab';
 import { WorkspaceSettings } from './workspace-settings';
 import { EventsLog } from './_components/events-log';
 import { AgentList } from './agent-list';
+import { WebchatConfigList } from './webchat-config-list';
+import { PhoneConfigList } from './phone-config-list';
 import { PagesEditor } from './pages-editor';
 import { ReadinessPanel } from './readiness-panel';
 import { Workflow as WorkflowIcon, Plus, List } from 'lucide-react';
 import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
 
-type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'agents' | 'pages' | 'testing' | 'settings';
+type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'agents' | 'web-chats' | 'phone' | 'pages' | 'testing' | 'settings';
 
 interface SecretSummary {
   id: string;
@@ -87,6 +90,7 @@ interface WorkspaceTabsProps {
   resendTemplates?: Record<string, { id: string; name: string; variables?: string[] }>;
   stripeProducts?: Record<string, string>;
   agents?: Record<string, string>;
+  agentChannels?: Record<string, Array<{ channel: string; integration: string; address?: string }>>;
   timezone?: string; // Workspace timezone for settings
   domainConfig?: {
     customDomain: string | null;
@@ -97,6 +101,7 @@ interface WorkspaceTabsProps {
   leadStages?: Array<{ key: string; label: string; color: string }>;
   leadPropertySchema?: LeadPropertyDefinition[] | null;
   pagesConfig?: Record<string, unknown> | null;
+  integrationReferences?: Record<string, IntegrationReference>;
 }
 
 // Parse secrets from JSON, returning only id and name (never values)
@@ -138,9 +143,9 @@ interface IntegrationDependency {
   usedBy: Array<{ workflowId: string; workflowName: string }>;
 }
 
-const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'agents', 'pages', 'testing', 'settings'];
+const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'agents', 'web-chats', 'phone', 'pages', 'testing', 'settings'];
 
-export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, resendTemplates = {}, stripeProducts = {}, agents = {}, timezone = 'America/New_York', domainConfig, leadStages, leadPropertySchema, pagesConfig }: WorkspaceTabsProps) {
+export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, resendTemplates = {}, stripeProducts = {}, agents = {}, agentChannels = {}, timezone = 'America/New_York', domainConfig, leadStages, leadPropertySchema, pagesConfig, integrationReferences = {} }: WorkspaceTabsProps) {
   // Initialize with default to avoid hydration mismatch, then sync from hash in useEffect
   const [activeTab, setActiveTab] = useState<TabType>('workflows');
   const [integrationDeps, setIntegrationDeps] = useState<Record<string, IntegrationDependency>>({});
@@ -290,6 +295,7 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
                   resendTemplates={resendTemplates}
                   stripeProducts={stripeProducts}
                   agents={agents}
+                  agentChannels={agentChannels}
                   leadStages={leadStages}
                   leadPropertySchema={leadPropertySchema}
                   hideHeader
@@ -350,6 +356,9 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
                           <span className="px-2 py-1 text-xs rounded bg-amber-500/20 text-amber-400">SETUP</span>
                         ) : (
                           <HealthBadge status={integration.healthStatus} />
+                        )}
+                        {integrationReferences[integration.integration] && (
+                          <IntegrationReferenceDialog reference={integrationReferences[integration.integration]} />
                         )}
                         {usedByCount > 0 && (
                           <span className="flex items-center gap-1 px-2 py-0.5 bg-zinc-800 text-zinc-400 text-xs rounded" title={dependentWorkflows.map(w => w.name).join(', ')}>
@@ -430,6 +439,18 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
         {activeTab === 'agents' && (
           <div className="max-w-[1600px] mx-auto">
             <AgentList workspaceId={workspaceId} />
+          </div>
+        )}
+
+        {activeTab === 'web-chats' && (
+          <div className="max-w-[1600px] mx-auto">
+            <WebchatConfigList workspaceId={workspaceId} />
+          </div>
+        )}
+
+        {activeTab === 'phone' && (
+          <div className="max-w-[1600px] mx-auto">
+            <PhoneConfigList workspaceId={workspaceId} workspaceSlug={workspaceSlug} />
           </div>
         )}
 

@@ -42,6 +42,7 @@ export interface WorkflowEditorProps {
   resendTemplates?: Record<string, { id: string; name: string; variables?: string[] }>;
   stripeProducts?: Record<string, string>; // key -> product name
   agents?: Record<string, string>; // agentId -> agent name
+  agentChannels?: Record<string, Array<{ channel: string; integration: string; address?: string }>>;
   leadStages?: Array<{ key: string; label: string; color: string }>;
   leadPropertySchema?: LeadPropertyDefinition[] | null;
 }
@@ -60,6 +61,7 @@ export function WorkflowEditor({
   resendTemplates = {},
   stripeProducts = {},
   agents = {},
+  agentChannels = {},
   leadStages,
   leadPropertySchema,
   onClose,
@@ -646,6 +648,7 @@ export function WorkflowEditor({
                 mailerliteGroups={mailerliteGroups}
                 resendTemplates={resendTemplates}
                 agents={agents}
+                agentChannels={agentChannels}
                 leadStages={leadStages}
                 leadPropertySchema={leadPropertySchema}
                 workspaceId={workspaceId}
@@ -789,6 +792,7 @@ interface ActionEditorProps {
   mailerliteGroups: Record<string, { id: string; name: string }>;
   resendTemplates: Record<string, { id: string; name: string; variables?: string[] }>;
   agents: Record<string, string>;
+  agentChannels: Record<string, Array<{ channel: string; integration: string; address?: string }>>;
   leadStages?: Array<{ key: string; label: string; color: string }>;
   leadPropertySchema?: LeadPropertyDefinition[] | null;
   workspaceId: string;
@@ -808,6 +812,7 @@ function ActionEditor({
   mailerliteGroups,
   resendTemplates,
   agents,
+  agentChannels,
   leadStages,
   leadPropertySchema,
   workspaceId,
@@ -1212,6 +1217,32 @@ function ActionEditor({
               No agents configured. Create an agent in the Agents tab first.
             </p>
           )}
+          {(() => {
+            const selectedAgentId = action.params.agentId as string | undefined;
+            const channels = selectedAgentId ? (agentChannels[selectedAgentId] || []) : [];
+            if (channels.length > 1) {
+              return (
+                <div className="mt-3">
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">
+                    Channel
+                  </label>
+                  <select
+                    value={(action.params.channelType as string) || ''}
+                    onChange={(e) => onParamChange(index, 'channelType', e.target.value || undefined)}
+                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white text-sm focus:outline-none focus:border-zinc-600"
+                  >
+                    <option value="">Auto (first channel)</option>
+                    {channels.map((ch) => (
+                      <option key={ch.channel} value={ch.channel}>
+                        {ch.channel}{ch.address ? ` (${ch.address})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            }
+            return null;
+          })()}
           <div className="mt-3">
             <label className="block text-xs font-medium text-zinc-500 mb-1">
               Message (optional)

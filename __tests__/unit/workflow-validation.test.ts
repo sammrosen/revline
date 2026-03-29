@@ -42,7 +42,7 @@ describe('Workflow Validation', () => {
         name: 'Test Email Capture Flow',
         enabled: false,
         triggerAdapter: 'revline',
-        triggerOperation: 'email_captured',
+        triggerOperation: 'contact-submitted',
         actions: [
           { adapter: 'revline', operation: 'create_lead', params: {} },
           { adapter: 'mailerlite', operation: 'add_to_group', params: { group: 'leads' } },
@@ -64,7 +64,7 @@ describe('Workflow Validation', () => {
         name: 'Unconfigured Workflow',
         enabled: false,
         triggerAdapter: 'revline',
-        triggerOperation: 'email_captured',
+        triggerOperation: 'contact-submitted',
         actions: [
           { adapter: 'mailerlite', operation: 'add_to_group', params: { group: 'leads' } },
         ],
@@ -92,7 +92,7 @@ describe('Workflow Validation', () => {
         name: 'Bad Group Reference',
         enabled: false,
         triggerAdapter: 'revline',
-        triggerOperation: 'email_captured',
+        triggerOperation: 'contact-submitted',
         actions: [
           // References 'leads' but only 'customers' is configured
           { adapter: 'mailerlite', operation: 'add_to_group', params: { group: 'leads' } },
@@ -115,7 +115,7 @@ describe('Workflow Validation', () => {
         name: 'RevLine Only',
         enabled: false,
         triggerAdapter: 'revline',
-        triggerOperation: 'email_captured',
+        triggerOperation: 'contact-submitted',
         actions: [
           { adapter: 'revline', operation: 'create_lead', params: {} },
           { adapter: 'revline', operation: 'update_lead_stage', params: { stage: 'CAPTURED' } },
@@ -138,7 +138,7 @@ describe('Workflow Validation', () => {
         name: 'Enabled Workflow',
         enabled: true,
         triggerAdapter: 'mailerlite',
-        triggerOperation: 'email_captured',
+        triggerOperation: 'contact-submitted',
         actions: [],
       });
       
@@ -146,7 +146,7 @@ describe('Workflow Validation', () => {
         name: 'Disabled Workflow',
         enabled: false,
         triggerAdapter: 'mailerlite',
-        triggerOperation: 'email_captured',
+        triggerOperation: 'contact-submitted',
         actions: [],
       });
       
@@ -163,7 +163,7 @@ describe('Workflow Validation', () => {
         name: 'Enabled Workflow',
         enabled: true,
         triggerAdapter: 'mailerlite',
-        triggerOperation: 'email_captured',
+        triggerOperation: 'contact-submitted',
         actions: [],
       });
       
@@ -171,7 +171,7 @@ describe('Workflow Validation', () => {
         name: 'Disabled Workflow',
         enabled: false,
         triggerAdapter: 'mailerlite',
-        triggerOperation: 'email_captured',
+        triggerOperation: 'contact-submitted',
         actions: [],
       });
       
@@ -189,7 +189,7 @@ describe('Workflow Validation', () => {
         name: 'Action Uses MailerLite',
         enabled: true,
         triggerAdapter: 'revline',
-        triggerOperation: 'email_captured',
+        triggerOperation: 'contact-submitted',
         actions: [
           { adapter: 'mailerlite', operation: 'add_to_group', params: { group: 'leads' } },
         ],
@@ -222,7 +222,7 @@ describe('Workflow Validation', () => {
         name: 'Active MailerLite Workflow',
         enabled: true,
         triggerAdapter: 'revline',
-        triggerOperation: 'email_captured',
+        triggerOperation: 'contact-submitted',
         actions: [
           { adapter: 'mailerlite', operation: 'add_to_group', params: { group: 'leads' } },
         ],
@@ -245,7 +245,7 @@ describe('Workflow Validation', () => {
         name: 'Disabled MailerLite Workflow',
         enabled: false, // Key: workflow is disabled
         triggerAdapter: 'revline',
-        triggerOperation: 'email_captured',
+        triggerOperation: 'contact-submitted',
         actions: [
           { adapter: 'mailerlite', operation: 'add_to_group', params: { group: 'leads' } },
         ],
@@ -294,7 +294,7 @@ describe('Workflow Validation', () => {
           workspaceId: client.id,
           name: 'Default Test',
           triggerAdapter: 'revline',
-          triggerOperation: 'email_captured',
+          triggerOperation: 'contact-submitted',
           actions: [],
         },
       });

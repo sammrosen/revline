@@ -1,8 +1,13 @@
 # Workflow Validation & Dependency System Plan
 
-> **Status:** Planning  
+> **Status:** Phase 1 DONE — Phases 2–6 pending  
 > **Created:** January 2026  
+> **Updated:** March 28, 2026  
 > **Priority:** High - prevents broken automations in production
+>
+> **Cross-references:**
+> - [WORKFLOW-FUTURE-CONSIDERATIONS.md](./WORKFLOW-FUTURE-CONSIDERATIONS.md) — post-v1 engine enhancements (trigger replay, execution modes, observability)
+> - Archived: [WORKFLOW-ENGINE.md](./archive/WORKFLOW-ENGINE.md) — original v1 engine plan (complete)
 
 ---
 
@@ -429,36 +434,37 @@ Show which workflows depend on each integration:
 
 ## Implementation Plan
 
-### Phase 1: Core Validation (Backend)
+### Phase 1: Core Validation (Backend) — DONE
+**Files built:**
+- [x] `app/_lib/workflow/validation.ts` — Full validation service: `validateCanEnable`, `validateCanEdit`, `validateWorkflowConfig`, `validateCanDeleteIntegration`, `getWorkflowsUsingIntegration`, `validateAllWorkflows`, `checkAdapterAvailability`, `getClientIntegrations`
+- [x] `app/api/v1/workflows/[id]/toggle/route.ts` — Enable validation gate
+- [x] `app/api/v1/integrations/[id]/route.ts` — Delete validation gate
+- [x] `app/_lib/workflow/validators/` — Custom validator registry for adapter-specific logic
+- [x] `__tests__/unit/workflow-validation.test.ts` — Unit tests
+
+**Note:** Uses `workspaceId` throughout (not `clientId` as originally planned).
+
+### Phase 2: Validation API & Dependencies — NOT STARTED
 **Files to create/modify:**
-- [ ] `app/_lib/workflow/validation.ts` - New validation service
-- [ ] `app/api/v1/workflows/[id]/toggle/route.ts` - Add enable validation
-- [ ] `app/api/v1/workflows/[id]/route.ts` - Add edit validation
-- [ ] `app/api/v1/integrations/[id]/route.ts` - Add delete validation
+- [ ] `app/api/v1/workspaces/[id]/dependency-graph/route.ts` - New endpoint
+- [ ] `app/_lib/workflow/dependencies.ts` - Dependency graph builder (some primitives exist in `validation.ts`: `getWorkflowsUsingIntegration`, `getWorkflowDependencies`)
 
-### Phase 2: Validation API & Dependencies
-**Files to create/modify:**
-- [ ] `app/api/workspaces/[id]/dependency-graph/route.ts` - New endpoint
-- [ ] `app/_lib/workflow/dependencies.ts` - Dependency graph builder
-
-### Phase 3: UI - List View Updates
+### Phase 3: UI - List View Updates — NOT STARTED
 **Files to modify:**
-- [ ] `app/workspaces/[id]/workflows/workflow-list.tsx` - Add validation badges
-- [ ] `app/workspaces/[id]/_components/workflow-card.tsx` - Add indicators
+- [ ] Workflow list/cards — Add validation badges, disabled-toggle indicators
 
-### Phase 4: UI - Editor Updates
+### Phase 4: UI - Editor Updates — NOT STARTED
 **Files to modify:**
-- [ ] `app/workspaces/[id]/workflows/workflow-editor.tsx` - Add lock modal, warnings
+- [ ] Workflow editor — Add lock modal for active workflows, integration warnings on action selection
 
-### Phase 5: UI - Dependency Tree
+### Phase 5: UI - Dependency Tree — NOT STARTED
 **Files to create:**
-- [ ] `app/workspaces/[id]/_components/dependency-tree.tsx` - New component
-- [ ] `app/workspaces/[id]/workflows/workflow-list.tsx` - Add view toggle
+- [ ] Dependency tree visualization component
+- [ ] View toggle (list ↔ dependencies)
 
-### Phase 6: Integration Tab Updates
+### Phase 6: Integration Tab Updates — NOT STARTED
 **Files to modify:**
-- [ ] Integration delete logic (need to locate file)
-- [ ] Add "used by" indicators
+- [ ] `app/(dashboard)/workspaces/[id]/integration-actions.tsx` — "Used by X workflows" indicators, disable delete when dependents exist
 
 ---
 
@@ -580,5 +586,5 @@ await emitEvent({
 
 ---
 
-*Last updated: January 2026*
+*Last updated: March 28, 2026*
 

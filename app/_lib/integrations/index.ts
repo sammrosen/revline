@@ -47,11 +47,16 @@ export type { SendEmailResult, SendEmailParams, SendTemplateParams, RemoteResend
 export { TwilioAdapter } from './twilio.adapter';
 export type { SendSmsResult, SendSmsParams, TwilioWebhookPayload } from './twilio.adapter';
 
+export { EMPTY_TWIML, twimlResponse, escapeXml, voiceTwimlResponse, parseFormBody, getWebhookUrl } from './twilio-utils';
+
 export { OpenAIAdapter } from './openai.adapter';
 export type { ChatCompletionParams, ChatCompletionResult, ChatMessage, ToolDefinition, ToolCall, OpenAIModel } from './openai.adapter';
 
 export { AnthropicAdapter } from './anthropic.adapter';
 export type { AnthropicModel } from './anthropic.adapter';
+
+export { PipedriveAdapter } from './pipedrive.adapter';
+export type { PipedrivePersonResult, PipedrivePerson, PipedriveField } from './pipedrive.adapter';
 
 // Integration config - single source of truth
 export {

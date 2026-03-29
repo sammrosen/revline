@@ -281,7 +281,7 @@ export function AbcIgniteTab() {
               Book new leads into an intro session when they submit their email
             </p>
             <CodeBlock language="json">{`Workflow: "Email Capture → Intro Session"
-Trigger: revline.email_captured
+Trigger: revline.contact-submitted
 Actions:
   - revline.create_lead → {}
   - abc_ignite.enroll_member → { "eventId": "INTRO_EVENT_ID" }`}</CodeBlock>

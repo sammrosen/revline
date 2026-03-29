@@ -346,7 +346,7 @@ export async function createTestWorkflow(
       name: overrides.name ?? 'Test Workflow',
       enabled: overrides.enabled ?? false, // Default to disabled - must be explicitly enabled
       triggerAdapter: overrides.triggerAdapter ?? 'revline',
-      triggerOperation: overrides.triggerOperation ?? 'email_captured',
+      triggerOperation: overrides.triggerOperation ?? 'contact-submitted',
       actions: (overrides.actions ?? []) as Parameters<typeof testPrisma.workflow.create>[0]['data']['actions'],
     },
   });

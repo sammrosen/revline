@@ -1,6 +1,6 @@
 # Workflow Engine: Future Considerations
 
-> **Related:** [WORKFLOW-ENGINE.md](./WORKFLOW-ENGINE.md)  
+> **Related:** [WORKFLOW-ENGINE.md](./archive/WORKFLOW-ENGINE.md) (archived — v1 complete)  
 > **Status:** Documented for future reference  
 > **Priority:** Post-v1 enhancements
 

@@ -507,6 +507,7 @@ function adapterIdToIntegrationType(adapterId: string): IntegrationType | null {
     twilio: IntegrationType.TWILIO,
     openai: IntegrationType.OPENAI,
     anthropic: IntegrationType.ANTHROPIC,
+    pipedrive: IntegrationType.PIPEDRIVE,
   };
   return mapping[adapterId.toLowerCase()] ?? null;
 }

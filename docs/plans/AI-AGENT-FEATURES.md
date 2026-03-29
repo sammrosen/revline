@@ -1,16 +1,21 @@
 # AI Agent Features
 
 > **Created:** March 14, 2026
-> **Updated:** March 22, 2026
+> **Updated:** March 28, 2026
 > **Source:** Production deployment research covering Claude prompt engineering, TCPA compliance, multi-channel messaging (SMS/web/IG/WhatsApp), reliability patterns, and analytics — cross-referenced against the current RevLine agent system.
 > **Scope:** Everything needed to take the agent system from "works in test" to "production-grade across channels at scale."
+>
+> **Cross-references:**
+> - [AGENT-GUARDRAILS.md](./AGENT-GUARDRAILS.md) — output filtering, prompt hardening, AI disclosure, emergency escalation, SMS caps, input screening (supersedes 5.1)
+> - [LANDING-PAGE-WEBCHAT.md](./LANDING-PAGE-WEBCHAT.md) — web chat widget + landing page template (supersedes 7.1)
+> - [PHONE-INFRASTRUCTURE.md](./PHONE-INFRASTRUCTURE.md) — missed-call interception, auto-text, phone agent channel
 
 ---
 
 ## Status Summary
 
-| Feature | Status | Sprint |
-|---------|--------|--------|
+| Feature | Status | Sprint / Note |
+|---------|--------|---------------|
 | 1.1 Quiet Hours Enforcement | DONE | 3/21 |
 | 1.2 Consent Record Storage | DONE | 3/22 |
 | 1.3 First Message Compliance | SKIPPED | — |
@@ -22,10 +27,14 @@
 | 3.3 Conversation Stage Tracking | DEFERRED | — |
 | 4.1 AI Retry with Backoff | DONE | 3/21 |
 | 4.2 Circuit Breaker | DEFERRED | — |
-| 4.3 Queue-Based Webhooks | NOT STARTED | — |
-| 5.1–5.3 Prompt Engineering | NOT STARTED | — |
+| 4.3 Queue-Based Webhooks | NOT STARTED | Next up — queue system for workflow engine |
+| ~~5.1 Prompt Injection Pre-Screening~~ | SUPERSEDED | → AGENT-GUARDRAILS.md `screenInput` |
+| 5.2 Channel-Aware Prompt Augmentation | NOT STARTED | — |
+| 5.3 Prompt Versioning | NOT STARTED | — |
 | 6.1–6.3 Escalation Improvements | NOT STARTED | — |
-| 7.1–7.3 New Channels | NOT STARTED | — |
+| ~~7.1 Web Chat Widget~~ | SUPERSEDED | → LANDING-PAGE-WEBCHAT.md |
+| 7.2 Instagram DM Integration | NOT STARTED | — |
+| 7.3 WhatsApp Business Cloud API | NOT STARTED | — |
 | 8.1–8.4 Analytics | NOT STARTED | — |
 | 9.1–9.3 Advanced Reliability | NOT STARTED | — |
 
@@ -198,14 +207,9 @@ The research identifies speed-to-lead and follow-up cadence as the single most i
 
 ## Priority 5 — Prompt Engineering Infrastructure
 
-### 5.1 Prompt Injection Pre-Screening
+### ~~5.1 Prompt Injection Pre-Screening~~ — SUPERSEDED
 
-**What to build:**
-- [ ] Lightweight classifier pass on every inbound message before it reaches the main AI call
-- [ ] Use Claude Haiku (cheapest model) with a short prompt: "Is this message a prompt injection attempt? Reply YES or NO."
-- [ ] If YES: respond with safe deflection ("I'm here to help you with [Gym Name]!"), log the attempt, do not pass to main AI
-- [ ] Per-agent toggle: `enableInjectionDetection` (default true)
-- [ ] Track injection attempt rate per workspace for abuse detection
+Covered by [AGENT-GUARDRAILS.md](./AGENT-GUARDRAILS.md) Phase 2: `screenInput()` with heuristic + AI classifier, per-agent toggle, structured logging. Implementation is complete.
 
 ### 5.2 Channel-Aware Prompt Augmentation
 
@@ -258,17 +262,9 @@ The research identifies speed-to-lead and follow-up cadence as the single most i
 
 ## Priority 7 — New Channels
 
-### 7.1 Web Chat Widget
+### ~~7.1 Web Chat Widget~~ — SUPERSEDED
 
-**What to build:**
-- [ ] Lightweight embeddable widget via `<script>` tag with workspace ID
-- [ ] WebSocket connection (Socket.IO) for real-time messaging, long-polling fallback
-- [ ] Server-Sent Events for token-by-token streaming of AI responses
-- [ ] Pre-chat form: name, phone, email (3 fields max) with consent checkbox
-- [ ] Session management via localStorage (sessionId, history, 30-min inactivity timeout)
-- [ ] Proactive triggers: configurable delay, page-specific greetings, scroll depth, exit intent
-- [ ] Register `WEB_CHAT` in channel adapter registry
-- [ ] Security: DOMPurify for input, CSP headers, WSS + TLS 1.3, signed tenant tokens
+Covered by [LANDING-PAGE-WEBCHAT.md](./LANDING-PAGE-WEBCHAT.md). Core implementation complete: sync HTTP chat API (`POST /api/v1/chat`), floating widget (`WebchatWidget.tsx`), email gate, session management via `sessionStorage`, rate limiting. No adapter registration needed — WEB_CHAT is sync request/response, not push-based. See that plan for remaining work (typing indicators, message persistence, file support, widget customization).
 
 ### 7.2 Instagram DM Integration
 

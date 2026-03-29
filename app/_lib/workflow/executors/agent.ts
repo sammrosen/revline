@@ -36,24 +36,38 @@ const routeToAgent: ActionExecutor = {
 
     const agent = await prisma.agent.findFirst({
       where: { id: agentId, workspaceId: ctx.workspaceId },
-      select: { channelType: true, channelIntegration: true, channelAddress: true },
+      select: { channels: true },
     });
     if (!agent) {
       return { success: false, error: 'Agent not found' };
     }
 
+    const channels = Array.isArray(agent.channels)
+      ? (agent.channels as Array<{ channel: string; integration: string; address?: string }>)
+      : [];
+
+    const requestedChannelType = params.channelType as string | undefined;
     const from = ctx.trigger.payload.from as string | undefined;
     const body = ctx.trigger.payload.body as string | undefined;
     const to = ctx.trigger.payload.to as string | undefined;
+
+    // Resolve which channel entry to use
+    const resolvedChannel = requestedChannelType
+      ? channels.find((c) => c.channel === requestedChannelType)
+      : channels[0];
+
+    const chType = resolvedChannel?.channel ?? 'SMS';
+    const chIntegration = resolvedChannel?.integration;
+    const chAddress = resolvedChannel?.address;
 
     let result;
 
     if (body && from) {
       // REACTIVE MODE: inbound message, agent responds
-      if (!ctx.isTest && (!agent.channelType || !agent.channelIntegration)) {
+      if (!ctx.isTest && channels.length === 0) {
         return {
           success: false,
-          error: 'Agent has no channel configured. Add a channel integration before using in workflows.',
+          error: 'Agent has no channels configured. Add a channel in the agent editor before using in workflows.',
         };
       }
 
@@ -61,8 +75,9 @@ const routeToAgent: ActionExecutor = {
         workspaceId: ctx.workspaceId,
         agentId,
         contactAddress: from,
-        channelAddress: to || agent.channelAddress || '',
-        channel: agent.channelType || 'SMS',
+        channelAddress: to || chAddress || '',
+        channel: chType,
+        channelIntegration: chIntegration,
         messageText: body,
         leadId: ctx.leadId,
         testMode: ctx.isTest,
@@ -82,6 +97,7 @@ const routeToAgent: ActionExecutor = {
         workspaceId: ctx.workspaceId,
         agentId,
         leadId: ctx.leadId,
+        channelType: requestedChannelType,
         messageText,
         testMode: ctx.isTest,
       });
