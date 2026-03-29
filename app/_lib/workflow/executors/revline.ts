@@ -36,6 +36,43 @@ async function getPropertySchema(workspaceId: string): Promise<LeadPropertyDefin
   return (workspace?.leadPropertySchema as LeadPropertyDefinition[] | null) ?? [];
 }
 
+const PIPEDRIVE_PERSON_ID_DEF: LeadPropertyDefinition = {
+  key: 'pipedrivePersonId',
+  label: 'Pipedrive Person ID',
+  type: 'number',
+  required: false,
+};
+
+/**
+ * Auto-provision pipedrivePersonId in the workspace's leadPropertySchema
+ * so it appears as a column in the leads table. Idempotent — skips if
+ * the property already exists. Fail-safe: never blocks lead creation.
+ */
+async function ensurePipedrivePropertyInSchema(workspaceId: string): Promise<void> {
+  try {
+    const schema = await getPropertySchema(workspaceId);
+    if (schema.some(p => p.key === 'pipedrivePersonId')) return;
+
+    const updated = [...schema, PIPEDRIVE_PERSON_ID_DEF];
+    await prisma.workspace.update({
+      where: { id: workspaceId },
+      data: { leadPropertySchema: updated as unknown as Prisma.InputJsonValue },
+    });
+
+    await emitEvent({
+      workspaceId,
+      system: EventSystem.BACKEND,
+      eventType: 'workspace_schema_auto_provisioned',
+      success: true,
+    });
+  } catch (err) {
+    console.error('[Workflow] Failed to auto-provision pipedrivePersonId schema:', {
+      workspaceId,
+      error: err instanceof Error ? err.message : 'Unknown',
+    });
+  }
+}
+
 /**
  * Resolve properties from params and/or payload, validated against workspace schema.
  * Returns validated properties or null if none to set.
@@ -107,15 +144,32 @@ const createLead: ActionExecutor = {
       // Resolve custom properties from params and/or payload
       const { properties, error: propError } = await resolveProperties(ctx, params);
       if (propError) {
-        // Log warning but don't fail lead creation -- properties are best-effort
         console.warn('[Workflow] Property validation warning on create_lead:', propError);
       }
+
+      // Merge Pipedrive person ID from prior workflow actions into lead properties
+      let mergedProperties = properties ?? {};
+      const pipedrivePersonId = ctx.actionData.pipedrivePersonId as number | undefined;
+      if (pipedrivePersonId) {
+        mergedProperties = { ...mergedProperties, pipedrivePersonId };
+        await ensurePipedrivePropertyInSchema(ctx.workspaceId);
+      } else if (ctx.actionData.pipedrivePersonId === undefined && Object.keys(ctx.actionData).length > 0) {
+        const hasPipedriveActionData = 'pipedrivePersonId' in ctx.actionData;
+        if (!hasPipedriveActionData) {
+          const triggerPayload = ctx.trigger?.payload as Record<string, unknown> | undefined;
+          if (triggerPayload?.pipedriveSyncPending) {
+            mergedProperties = { ...mergedProperties, pipedriveSyncPending: true };
+          }
+        }
+      }
+
+      const hasProperties = Object.keys(mergedProperties).length > 0;
 
       const leadId = await upsertLead({
         workspaceId: ctx.workspaceId,
         email: ctx.email,
         source,
-        properties: properties ?? undefined,
+        properties: hasProperties ? mergedProperties : undefined,
       });
 
       await emitEvent({
@@ -131,7 +185,8 @@ const createLead: ActionExecutor = {
         data: {
           leadId,
           source,
-          ...(properties ? { properties } : {}),
+          ...(pipedrivePersonId ? { pipedrivePersonId } : {}),
+          ...(hasProperties ? { properties: mergedProperties } : {}),
         },
       };
     } catch (error) {

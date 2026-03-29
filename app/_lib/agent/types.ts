@@ -79,6 +79,7 @@ export interface InboundMessageParams {
   contactAddress: string;
   channelAddress: string;
   channel: string;
+  channelIntegration?: string;
   messageText: string;
   leadId?: string;
   testMode?: boolean;
@@ -151,9 +152,22 @@ export interface ConversationWithMessages {
   }>;
 }
 
+export interface AgentChannel {
+  channel: 'SMS' | 'EMAIL' | 'WEB_CHAT';
+  integration: 'TWILIO' | 'RESEND' | 'BUILT_IN';
+  address?: string;
+}
+
+export interface SendChannelContext {
+  channel: string;
+  channelIntegration: string | null;
+  channelAddress: string;
+}
+
 export interface AgentConfig {
   id: string;
   name: string;
+  channels: AgentChannel[];
   channelType: string | null;
   channelIntegration: string | null;
   channelAddress: string | null;
@@ -191,6 +205,8 @@ export interface InitiateConversationParams {
   workspaceId: string;
   agentId: string;
   leadId: string;
+  /** Which of the agent's configured channels to use (e.g. 'SMS', 'EMAIL') */
+  channelType?: string;
   /** Override for agent's initialMessage (supports lead variables) */
   messageText?: string;
   testMode?: boolean;

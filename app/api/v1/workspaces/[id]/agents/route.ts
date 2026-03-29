@@ -89,16 +89,19 @@ export async function POST(
     );
   }
 
-  if (data.channelIntegration) {
-    const channelInt = await prisma.workspaceIntegration.findFirst({
-      where: { workspaceId, integration: data.channelIntegration as IntegrationType },
-    });
-    if (!channelInt) {
-      return ApiResponse.error(
-        `Channel integration ${data.channelIntegration} not configured for this workspace`,
-        400,
-        ErrorCodes.INTEGRATION_NOT_CONFIGURED
-      );
+  const channels = data.channels || [];
+  for (const ch of channels) {
+    if (ch.integration !== 'BUILT_IN') {
+      const channelInt = await prisma.workspaceIntegration.findFirst({
+        where: { workspaceId, integration: ch.integration as IntegrationType },
+      });
+      if (!channelInt) {
+        return ApiResponse.error(
+          `Channel integration ${ch.integration} not configured for this workspace`,
+          400,
+          ErrorCodes.INTEGRATION_NOT_CONFIGURED
+        );
+      }
     }
   }
 
@@ -107,9 +110,7 @@ export async function POST(
       workspaceId,
       name: data.name,
       description: data.description || null,
-      channelType: data.channelType || null,
-      channelIntegration: data.channelIntegration || null,
-      channelAddress: data.channelAddress || null,
+      channels: channels.length > 0 ? channels : [],
       aiIntegration: data.aiIntegration,
       systemPrompt: data.systemPrompt,
       initialMessage: data.initialMessage || null,

@@ -53,6 +53,9 @@ export type { ChatCompletionParams, ChatCompletionResult, ChatMessage, ToolDefin
 export { AnthropicAdapter } from './anthropic.adapter';
 export type { AnthropicModel } from './anthropic.adapter';
 
+export { PipedriveAdapter } from './pipedrive.adapter';
+export type { PipedrivePersonResult, PipedrivePerson, PipedriveField } from './pipedrive.adapter';
+
 // Integration config - single source of truth
 export {
   INTEGRATION_TYPES,

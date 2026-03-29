@@ -20,14 +20,17 @@ import {
   Clock,
 } from 'lucide-react';
 
+interface AgentChannelEntry {
+  channel: string;
+  integration: string;
+  address: string;
+}
+
 interface AgentData {
   id?: string;
   name: string;
   description: string;
-  channelType: string;
-  channelIntegration: string;
-  channelAddress: string;
-  channelEnabled: boolean;
+  channels: AgentChannelEntry[];
   aiIntegration: string;
   systemPrompt: string;
   initialMessage: string;
@@ -108,10 +111,7 @@ const AVAILABLE_EVENTS = [
 const DEFAULT_DATA: AgentData = {
   name: '',
   description: '',
-  channelType: 'SMS',
-  channelIntegration: 'TWILIO',
-  channelAddress: '',
-  channelEnabled: false,
+  channels: [],
   aiIntegration: 'OPENAI',
   systemPrompt: '',
   initialMessage: '',
@@ -123,7 +123,7 @@ const DEFAULT_DATA: AgentData = {
   conversationTimeoutMinutes: 1440,
   responseDelaySeconds: 0,
   autoResumeMinutes: 60,
-  rateLimitPerHour: 10,
+  rateLimitPerHour: 60,
   fallbackMessage: '',
   escalationPattern: '[ESCALATE]',
   faqOverrides: [],
@@ -218,10 +218,11 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
           id: bot.id,
           name: bot.name,
           description: bot.description || '',
-          channelType: bot.channelType || 'SMS',
-          channelIntegration: bot.channelIntegration || 'TWILIO',
-          channelAddress: bot.channelAddress || '',
-          channelEnabled: !!bot.channelType && !!bot.channelIntegration,
+          channels: (bot.channels || []).map((c: { channel: string; integration: string; address?: string }) => ({
+            channel: c.channel,
+            integration: c.integration,
+            address: c.address || '',
+          })),
           aiIntegration: bot.aiIntegration,
           systemPrompt: bot.systemPrompt,
           initialMessage: bot.initialMessage || '',
@@ -233,7 +234,7 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
           conversationTimeoutMinutes: bot.conversationTimeoutMinutes,
           responseDelaySeconds: bot.responseDelaySeconds ?? 0,
           autoResumeMinutes: bot.autoResumeMinutes ?? 60,
-          rateLimitPerHour: bot.rateLimitPerHour ?? 10,
+          rateLimitPerHour: bot.rateLimitPerHour ?? 60,
           fallbackMessage: bot.fallbackMessage || '',
           escalationPattern: bot.escalationPattern || '[ESCALATE]',
           faqOverrides: (bot.faqOverrides || []).map((f: { patterns: string[]; response: string }) => ({
@@ -442,10 +443,13 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
     try {
       const payload = {
         ...data,
-        channelType: data.channelEnabled ? data.channelType : null,
-        channelIntegration: data.channelEnabled ? data.channelIntegration : null,
-        channelAddress: data.channelEnabled ? (data.channelAddress || null) : null,
-        channelEnabled: undefined,
+        channels: data.channels
+          .filter((c) => c.channel && c.integration)
+          .map((c) => ({
+            channel: c.channel,
+            integration: c.integration,
+            ...(c.address ? { address: c.address } : {}),
+          })),
         modelOverride: data.modelOverride || null,
         initialMessage: data.initialMessage || null,
         description: data.description || null,
@@ -491,13 +495,29 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
     }
   };
 
-  const hasChannelIntegration = data.channelType === 'WEB_CHAT' || integrations.some(
-    (i) => i.integration === data.channelIntegration
-  );
-  const availableChannelIntegrations = CHANNEL_INTEGRATIONS[data.channelType] || [];
   const availableAIIntegrations = AI_INTEGRATIONS.filter((ai) =>
     integrations.some((i) => i.integration === ai)
   );
+
+  const getIntegrationForChannel = (ch: string) => CHANNEL_INTEGRATIONS[ch]?.[0] || '';
+
+  const getPhoneNumbers = () => {
+    const twilioInt = integrations.find((i) => i.integration === 'TWILIO');
+    const meta = twilioInt?.meta as Record<string, unknown> | null;
+    if (meta && typeof meta === 'object' && 'phoneNumbers' in meta) {
+      return meta.phoneNumbers as Record<string, { number: string; label: string }>;
+    }
+    return null;
+  };
+
+  const getEmailAddresses = () => {
+    const resendInt = integrations.find((i) => i.integration === 'RESEND');
+    const meta = resendInt?.meta as Record<string, unknown> | null;
+    if (meta && typeof meta === 'object' && 'fromEmail' in meta) {
+      return (meta.fromEmail as string) || '';
+    }
+    return '';
+  };
 
   if (loading) {
     return (
@@ -577,136 +597,131 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
           </div>
         </Section>
 
-        {/* Channel Configuration */}
-        <Section icon={MessageCircle} title="Channel Configuration">
+        {/* Channels */}
+        <Section icon={MessageCircle} title={`Channels (${data.channels.length})`}>
           <div className="space-y-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={data.channelEnabled}
-                onChange={(e) => setData({ ...data, channelEnabled: e.target.checked })}
-                className="rounded border-zinc-700 bg-zinc-800 text-violet-500 focus:ring-violet-500"
-              />
-              <span className="text-zinc-300">Enable channel for production messaging</span>
-            </label>
-            {!data.channelEnabled && (
+            <p className="text-xs text-zinc-500">
+              Configure which channels this agent can communicate on. Pick channels in workflow actions to use them.
+            </p>
+            {data.channels.length === 0 && (
               <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded text-xs text-blue-400">
-                <MessageCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                No channel configured — this bot can only be used in the test playground. Add a channel to use in workflows.
+                <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                No channels configured — this bot can only be used in the test playground. Add a channel to use in workflows.
               </div>
             )}
-            {data.channelEnabled && (
-              <>
-                <Field label="Channel Type" required>
-                  <select
-                    value={data.channelType}
-                    onChange={(e) => {
-                      const channelType = e.target.value;
-                      const available = CHANNEL_INTEGRATIONS[channelType] || [];
-                      setData({
-                        ...data,
-                        channelType,
-                        channelIntegration: available[0] || '',
-                      });
-                    }}
-                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
-                  >
-                    {CHANNEL_TYPES.map((ct) => (
-                      <option key={ct.value} value={ct.value}>
-                        {ct.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                {data.channelType !== 'WEB_CHAT' && (
-                  <Field label="Channel Integration" required>
-                    <select
-                      value={data.channelIntegration}
-                      onChange={(e) => setData({ ...data, channelIntegration: e.target.value })}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+            {data.channels.map((ch, idx) => {
+              const phoneNumbers = getPhoneNumbers();
+              const configuredEmail = getEmailAddresses();
+              const usedChannels = data.channels.map((c) => c.channel);
+
+              return (
+                <div key={idx} className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">
+                      {CHANNEL_TYPES.find((ct) => ct.value === ch.channel)?.label || ch.channel}
+                      {ch.integration !== 'BUILT_IN' && <span className="text-zinc-600"> via {ch.integration}</span>}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = [...data.channels];
+                        updated.splice(idx, 1);
+                        setData({ ...data, channels: updated });
+                      }}
+                      className="text-zinc-500 hover:text-red-400 transition-colors"
                     >
-                      {availableChannelIntegrations.map((ci) => (
-                        <option key={ci} value={ci}>
-                          {ci}
-                        </option>
-                      ))}
-                    </select>
-                    {!hasChannelIntegration && data.channelIntegration && (
-                      <p className="text-xs text-amber-400 mt-1">
-                        {data.channelIntegration} is not configured for this workspace. Add it in Integrations first.
-                      </p>
-                    )}
-                  </Field>
-                )}
-                {hasChannelIntegration && (() => {
-                  const channelInt = integrations.find((i) => i.integration === data.channelIntegration);
-                  const meta = channelInt?.meta as Record<string, unknown> | null;
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
 
-                  if (data.channelType === 'WEB_CHAT') {
-                    return (
-                      <Field label="Channel" hint="Web Chat uses the built-in /api/v1/chat endpoint">
-                        <p className="text-xs text-zinc-400 bg-zinc-800/50 border border-zinc-700 rounded p-2">
-                          No external integration required. Messages are handled via the embedded webchat widget on your landing page.
-                        </p>
-                      </Field>
-                    );
-                  }
-
-                  if (data.channelType === 'EMAIL') {
-                    const configuredEmail = meta && typeof meta === 'object' && 'fromEmail' in meta
-                      ? (meta.fromEmail as string)
-                      : '';
-
-                    return (
-                      <Field label="Send From" required hint="Email address the agent sends from (must match Resend verified domain)">
-                        <input
-                          type="email"
-                          value={data.channelAddress || configuredEmail}
-                          onChange={(e) => setData({ ...data, channelAddress: e.target.value })}
-                          placeholder={configuredEmail || 'agent@yourdomain.com'}
+                  {ch.channel === 'SMS' && (
+                    <Field label="Send From" required hint="Twilio phone number">
+                      {phoneNumbers && Object.keys(phoneNumbers).length > 0 ? (
+                        <select
+                          value={ch.address}
+                          onChange={(e) => {
+                            const updated = [...data.channels];
+                            updated[idx] = { ...updated[idx], address: e.target.value };
+                            setData({ ...data, channels: updated });
+                          }}
                           className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
-                        />
-                        {configuredEmail && !data.channelAddress && (
-                          <p className="text-xs text-zinc-500 mt-1">
-                            Using configured from-address: {configuredEmail}
-                          </p>
-                        )}
-                      </Field>
-                    );
-                  }
-
-                  const phoneNumbers = meta && typeof meta === 'object' && 'phoneNumbers' in meta
-                    ? (meta.phoneNumbers as Record<string, { number: string; label: string }>)
-                    : null;
-
-                  if (!phoneNumbers || Object.keys(phoneNumbers).length === 0) {
-                    return (
-                      <Field label="Send From" hint="Agent's address on this channel">
+                        >
+                          <option value="">Select phone number...</option>
+                          {Object.entries(phoneNumbers).map(([key, entry]) => (
+                            <option key={key} value={entry.number}>
+                              {entry.label} ({entry.number})
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
                         <p className="text-xs text-zinc-500 bg-zinc-800/50 border border-zinc-700 rounded p-2">
-                          No addresses available. Configure phone numbers in the {data.channelIntegration} integration first.
+                          No phone numbers available. Configure them in the Twilio integration first.
                         </p>
-                      </Field>
-                    );
-                  }
-
-                  return (
-                    <Field label="Send From" required hint="Agent's address on this channel">
-                      <select
-                        value={data.channelAddress}
-                        onChange={(e) => setData({ ...data, channelAddress: e.target.value })}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
-                      >
-                        <option value="">Select address...</option>
-                        {Object.entries(phoneNumbers).map(([key, entry]) => (
-                          <option key={key} value={entry.number}>
-                            {entry.label} ({entry.number})
-                          </option>
-                        ))}
-                      </select>
+                      )}
+                      {!integrations.some((i) => i.integration === 'TWILIO') && (
+                        <p className="text-xs text-amber-400 mt-1">
+                          Twilio is not configured for this workspace. Add it in Integrations first.
+                        </p>
+                      )}
                     </Field>
-                  );
-                })()}
-              </>
+                  )}
+
+                  {ch.channel === 'EMAIL' && (
+                    <Field label="Send From" required hint="Must match Resend verified domain">
+                      <input
+                        type="email"
+                        value={ch.address}
+                        onChange={(e) => {
+                          const updated = [...data.channels];
+                          updated[idx] = { ...updated[idx], address: e.target.value };
+                          setData({ ...data, channels: updated });
+                        }}
+                        placeholder={configuredEmail || 'agent@yourdomain.com'}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder:text-zinc-600 focus:border-violet-500 focus:outline-none"
+                      />
+                      {!integrations.some((i) => i.integration === 'RESEND') && (
+                        <p className="text-xs text-amber-400 mt-1">
+                          Resend is not configured for this workspace. Add it in Integrations first.
+                        </p>
+                      )}
+                    </Field>
+                  )}
+
+                  {ch.channel === 'WEB_CHAT' && (
+                    <p className="text-xs text-zinc-400 bg-zinc-800/50 border border-zinc-700 rounded p-2">
+                      No external integration required. Configure the embed widget in the Web Chats section.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+            {data.channels.length < 3 && (
+              <div className="flex flex-wrap gap-2">
+                {CHANNEL_TYPES
+                  .filter((ct) => !data.channels.some((c) => c.channel === ct.value))
+                  .map((ct) => (
+                    <button
+                      key={ct.value}
+                      type="button"
+                      onClick={() =>
+                        setData({
+                          ...data,
+                          channels: [
+                            ...data.channels,
+                            {
+                              channel: ct.value,
+                              integration: getIntegrationForChannel(ct.value),
+                              address: '',
+                            },
+                          ],
+                        })
+                      }
+                      className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 transition-colors px-2.5 py-1.5 border border-zinc-700 rounded hover:border-violet-500/40 hover:bg-violet-500/5"
+                    >
+                      <Plus className="w-3 h-3" /> {ct.label}
+                    </button>
+                  ))}
+              </div>
             )}
           </div>
         </Section>
@@ -1400,10 +1415,7 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4">
           <h3 className="text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Summary</h3>
           <div className="grid grid-cols-2 gap-2 text-xs">
-            <SummaryRow label="Channel" value={data.channelEnabled ? `${data.channelType} via ${data.channelIntegration}` : 'Not configured (test only)'} />
-            {data.channelEnabled && data.channelAddress && (
-              <SummaryRow label="Send From" value={data.channelAddress} />
-            )}
+            <SummaryRow label="Channels" value={data.channels.length > 0 ? data.channels.map((c) => c.channel).join(', ') : 'None (test only)'} />
             <SummaryRow label="AI Provider" value={data.aiIntegration} />
             <SummaryRow label="Model" value={data.modelOverride || '(integration default)'} />
             <SummaryRow label="Ref Files" value={`${files.length} file${files.length !== 1 ? 's' : ''}`} />

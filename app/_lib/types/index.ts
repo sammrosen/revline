@@ -809,6 +809,25 @@ export interface AnthropicMeta {
   temperature?: number;
 }
 
+export interface PipedriveMeta {
+  /** RevLine property key -> Pipedrive person field key */
+  fieldMap?: Record<string, string>;
+  /** Default pipeline ID for new deals */
+  defaultPipelineId?: number;
+  /** RevLine lead stage -> Pipedrive stage ID (within the default pipeline) */
+  stageMap?: Record<string, number>;
+  /** Whether to auto-create a deal when a person is created */
+  autoCreateDeal?: boolean;
+  /** Default deal title template (supports {name}, {email} placeholders) */
+  dealTitleTemplate?: string;
+  /** Whether to log agent activities to Pipedrive (default: true if configured) */
+  logActivities?: boolean;
+  /** Custom activity type key for SMS (if configured in Pipedrive, otherwise uses "call") */
+  smsActivityType?: string;
+  /** Cached field key mappings: human-readable name -> Pipedrive hash key */
+  fieldKeyCache?: Record<string, string>;
+}
+
 /**
  * Union of all integration meta types
  */
@@ -823,6 +842,7 @@ export type IntegrationMeta =
   | TwilioMeta
   | OpenAIMeta
   | AnthropicMeta
+  | PipedriveMeta
   | Record<string, unknown>;
 
 /**
@@ -868,6 +888,11 @@ export function isOpenAIMeta(meta: IntegrationMeta | null): meta is OpenAIMeta {
 export function isAnthropicMeta(meta: IntegrationMeta | null): meta is AnthropicMeta {
   if (!meta) return false;
   return 'model' in meta && 'maxTokens' in meta && typeof (meta as AnthropicMeta).maxTokens === 'number';
+}
+
+export function isPipedriveMeta(meta: IntegrationMeta | null): meta is PipedriveMeta {
+  if (!meta) return false;
+  return 'fieldMap' in meta || 'defaultPipelineId' in meta || 'stageMap' in meta;
 }
 
 // =============================================================================
@@ -1026,6 +1051,50 @@ export interface WebhookVerification {
   valid: boolean;
   error?: string;
   payload?: unknown;
+}
+
+// =============================================================================
+// INTEGRATION REFERENCE TYPES
+// =============================================================================
+
+/**
+ * Quick reference data for an integration — triggers, actions, routes, test coverage.
+ * Assembled server-side from the workflow registry and static config.
+ * Passed to client components for the integration card reference dialog.
+ */
+export interface IntegrationReference {
+  integration: string;
+  adapterId: string;
+  triggers: Array<{
+    operation: string;
+    label: string;
+    description?: string;
+    hasTestFields: boolean;
+    planned?: boolean;
+  }>;
+  actions: Array<{
+    operation: string;
+    label: string;
+    description?: string;
+    hasTestFields: boolean;
+    implemented: boolean;
+    stub?: boolean;
+  }>;
+  routes: Array<{
+    method: string;
+    path: string;
+    description: string;
+  }>;
+  testSuite: {
+    triggerTests: number;
+    actionTests: number;
+    knownEndpoints: number;
+    scenarios: string[];
+  };
+  requires: {
+    secrets: string[];
+    metaKeys: string[];
+  };
 }
 
 // =============================================================================

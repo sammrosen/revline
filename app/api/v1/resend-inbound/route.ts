@@ -271,6 +271,7 @@ export async function POST(request: NextRequest) {
         contactAddress: senderEmail,
         channelAddress: recipientEmail,
         channel: 'EMAIL',
+        channelIntegration: 'RESEND',
         messageText: messageBody,
         callerContext: 'webhook',
       });

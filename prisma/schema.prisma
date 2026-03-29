@@ -110,6 +110,7 @@ model Workspace {
   optOutRecords      OptOutRecord[]
   followUps          FollowUp[]
   consentRecords     ConsentRecord[]
+  webchatConfigs     WebchatConfig[]
 
   @@index([organizationId])
   @@map("workspaces")
@@ -166,6 +167,7 @@ enum IntegrationType {
   TWILIO
   ANTHROPIC
   OPENAI
+  PIPEDRIVE
 }
 
 enum HealthStatus {
@@ -212,6 +214,7 @@ model Event {
   eventType    String      @map("event_type")
   success      Boolean
   errorMessage String?     @map("error_message")
+  metadata     Json?       @map("metadata")
   createdAt    DateTime    @default(now()) @map("created_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -233,6 +236,7 @@ enum EventSystem {
   TWILIO
   OPENAI
   ANTHROPIC
+  PIPEDRIVE
   AGENT
   CRON
   WORKFLOW
@@ -366,6 +370,7 @@ model WorkflowExecution {
 enum WorkflowExecutionStatus {
   RUNNING
   COMPLETED
+  COMPLETED_WITH_WARNINGS
   FAILED
 }
 
@@ -501,10 +506,13 @@ model Agent {
   name        String
   description String?
 
-  // Channel config -- optional; only required for production SMS delivery
-  channelType        String? @map("channel_type")        // "SMS" (extensible: "WHATSAPP", "WEB_CHAT")
-  channelIntegration String? @map("channel_integration")  // IntegrationType value: "TWILIO"
-  channelAddress     String? @map("channel_address")      // Agent's address on the channel (e.g., Twilio phone number)
+  // Multi-channel config — JSON array of { channel, integration, address? }
+  channels Json @default("[]")
+
+  // Deprecated — kept for migration backcompat, no longer written by new code
+  channelType        String? @map("channel_type")
+  channelIntegration String? @map("channel_integration")
+  channelAddress     String? @map("channel_address")
 
   // AI config -- which AI integration to use
   aiIntegration String @map("ai_integration") // IntegrationType value: "OPENAI" or "ANTHROPIC"
@@ -522,7 +530,7 @@ model Agent {
   conversationTimeoutMinutes Int     @default(1440) @map("conversation_timeout_minutes")
   responseDelaySeconds       Int     @default(0)    @map("response_delay_seconds")
   autoResumeMinutes          Int     @default(60)   @map("auto_resume_minutes")
-  rateLimitPerHour           Int     @default(10)   @map("rate_limit_per_hour")
+  rateLimitPerHour           Int     @default(60)   @map("rate_limit_per_hour")
   fallbackMessage            String? @map("fallback_message")
   escalationPattern          String? @map("escalation_pattern")
   faqOverrides               Json?   @map("faq_overrides")
@@ -543,10 +551,11 @@ model Agent {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  conversations Conversation[]
-  files         AgentFile[]
-  followUps     FollowUp[]
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversations  Conversation[]
+  files          AgentFile[]
+  followUps      FollowUp[]
+  webchatConfigs WebchatConfig[]
 
   @@index([workspaceId, active])
   @@map("agents")
@@ -567,6 +576,28 @@ model AgentFile {
   @@map("agent_files")
 }
 
+model WebchatConfig {
+  id           String  @id @default(uuid())
+  workspaceId  String  @map("workspace_id")
+  agentId      String  @map("agent_id")
+  name         String
+  brandColor   String  @default("#2563eb") @map("brand_color")
+  chatName     String  @default("Chat") @map("chat_name")
+  collectEmail Boolean @default(true) @map("collect_email")
+  collectPhone Boolean @default(false) @map("collect_phone")
+  greeting     String? @db.Text
+  active       Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("webchat_configs")
+}
+
 model Conversation {
   id          String @id @default(uuid())
   workspaceId String @map("workspace_id")
@@ -574,9 +605,10 @@ model Conversation {
   leadId      String? @map("lead_id")
 
   // Channel context (how to reply)
-  channel        String // "SMS"
-  contactAddress String @map("contact_address") // Lead's phone/identifier
-  channelAddress String @map("channel_address") // Bot's phone/identifier (Twilio number)
+  channel            String  // "SMS" | "EMAIL" | "WEB_CHAT"
+  channelIntegration String? @map("channel_integration") // "TWILIO" | "RESEND" | "BUILT_IN"
+  contactAddress     String  @map("contact_address") // Lead's phone/identifier
+  channelAddress     String  @map("channel_address") // Bot's phone/identifier (Twilio number)
 
   status       ConversationStatus @default(ACTIVE)
   messageCount Int    @default(0) @map("message_count")

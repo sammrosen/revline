@@ -92,7 +92,7 @@ describe('Capture Service Integration', () => {
       expect(lead?.stage).toBe('CAPTURED'); // Prisma enum returns uppercase
     });
 
-    it('should emit email_captured event', async () => {
+    it('should emit contact-submitted event', async () => {
       const { CaptureService } = await import('@/app/_lib/services/capture.service');
       
       const client = await createTestWorkspace({ slug: 'event-test' });
@@ -112,7 +112,7 @@ describe('Capture Service Integration', () => {
       });
       
       const events = await getEventsForWorkspace(client.id);
-      const captureEvent = events.find((e: { eventType: string }) => e.eventType === 'email_captured');
+      const captureEvent = events.find((e: { eventType: string }) => e.eventType === 'contact-submitted');
       
       expect(captureEvent).toBeDefined();
       expect(captureEvent?.success).toBe(true);
@@ -134,7 +134,7 @@ describe('Capture Service Integration', () => {
         name: 'Test MailerLite Workflow',
         enabled: true,
         triggerAdapter: 'revline',
-        triggerOperation: 'email_captured',
+        triggerOperation: 'contact-submitted',
         actions: [
           {
             adapter: 'mailerlite',

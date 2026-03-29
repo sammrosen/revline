@@ -10,8 +10,9 @@ import { ResendConfigEditor } from './resend-config-editor';
 import { TwilioConfigEditor } from './twilio-config-editor';
 import { OpenAIConfigEditor } from './openai-config-editor';
 import { AnthropicConfigEditor } from './anthropic-config-editor';
+import { PipedriveConfigEditor } from './pipedrive-config-editor';
 
-type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND' | 'TWILIO' | 'OPENAI' | 'ANTHROPIC';
+type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND' | 'TWILIO' | 'OPENAI' | 'ANTHROPIC' | 'PIPEDRIVE';
 
 // Available secret names by integration type
 const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
@@ -25,6 +26,7 @@ const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
   TWILIO: ['Account SID', 'Auth Token'],
   OPENAI: ['API Key'],
   ANTHROPIC: ['API Key'],
+  PIPEDRIVE: ['API Token'],
 };
 
 interface SecretSummary {
@@ -79,6 +81,7 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
   const isTwilio = integrationType === 'TWILIO';
   const isOpenAI = integrationType === 'OPENAI';
   const isAnthropic = integrationType === 'ANTHROPIC';
+  const isPipedrive = integrationType === 'PIPEDRIVE';
   
   // Check if this integration has dependent workflows
   const hasDependents = dependentWorkflows.length > 0;
@@ -275,7 +278,7 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
 
   // Edit Meta Modal
   if (showEditMeta) {
-    const hasStructuredEditor = isMailerLite || isStripe || isAbcIgnite || isResend || isTwilio || isOpenAI || isAnthropic;
+    const hasStructuredEditor = isMailerLite || isStripe || isAbcIgnite || isResend || isTwilio || isOpenAI || isAnthropic || isPipedrive;
     const modalTitle = isMailerLite 
       ? 'MailerLite Configuration' 
       : isStripe 
@@ -290,7 +293,9 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
                   ? 'OpenAI Configuration'
                   : isAnthropic
                     ? 'Anthropic Configuration'
-                    : 'Meta Config';
+                    : isPipedrive
+                      ? 'Pipedrive Configuration'
+                      : 'Meta Config';
     const modalDescription = isMailerLite 
       ? 'Configure MailerLite groups. Use the Workflows tab to set up automations.'
       : isStripe
@@ -299,8 +304,10 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
           ? 'Configure club settings and sync event types from ABC Ignite.'
           : isResend
               ? 'Configure sender settings for transactional emails.'
-              : isTwilio
-                ? 'Configure phone numbers and webhooks for SMS messaging.'
+              : isPipedrive
+                ? 'Configure field mappings between RevLine and Pipedrive.'
+                : isTwilio
+                  ? 'Configure phone numbers and webhooks for SMS messaging.'
                 : isOpenAI
                   ? 'Configure model and generation settings for AI completions.'
                   : isAnthropic
@@ -398,6 +405,14 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
               onChange={setMetaText}
               error={error}
               integrationId={integration.id}
+            />
+          ) : isPipedrive ? (
+            <PipedriveConfigEditor
+              value={metaText}
+              onChange={setMetaText}
+              error={error}
+              integrationId={integration.id}
+              workspaceId={workspaceId}
             />
           ) : (
             <>

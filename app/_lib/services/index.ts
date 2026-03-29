@@ -6,7 +6,7 @@
  * Use emitTrigger() from '@/app/_lib/workflow' instead.
  * 
  * Migration guide:
- * - CaptureService.captureEmail() → emitTrigger(clientId, { adapter: 'revline', operation: 'email_captured' }, payload)
+ * - CaptureService.captureEmail() → emitTrigger(clientId, { adapter: 'revline', operation: 'contact-submitted' }, payload)
  * - WebhookService.processStripeCheckout() → emitTrigger(clientId, { adapter: 'stripe', operation: 'payment_succeeded' }, payload)
  */
 

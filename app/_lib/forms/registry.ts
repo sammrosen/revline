@@ -142,7 +142,7 @@ export const FORM_REGISTRY: FormRegistryEntry[] = [
       {
         id: 'contact-submitted',
         label: 'Contact Form Submitted',
-        description: 'Visitor submitted the contact form (reuses revline.email_captured)',
+        description: 'Visitor submitted the contact form on the landing page',
       },
     ],
   },

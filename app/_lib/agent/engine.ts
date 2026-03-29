@@ -24,7 +24,7 @@ import type { ChatMessage, ChatCompletionResult } from '@/app/_lib/integrations'
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { emitTrigger } from '@/app/_lib/workflow';
 import { logStructured } from '@/app/_lib/reliability';
-import type { InboundMessageParams, InitiateConversationParams, AgentResponse, AgentConfig, TurnLogEntry } from './types';
+import type { InboundMessageParams, InitiateConversationParams, AgentResponse, AgentConfig, TurnLogEntry, SendChannelContext } from './types';
 import type { IntegrationResult } from '@/app/_lib/types';
 import { resolveAI, resolveChannel, getContactFieldForChannel } from './adapter-registry';
 import type { ChannelMessageMetadata } from './adapter-registry';
@@ -53,6 +53,9 @@ export async function handleInboundMessage(
   const correlationId = crypto.randomUUID();
   const eventsEmitted: string[] = [];
   const turnLog: TurnLogEntry[] = [];
+  const channelCtx: SendChannelContext | undefined = params.channelIntegration
+    ? { channel: params.channel, channelIntegration: params.channelIntegration, channelAddress: params.channelAddress }
+    : undefined;
 
   try {
     // 0a. Check if contact has opted out (skip in test mode)
@@ -258,7 +261,7 @@ export async function handleInboundMessage(
       turnLog.push({ type: 'event', event: 'conversation_completed', ts: Date.now() });
 
       if (agent.fallbackMessage && !params.testMode) {
-        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, agent.fallbackMessage, 'reactive', conversation.id);
+        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, agent.fallbackMessage, 'reactive', conversation.id, channelCtx);
       }
 
       return {
@@ -301,6 +304,24 @@ export async function handleInboundMessage(
           success: false,
           metadata: { agentId: agent.id, conversationId: conversation.id, recentReplies },
         });
+
+        await emitEvent({
+          workspaceId: params.workspaceId,
+          system: EventSystem.AGENT,
+          eventType: 'agent_rate_limited',
+          success: false,
+          errorMessage: `Rate limited: ${recentReplies}/${agent.rateLimitPerHour} replies per hour`,
+          metadata: {
+            agentId: agent.id,
+            conversationId: conversation.id,
+            channel: params.channel,
+            channelIntegration: params.channelIntegration,
+            correlationId,
+            recentReplies,
+            rateLimitPerHour: agent.rateLimitPerHour,
+          },
+        });
+
         turnLog.push({ type: 'guardrail', guardrail: 'rate_limited', detail: `${recentReplies}/${agent.rateLimitPerHour} replies/hr`, ts: Date.now() });
 
         return {
@@ -371,7 +392,7 @@ export async function handleInboundMessage(
           if (shouldApplyDelay(params) && agent.responseDelaySeconds > 0) {
             await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
           }
-          await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, initialText, 'reactive', conversation.id);
+          await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, initialText, 'reactive', conversation.id, channelCtx);
         }
       }
     }
@@ -398,7 +419,7 @@ export async function handleInboundMessage(
           if (shouldApplyDelay(params) && agent.responseDelaySeconds > 0) {
             await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
           }
-          await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, faqMatch, 'reactive', conversation.id);
+          await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, faqMatch, 'reactive', conversation.id, channelCtx);
         }
         return {
           success: true,
@@ -487,10 +508,19 @@ export async function handleInboundMessage(
         eventType: 'agent_ai_failure',
         success: false,
         errorMessage: aiResult.error,
+        metadata: {
+          agentId: agent.id,
+          conversationId: conversation.id,
+          channel: params.channel,
+          channelIntegration: params.channelIntegration,
+          provider: agent.aiIntegration,
+          correlationId,
+          latencyMs: Math.round(performance.now() - aiStartMs),
+        },
       });
 
       if (agent.fallbackMessage && !params.testMode) {
-        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, agent.fallbackMessage, 'reactive', conversation.id);
+        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, agent.fallbackMessage, 'reactive', conversation.id, channelCtx);
       }
 
       return {
@@ -619,6 +649,23 @@ export async function handleInboundMessage(
           error: loopResult.error || 'AI call failed during tool loop',
           metadata: { agentId: agent.id, conversationId: conversation.id, iteration },
         });
+
+        await emitEvent({
+          workspaceId: params.workspaceId,
+          system: EventSystem.AGENT,
+          eventType: 'agent_ai_failure_in_tool_loop',
+          success: false,
+          errorMessage: loopResult.error || 'AI call failed during tool loop',
+          metadata: {
+            agentId: agent.id,
+            conversationId: conversation.id,
+            channel: params.channel,
+            channelIntegration: params.channelIntegration,
+            provider: agent.aiIntegration,
+            correlationId,
+            iteration,
+          },
+        });
         break;
       }
 
@@ -676,7 +723,7 @@ export async function handleInboundMessage(
         if (shouldApplyDelay(params) && agent.responseDelaySeconds > 0) {
           await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
         }
-        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, cleanedReply, 'reactive', conversation.id);
+        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, cleanedReply, 'reactive', conversation.id, channelCtx);
       }
 
       await emitAgentEvent(params.workspaceId, 'escalation_requested', {
@@ -785,6 +832,7 @@ export async function handleInboundMessage(
         replyText,
         'reactive',
         conversation.id,
+        channelCtx,
       );
     }
 
@@ -794,6 +842,15 @@ export async function handleInboundMessage(
       system: EventSystem.AGENT,
       eventType: 'agent_response_sent',
       success: true,
+      metadata: {
+        agentId: agent.id,
+        conversationId: conversation.id,
+        channel: params.channel,
+        channelIntegration: params.channelIntegration,
+        provider: agent.aiIntegration,
+        correlationId,
+        tokensUsed: completion.usage.totalTokens,
+      },
     });
 
     logStructured({
@@ -863,15 +920,28 @@ export async function initiateConversation(
       return errorResponse('Agent not found or inactive', correlationId);
     }
 
+    // 1a. Resolve the requested channel from agent.channels
+    const selectedChannel = params.channelType
+      ? agent.channels.find((c) => c.channel === params.channelType)
+      : agent.channels[0]; // fallback: first configured channel
+
+    const chType = selectedChannel?.channel ?? agent.channelType ?? 'SMS';
+    const chIntegration = selectedChannel?.integration ?? agent.channelIntegration;
+    const chAddress = selectedChannel?.address ?? agent.channelAddress;
+
+    const channelCtx: SendChannelContext | undefined = chIntegration
+      ? { channel: chType, channelIntegration: chIntegration, channelAddress: chAddress || '' }
+      : undefined;
+
     // 1b. Quiet hours check for proactive outreach (before any DB writes)
-    if (!params.testMode && shouldEnforceQuietHours(agent.channelType)) {
+    if (!params.testMode && shouldEnforceQuietHours(chType)) {
       const gate = checkSendWindow(agent.timezone);
       if (!gate.allowed) {
         logStructured({
           correlationId,
           event: 'agent_send_blocked_quiet_hours',
           workspaceId: params.workspaceId,
-          provider: agent.channelIntegration || 'agent',
+          provider: chIntegration || 'agent',
           success: false,
           metadata: {
             agentId: agent.id,
@@ -898,12 +968,12 @@ export async function initiateConversation(
     }
 
     // 2. Validate channel is configured
-    if (!agent.channelIntegration || !agent.channelAddress) {
+    if (!chIntegration || !chAddress) {
       if (params.testMode) {
         // Test mode: skip channel delivery, just store in DB
       } else {
         return errorResponse(
-          'Agent has no channel configured. Set channelIntegration and channelAddress before proactive outreach.',
+          'Agent has no channel configured. Add a channel in the agent editor before proactive outreach.',
           correlationId
         );
       }
@@ -920,11 +990,11 @@ export async function initiateConversation(
 
     let contactAddress: string | null = null;
 
-    if (agent.channelIntegration) {
-      const contactField = getContactFieldForChannel(agent.channelIntegration);
+    if (chIntegration) {
+      const contactField = getContactFieldForChannel(chIntegration);
       if (!contactField) {
         return errorResponse(
-          `No contactField defined for channel: ${agent.channelIntegration}`,
+          `No contactField defined for channel: ${chIntegration}`,
           correlationId
         );
       }
@@ -937,11 +1007,11 @@ export async function initiateConversation(
     }
 
     if (!contactAddress && !params.testMode) {
-      const fieldName = agent.channelIntegration
-        ? getContactFieldForChannel(agent.channelIntegration) || 'unknown'
+      const fieldName = chIntegration
+        ? getContactFieldForChannel(chIntegration) || 'unknown'
         : 'unknown';
       return errorResponse(
-        `Lead is missing "${fieldName}" property required for ${agent.channelIntegration || 'channel'} outreach`,
+        `Lead is missing "${fieldName}" property required for ${chIntegration || 'channel'} outreach`,
         correlationId
       );
     }
@@ -972,18 +1042,18 @@ export async function initiateConversation(
 
     // 4b. Check consent for proactive outreach
     if (contactAddress && !params.testMode) {
-      const consent = await checkConsent(params.workspaceId, contactAddress, agent.channelType || 'SMS');
+      const consent = await checkConsent(params.workspaceId, contactAddress, chType);
       if (!consent) {
         logStructured({
           correlationId,
           event: 'agent_send_blocked_no_consent',
           workspaceId: params.workspaceId,
-          provider: agent.channelIntegration || 'agent',
+          provider: chIntegration || 'agent',
           success: false,
           metadata: {
             agentId: agent.id,
             contactAddress,
-            channel: agent.channelType || 'SMS',
+            channel: chType,
           },
         });
         return {
@@ -1017,15 +1087,15 @@ export async function initiateConversation(
     const outboundText = interpolateLeadVariables(rawText, lead, workspaceName);
 
     // 6. Create conversation
-    const channelType = agent.channelType || 'SMS';
     const conversation = await prisma.conversation.create({
       data: {
         workspaceId: params.workspaceId,
         agentId: agent.id,
         leadId: params.leadId,
-        channel: channelType,
+        channel: chType,
+        channelIntegration: chIntegration || null,
         contactAddress: contactAddress || `test-${params.leadId}`,
-        channelAddress: agent.channelAddress || '',
+        channelAddress: chAddress || '',
         status: ConversationStatus.ACTIVE,
         isTest: params.testMode ?? false,
       },
@@ -1047,18 +1117,19 @@ export async function initiateConversation(
     });
 
     // 8. Send via channel (skip in test mode or when no channel)
-    if (!params.testMode && agent.channelIntegration && agent.channelAddress && contactAddress) {
+    if (!params.testMode && chIntegration && chAddress && contactAddress) {
       if (agent.responseDelaySeconds > 0) {
         await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
       }
       await sendReply(
         params.workspaceId,
         agent,
-        agent.channelAddress,
+        chAddress,
         contactAddress,
         outboundText,
         'proactive',
         conversation.id,
+        channelCtx,
       );
     }
 
@@ -1130,6 +1201,13 @@ export async function loadAgent(
   return {
     id: agent.id,
     name: agent.name,
+    channels: Array.isArray(agent.channels)
+      ? (agent.channels as Array<{ channel: string; integration: string; address?: string }>).map((c) => ({
+          channel: c.channel as 'SMS' | 'EMAIL' | 'WEB_CHAT',
+          integration: c.integration as 'TWILIO' | 'RESEND' | 'BUILT_IN',
+          address: c.address,
+        }))
+      : [],
     channelType: agent.channelType,
     channelIntegration: agent.channelIntegration,
     channelAddress: agent.channelAddress,
@@ -1208,6 +1286,7 @@ async function findOrCreateConversation(
       agentId: agent.id,
       leadId: params.leadId || null,
       channel: params.channel,
+      channelIntegration: params.channelIntegration || null,
       contactAddress: params.contactAddress,
       channelAddress: params.channelAddress,
       status: ConversationStatus.ACTIVE,
@@ -1274,21 +1353,25 @@ export async function sendReply(
   body: string,
   sendType: SendType = 'reactive',
   conversationId?: string,
+  channelCtx?: SendChannelContext,
 ): Promise<SendReplyResult> {
-  if (!agent.channelIntegration) {
+  const chIntegration = channelCtx?.channelIntegration ?? agent.channelIntegration;
+  const chType = channelCtx?.channel ?? agent.channelType;
+
+  if (!chIntegration || chIntegration === 'BUILT_IN') {
     logStructured({
       correlationId: crypto.randomUUID(),
       event: 'agent_send_skipped',
       workspaceId,
       provider: 'agent',
       success: true,
-      metadata: { agentId: agent.id, reason: 'no_channel_configured' },
+      metadata: { agentId: agent.id, reason: chIntegration === 'BUILT_IN' ? 'webchat_synchronous' : 'no_channel_configured' },
     });
     return { sent: false };
   }
 
   // Quiet hours send gate
-  if (shouldEnforceQuietHours(agent.channelType)) {
+  if (shouldEnforceQuietHours(chType)) {
     const gate = checkSendWindow(agent.timezone);
     if (!gate.allowed) {
       if (sendType === 'proactive') {
@@ -1296,7 +1379,7 @@ export async function sendReply(
           correlationId: crypto.randomUUID(),
           event: 'agent_send_blocked_quiet_hours',
           workspaceId,
-          provider: agent.channelIntegration,
+          provider: chIntegration,
           success: false,
           metadata: {
             agentId: agent.id,
@@ -1309,12 +1392,11 @@ export async function sendReply(
         });
         return { sent: false, blockedByQuietHours: true, nextWindowAt: gate.nextWindowAt ?? undefined };
       }
-      // Reactive: log warning but proceed (responding to user-initiated contact)
       logStructured({
         correlationId: crypto.randomUUID(),
         event: 'agent_send_outside_window',
         workspaceId,
-        provider: agent.channelIntegration,
+        provider: chIntegration,
         success: true,
         metadata: {
           agentId: agent.id,
@@ -1327,14 +1409,14 @@ export async function sendReply(
     }
   }
 
-  const entry = resolveChannel(agent.channelIntegration);
+  const entry = resolveChannel(chIntegration);
   if (!entry) {
     logStructured({
       correlationId: crypto.randomUUID(),
       event: 'agent_unsupported_channel',
       workspaceId,
-      provider: agent.channelIntegration,
-      error: `Unsupported channel: ${agent.channelIntegration}`,
+      provider: chIntegration,
+      error: `Unsupported channel: ${chIntegration}`,
       metadata: { agentId: agent.id },
     });
     return { sent: false };
@@ -1346,16 +1428,15 @@ export async function sendReply(
       correlationId: crypto.randomUUID(),
       event: 'agent_channel_not_configured',
       workspaceId,
-      provider: agent.channelIntegration,
+      provider: chIntegration,
       error: `${entry.label} not configured for this workspace`,
       metadata: { agentId: agent.id },
     });
     return { sent: false };
   }
 
-  // SMS encoding sanitization (skipped for non-SMS channels)
   let sanitizedBody = body;
-  if (shouldSanitizeSms(agent.channelType) && !agent.allowUnicode) {
+  if (shouldSanitizeSms(chType) && !agent.allowUnicode) {
     sanitizedBody = sanitizeForGsm7(body);
   }
   const segments = estimateSegments(sanitizedBody);
@@ -1363,7 +1444,7 @@ export async function sendReply(
     correlationId: crypto.randomUUID(),
     event: 'agent_sms_segments',
     workspaceId,
-    provider: agent.channelIntegration,
+    provider: chIntegration,
     success: true,
     metadata: {
       agentId: agent.id,
@@ -1374,9 +1455,8 @@ export async function sendReply(
     },
   });
 
-  // Build email threading metadata when using email channel
   let metadata: ChannelMessageMetadata | undefined;
-  if (agent.channelType?.toUpperCase() === 'EMAIL' && conversationId) {
+  if (chType?.toUpperCase() === 'EMAIL' && conversationId) {
     const convo = await prisma.conversation.findUnique({
       where: { id: conversationId },
       select: { metadata: true, messageCount: true },
@@ -1400,7 +1480,7 @@ export async function sendReply(
       correlationId: crypto.randomUUID(),
       event: 'agent_send_failed',
       workspaceId,
-      provider: agent.channelIntegration,
+      provider: chIntegration,
       success: false,
       error: err instanceof Error ? err.message : 'Channel adapter threw',
       metadata: { agentId: agent.id },
@@ -1412,7 +1492,7 @@ export async function sendReply(
       correlationId: crypto.randomUUID(),
       event: 'agent_send_failed',
       workspaceId,
-      provider: agent.channelIntegration,
+      provider: chIntegration,
       success: false,
       error: result.error || 'Send failed',
       metadata: { agentId: agent.id },
@@ -1420,8 +1500,7 @@ export async function sendReply(
     return { sent: false };
   }
 
-  // Store outbound email message ID for threading
-  if (agent.channelType?.toUpperCase() === 'EMAIL' && conversationId && result.data) {
+  if (chType?.toUpperCase() === 'EMAIL' && conversationId && result.data) {
     const sendResult = result.data as { messageId?: string };
     if (sendResult.messageId) {
       const convo = await prisma.conversation.findUnique({
@@ -1450,12 +1529,14 @@ async function emitAgentEvent(
   eventType: string,
   payload: Record<string, unknown>
 ): Promise<void> {
+  const { leadId, ...meta } = payload;
   await emitEvent({
     workspaceId,
-    leadId: payload.leadId as string | undefined,
+    leadId: leadId as string | undefined,
     system: EventSystem.AGENT,
     eventType: `agent_${eventType}`,
     success: true,
+    metadata: meta,
   });
 
   await emitTrigger(

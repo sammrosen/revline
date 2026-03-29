@@ -54,9 +54,9 @@ export function WorkflowsTab() {
             </thead>
             <tbody className="text-zinc-300">
               <tr className="border-b border-zinc-800/50">
-                <td className="py-3"><code className="text-purple-400">revline.email_captured</code></td>
+                <td className="py-3"><code className="text-purple-400">revline.contact-submitted</code></td>
                 <td className="py-3 text-zinc-400">RevLine</td>
-                <td className="py-3 text-zinc-400">Lead submits email on landing page</td>
+                <td className="py-3 text-zinc-400">Visitor submits contact form on landing page</td>
               </tr>
               <tr className="border-b border-zinc-800/50">
                 <td className="py-3"><code className="text-purple-400">stripe.payment_succeeded</code></td>
@@ -360,7 +360,7 @@ export function WorkflowsTab() {
             <h3 className="font-medium text-white mb-2">Email Capture &rarr; MailerLite</h3>
             <p className="text-sm text-zinc-400 mb-3">Add new leads to a MailerLite group</p>
             <CodeBlock language="json">{`{
-  "trigger": "revline.email_captured",
+  "trigger": "revline.contact-submitted",
   "actions": [
     { "action": "revline.create_lead", "params": {} },
     { "action": "mailerlite.add_to_group", "params": { "group": "leads" } }

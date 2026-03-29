@@ -85,6 +85,8 @@ export interface WorkflowAction {
   params: Record<string, unknown>;
   /** Reserved for future: conditions to check before executing */
   conditions?: Record<string, unknown>;
+  /** If true, a failed action logs the error but does not stop the workflow */
+  continueOnError?: boolean;
 }
 
 /**
@@ -169,7 +171,7 @@ export interface WorkflowExecutionResult {
   /** Workflow name */
   workflowName: string;
   /** Final status */
-  status: 'completed' | 'failed';
+  status: 'completed' | 'completed_with_warnings' | 'failed';
   /** Number of actions executed */
   actionsExecuted: number;
   /** Total actions in workflow */

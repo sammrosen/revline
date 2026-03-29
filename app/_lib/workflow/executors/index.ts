@@ -14,6 +14,7 @@ import { twilioExecutors } from './twilio';
 import { openaiExecutors } from './openai';
 import { anthropicExecutors } from './anthropic';
 import { agentExecutors } from './agent';
+import { pipedriveExecutors } from './pipedrive';
 
 // =============================================================================
 // EXECUTOR REGISTRY
@@ -31,6 +32,7 @@ const EXECUTORS: Record<string, Record<string, ActionExecutor>> = {
   openai: openaiExecutors,
   anthropic: anthropicExecutors,
   agent: agentExecutors,
+  pipedrive: pipedriveExecutors,
 };
 
 // =============================================================================

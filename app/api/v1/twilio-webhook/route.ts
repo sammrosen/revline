@@ -229,6 +229,7 @@ export async function POST(request: NextRequest) {
         contactAddress: payload.from,
         channelAddress: payload.to,
         channel: 'SMS',
+        channelIntegration: 'TWILIO',
         messageText: payload.body,
         callerContext: 'webhook',
       });

@@ -192,13 +192,34 @@ export const MAILERLITE_ADAPTER: AdapterDefinition = {
  * 
  * See: app/api/v1/workflow-registry/route.ts
  */
+const ContactSubmittedPayloadSchema = z.object({
+  email: z.string().email(),
+  name: z.string().optional(),
+  phone: z.string().optional(),
+  source: z.string().optional(),
+});
+
 export const REVLINE_ADAPTER: AdapterDefinition = {
   id: 'revline',
   name: 'RevLine',
   requiresIntegration: false, // Always available
-  // Triggers are DYNAMIC - populated from workspace's enabled forms
-  // The API injects workspace-specific form triggers at runtime
-  triggers: {},
+  // Triggers are DYNAMIC — the workflow registry API injects workspace-specific
+  // form triggers at runtime. Static schemas below enable payload compatibility
+  // checks even though the UI dropdown is populated dynamically.
+  triggers: {
+    'contact-submitted': {
+      name: 'contact-submitted',
+      label: 'Contact Form Submitted',
+      description: 'Visitor submitted a contact form on the landing page',
+      payloadSchema: ContactSubmittedPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email' as const, required: true },
+        { name: 'name', label: 'Name', type: 'text' as const, required: false },
+        { name: 'phone', label: 'Phone', type: 'text' as const, required: false },
+        { name: 'source', label: 'Source', type: 'text' as const, required: false },
+      ],
+    },
+  },
   actions: {
     create_lead: {
       name: 'create_lead',
@@ -765,6 +786,7 @@ export const AGENT_ADAPTER: AdapterDefinition = {
       payloadSchema: CommonPayloadSchema,
       paramsSchema: z.object({
         agentId: z.string().describe('ID of the agent to route to'),
+        channelType: z.string().optional().describe('Which of the agent\'s channels to use (SMS, EMAIL, WEB_CHAT). Omit to infer from trigger.'),
         messageText: z.string().optional().describe('Override message for proactive outreach (supports lead variables)'),
       }),
       testFields: [
@@ -772,6 +794,62 @@ export const AGENT_ADAPTER: AdapterDefinition = {
         { name: 'agentId', label: 'Agent ID', type: 'text' as const, required: true, placeholder: 'Agent ID to route to' },
         { name: 'messageText', label: 'Message', type: 'text' as const, required: false, placeholder: 'Override initial message (optional)' },
       ],
+    },
+  },
+};
+
+/**
+ * Pipedrive Adapter
+ * CRM integration — person sync, field updates, deal management
+ */
+export const PIPEDRIVE_ADAPTER: AdapterDefinition = {
+  id: 'pipedrive',
+  name: 'Pipedrive',
+  requiresIntegration: true,
+  requirements: {
+    secrets: ['API Token'],
+  },
+  triggers: {
+    person_created: {
+      name: 'person_created',
+      label: 'Person Created',
+      description: 'Fires when a person is created in Pipedrive (via webhook)',
+      payloadSchema: CommonPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'name', label: 'Name', type: 'text', required: false },
+        { name: 'phone', label: 'Phone', type: 'text', required: false },
+      ],
+    },
+    person_updated: {
+      name: 'person_updated',
+      label: 'Person Updated',
+      description: 'Fires when a Pipedrive person field changes (via webhook)',
+      payloadSchema: CommonPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'field', label: 'Changed Field', type: 'text', required: false },
+      ],
+    },
+  },
+  actions: {
+    create_or_update_person: {
+      name: 'create_or_update_person',
+      label: 'Create or Update Person',
+      description: 'Upsert a person in Pipedrive by email. Returns pipedrivePersonId for downstream actions.',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        fields: z.record(z.string(), z.string()).optional(),
+      }),
+    },
+    update_person_fields: {
+      name: 'update_person_fields',
+      label: 'Update Person Fields',
+      description: 'Update specific fields on an existing Pipedrive person (requires pipedrivePersonId in context)',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        fields: z.record(z.string(), z.string()),
+      }),
     },
   },
 };
@@ -795,6 +873,7 @@ export const ADAPTER_REGISTRY: Record<string, AdapterDefinition> = {
   openai: OPENAI_ADAPTER,
   anthropic: ANTHROPIC_ADAPTER,
   agent: AGENT_ADAPTER,
+  pipedrive: PIPEDRIVE_ADAPTER,
 };
 
 // =============================================================================

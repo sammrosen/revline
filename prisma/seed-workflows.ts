@@ -30,7 +30,7 @@ const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     name: 'Email Capture Flow',
     description: 'When a lead submits their email on a landing page, create a lead and add to MailerLite',
     triggerAdapter: 'revline',
-    triggerOperation: 'email_captured',
+    triggerOperation: 'contact-submitted',
     actions: [
       { adapter: 'revline', operation: 'create_lead', params: {} },
       { adapter: 'mailerlite', operation: 'add_to_group', params: { group: 'leads' } },

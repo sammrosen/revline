@@ -8,8 +8,7 @@ interface AgentSummary {
   id: string;
   name: string;
   description: string | null;
-  channelType: string | null;
-  channelIntegration: string | null;
+  channels: Array<{ channel: string; integration: string; address?: string }>;
   aiIntegration: string;
   active: boolean;
   conversationCount: number;
@@ -177,8 +176,8 @@ export function AgentList({ workspaceId }: AgentListProps) {
               <div className="flex items-center gap-3 text-[11px] text-zinc-500">
                 <span className="flex items-center gap-1">
                   <MessageCircle className="w-3 h-3" />
-                  {bot.channelType && bot.channelIntegration
-                    ? `${bot.channelType} via ${bot.channelIntegration}`
+                  {bot.channels && bot.channels.length > 0
+                    ? bot.channels.map((c) => c.channel).join(', ')
                     : 'Test only'}
                 </span>
                 <span className="flex items-center gap-1">

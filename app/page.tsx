@@ -723,7 +723,7 @@ export default function Home() {
                       { time: '2:14 PM', system: 'STRIPE',     sysColor: `${INTEGRATIONS.stripe.bgClass} ${INTEGRATIONS.stripe.textClass}`, event: 'payment_succeeded', ok: true },
                       { time: '2:14 PM', system: 'WORKFLOW',    sysColor: 'bg-zinc-700/50 text-zinc-300', event: 'execution_completed', ok: true },
                       { time: '2:14 PM', system: 'MAILERLITE',  sysColor: `${INTEGRATIONS.mailerlite.bgClass} ${INTEGRATIONS.mailerlite.textClass}`, event: 'subscribe_success', ok: true },
-                      { time: '1:47 PM', system: 'BACKEND',     sysColor: 'bg-blue-500/20 text-blue-400', event: 'email_captured', ok: true },
+                      { time: '1:47 PM', system: 'BACKEND',     sysColor: 'bg-blue-500/20 text-blue-400', event: 'contact-submitted', ok: true },
                       { time: '1:47 PM', system: 'WORKFLOW',    sysColor: 'bg-zinc-700/50 text-zinc-300', event: 'execution_completed', ok: true },
                       { time: '12:30 PM', system: 'CRON',       sysColor: 'bg-amber-500/20 text-amber-400', event: 'health_check_passed', ok: true },
                       { time: '11:02 AM', system: 'RESEND',     sysColor: `${INTEGRATIONS.resend.bgClass} ${INTEGRATIONS.resend.textClass}`, event: 'magic_link_sent', ok: true },
