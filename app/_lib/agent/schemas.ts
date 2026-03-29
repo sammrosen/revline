@@ -7,6 +7,17 @@
 
 import { z } from 'zod';
 
+export const GuardrailConfigSchema = z.object({
+  emergencyKeywords: z.array(z.string().min(1).max(100)).max(50).default([]),
+  prohibitedPhrases: z.array(z.string().min(1).max(200)).max(50).default([]),
+  allowedIntents: z.array(z.string().min(1).max(50)).max(30).default([]),
+  offTopicRefusal: z.string().max(500).optional(),
+  maxSmsSegments: z.number().int().min(1).max(10).optional(),
+  aiDisclosureMessage: z.string().max(500).optional(),
+  emergencyRefusal: z.string().max(1000).optional(),
+  skipAiDisclosure: z.boolean().optional(),
+});
+
 const FaqOverrideSchema = z.object({
   patterns: z.array(z.string().min(1)),
   response: z.string().min(1),
@@ -45,6 +56,7 @@ export const CreateAgentSchema = z.object({
   enabledTools: z.array(z.string()).default([]),
   active: z.boolean().default(true),
   allowUnicode: z.boolean().default(false),
+  guardrails: GuardrailConfigSchema.optional(),
   followUpEnabled: z.boolean().default(false),
   followUpAiGenerated: z.boolean().default(true),
   followUpSequence: z.array(z.object({

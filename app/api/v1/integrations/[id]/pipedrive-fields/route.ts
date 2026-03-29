@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { getUserIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { PipedriveAdapter } from '@/app/_lib/integrations';
 import { getWorkspaceAccess, WorkspaceRole } from '@/app/_lib/workspace-access';
 import { IntegrationType } from '@prisma/client';
+import { ApiResponse } from '@/app/_lib/utils/api-response';
 
 /**
  * GET /api/v1/integrations/[id]/pipedrive-fields
@@ -18,10 +20,13 @@ export async function GET(
 ): Promise<NextResponse> {
   const userId = await getUserIdFromHeaders();
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiResponse.unauthorized();
   }
 
   const { id } = await params;
+  if (!z.string().uuid().safeParse(id).success) {
+    return ApiResponse.error('Invalid integration ID', 400);
+  }
 
   try {
     const integration = await prisma.workspaceIntegration.findUnique({
@@ -30,53 +35,44 @@ export async function GET(
     });
 
     if (!integration) {
-      return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
+      return ApiResponse.error('Integration not found', 404);
     }
 
     if (integration.integration !== IntegrationType.PIPEDRIVE) {
-      return NextResponse.json(
-        { error: 'This endpoint is only available for Pipedrive integrations' },
-        { status: 400 }
+      return ApiResponse.error(
+        'This endpoint is only available for Pipedrive integrations',
+        400
       );
     }
 
     const access = await getWorkspaceAccess(userId, integration.workspaceId);
     if (!access) {
-      return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
+      return ApiResponse.error('Workspace not found', 404);
     }
 
     if (access.role !== WorkspaceRole.ADMIN && access.role !== WorkspaceRole.OWNER) {
-      return NextResponse.json(
-        { error: 'Insufficient permissions to manage integrations' },
-        { status: 403 }
-      );
+      return ApiResponse.error('Insufficient permissions to manage integrations', 403);
     }
 
     const adapter = await PipedriveAdapter.forWorkspace(integration.workspaceId);
     if (!adapter) {
-      return NextResponse.json(
-        { error: 'Pipedrive integration not properly configured (missing API Token)' },
-        { status: 400 }
+      return ApiResponse.error(
+        'Pipedrive integration not properly configured (missing API Token)',
+        400
       );
     }
 
     const result = await adapter.listPersonFields();
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error || 'Failed to fetch fields from Pipedrive' },
-        { status: 502 }
+      return ApiResponse.error(
+        result.error || 'Failed to fetch fields from Pipedrive',
+        502
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      data: result.data || [],
-    });
+    return ApiResponse.success(result.data || []);
   } catch (error) {
     console.error('Fetch Pipedrive fields error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch fields' },
-      { status: 500 }
-    );
+    return ApiResponse.error('Failed to fetch fields', 500);
   }
 }

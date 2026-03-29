@@ -16,12 +16,13 @@ import { WorkspaceSettings } from './workspace-settings';
 import { EventsLog } from './_components/events-log';
 import { AgentList } from './agent-list';
 import { WebchatConfigList } from './webchat-config-list';
+import { PhoneConfigList } from './phone-config-list';
 import { PagesEditor } from './pages-editor';
 import { ReadinessPanel } from './readiness-panel';
 import { Workflow as WorkflowIcon, Plus, List } from 'lucide-react';
 import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
 
-type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'agents' | 'web-chats' | 'pages' | 'testing' | 'settings';
+type TabType = 'workflows' | 'integrations' | 'leads' | 'events' | 'agents' | 'web-chats' | 'phone' | 'pages' | 'testing' | 'settings';
 
 interface SecretSummary {
   id: string;
@@ -142,7 +143,7 @@ interface IntegrationDependency {
   usedBy: Array<{ workflowId: string; workflowName: string }>;
 }
 
-const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'agents', 'web-chats', 'pages', 'testing', 'settings'];
+const VALID_TABS: TabType[] = ['workflows', 'integrations', 'leads', 'events', 'agents', 'web-chats', 'phone', 'pages', 'testing', 'settings'];
 
 export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events, eventCount, leads, workflows, configuredIntegrations, mailerliteGroups = {}, resendTemplates = {}, stripeProducts = {}, agents = {}, agentChannels = {}, timezone = 'America/New_York', domainConfig, leadStages, leadPropertySchema, pagesConfig, integrationReferences = {} }: WorkspaceTabsProps) {
   // Initialize with default to avoid hydration mismatch, then sync from hash in useEffect
@@ -444,6 +445,12 @@ export function WorkspaceTabs({ workspaceId, workspaceSlug, integrations, events
         {activeTab === 'web-chats' && (
           <div className="max-w-[1600px] mx-auto">
             <WebchatConfigList workspaceId={workspaceId} />
+          </div>
+        )}
+
+        {activeTab === 'phone' && (
+          <div className="max-w-[1600px] mx-auto">
+            <PhoneConfigList workspaceId={workspaceId} workspaceSlug={workspaceSlug} />
           </div>
         )}
 

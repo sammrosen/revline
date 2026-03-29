@@ -15,7 +15,8 @@
  * - Always returns 200 for processed events (prevents Resend retries)
  */
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { getActiveClient } from '@/app/_lib/client-gate';
 import { ResendAdapter } from '@/app/_lib/integrations';
 import { emitTrigger } from '@/app/_lib/workflow';
@@ -49,7 +50,7 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   const rawBody = await request.text();
 
   const svixId = request.headers.get('svix-id');
@@ -158,21 +159,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse inbound email payload
-    const payload = verification.payload as {
-      data: {
-        from: string;
-        to: string | string[];
-        subject?: string;
-        text?: string;
-        html?: string;
-        message_id?: string;
-        headers?: Array<{ name: string; value: string }>;
-      };
-      type: string;
-    };
+    const ResendInboundPayloadSchema = z.object({
+      data: z.object({
+        from: z.string(),
+        to: z.union([z.string(), z.array(z.string())]),
+        subject: z.string().optional(),
+        text: z.string().optional(),
+        html: z.string().optional(),
+        message_id: z.string().optional(),
+        headers: z.array(z.object({ name: z.string(), value: z.string() })).optional(),
+      }),
+      type: z.string().optional(),
+    });
 
-    const emailData = payload.data;
+    const parsed = ResendInboundPayloadSchema.safeParse(verification.payload);
+    if (!parsed.success) {
+      await WebhookProcessor.markFailed(registration.id, 'Invalid inbound payload shape');
+      return ApiResponse.error('Invalid payload', 400);
+    }
+
+    const emailData = parsed.data.data;
     const senderEmail = emailData.from;
     const recipientEmails = Array.isArray(emailData.to) ? emailData.to : [emailData.to];
     const recipientEmail = recipientEmails[0] || '';

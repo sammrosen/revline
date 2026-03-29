@@ -18,6 +18,7 @@
  * - Event-driven: emits events for workflow triggers
  */
 
+import { z } from 'zod';
 import { prisma } from '@/app/_lib/db';
 import { ConversationStatus, Prisma } from '@prisma/client';
 import type { ChatMessage, ChatCompletionResult } from '@/app/_lib/integrations';
@@ -38,6 +39,12 @@ import { cancelPendingFollowUps } from './follow-up';
 import { checkConsent, revokeConsent } from '@/app/_lib/services/consent.service';
 import { withTransaction } from '@/app/_lib/utils/transaction';
 import { maskContact } from '@/app/_lib/utils/validation';
+import { resolveGuardrails } from './guardrails/constants';
+import type { GuardrailConfig } from './guardrails/types';
+import { checkEmergencyKeywords, filterOutput, maskPiiForPrompt } from './guardrails/output-filter';
+import { hardenPrompt, wrapUserMessage, buildSandwich } from './guardrails/prompt-hardening';
+import { screenInput } from './guardrails/input-screen';
+import { truncateToSegments } from './sms-encoding';
 
 // Register all tools with the tool registry at module load
 import './tools';
@@ -158,6 +165,51 @@ export async function handleInboundMessage(
 
     // 2. Find or create conversation
     const { conversation, isNew } = await findOrCreateConversation(params, agent);
+
+    // 2a. Proactive outreach path (missed-call handler) — send first message without inbound
+    if (params.callerContext === 'proactive') {
+      if (!isNew) {
+        return {
+          success: false,
+          replyText: null,
+          conversationId: conversation.id,
+          isNewConversation: false,
+          status: conversation.status,
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          error: 'active_conversation_exists',
+          eventsEmitted: [],
+        };
+      }
+
+      const outboundText = params.proactiveMessage || agent.initialMessage || '';
+      if (outboundText) {
+        await prisma.conversationMessage.create({
+          data: { conversationId: conversation.id, role: 'ASSISTANT', content: outboundText },
+        });
+
+        if (!params.testMode) {
+          await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, outboundText, 'proactive', conversation.id, channelCtx);
+        }
+      }
+
+      await emitAgentEvent(params.workspaceId, 'conversation_started', {
+        agentId: agent.id,
+        conversationId: conversation.id,
+        contactAddress: params.contactAddress,
+        channel: params.channel,
+        leadId: params.leadId,
+      });
+
+      return {
+        success: true,
+        replyText: outboundText || null,
+        conversationId: conversation.id,
+        isNewConversation: true,
+        status: ConversationStatus.ACTIVE,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        eventsEmitted: ['conversation_started'],
+      };
+    }
 
     // 2b. Cancel pending follow-ups on any inbound message
     if (!isNew) {
@@ -436,6 +488,114 @@ export async function handleInboundMessage(
       }
     }
 
+    // 7d. Emergency keyword check — skip AI entirely on match
+    const emergencyCheck = checkEmergencyKeywords(params.messageText, agent.guardrails);
+    if (emergencyCheck.triggered) {
+      const emergencyReply = agent.guardrails.emergencyRefusal;
+      turnLog.push({ type: 'guardrail', guardrail: 'emergency_escalation', detail: `Matched keyword: "${emergencyCheck.keyword}"`, ts: Date.now() });
+
+      await prisma.conversationMessage.create({
+        data: { conversationId: conversation.id, role: 'ASSISTANT', content: emergencyReply },
+      });
+
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          status: ConversationStatus.ESCALATED,
+          endedAt: new Date(),
+          messageCount: { increment: 2 },
+          lastMessageAt: new Date(),
+        },
+      });
+
+      if (!params.testMode) {
+        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, emergencyReply, 'reactive', conversation.id, channelCtx);
+      }
+
+      await emitAgentEvent(params.workspaceId, 'escalation_requested', {
+        agentId: agent.id,
+        conversationId: conversation.id,
+        reason: 'emergency_keyword',
+        keyword: emergencyCheck.keyword,
+        leadId: params.leadId,
+      });
+      eventsEmitted.push('escalation_requested');
+      turnLog.push({ type: 'event', event: 'escalation_requested', ts: Date.now() });
+
+      try {
+        const { notifyEscalation } = await import('./escalation');
+        const summary = await buildConversationSummary(conversation.id);
+        await notifyEscalation({
+          workspaceId: params.workspaceId,
+          agentId: agent.id,
+          conversationId: conversation.id,
+          contactAddress: params.contactAddress,
+          summary,
+        });
+      } catch (err) {
+        logStructured({
+          correlationId,
+          event: 'agent_escalation_notification_failed',
+          workspaceId: params.workspaceId,
+          provider: 'agent',
+          error: err instanceof Error ? err.message : 'Emergency escalation notification failed',
+          metadata: { agentId: agent.id, conversationId: conversation.id, reason: 'emergency_keyword' },
+        });
+      }
+
+      return {
+        success: true,
+        replyText: emergencyReply,
+        conversationId: conversation.id,
+        isNewConversation: isNew,
+        status: ConversationStatus.ESCALATED,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        eventsEmitted,
+        turnLog,
+      };
+    }
+
+    // 7e. Input screening — injection detection + topic gating
+    const screenResult = await screenInput(params.workspaceId, agent, params.messageText);
+    if (!screenResult.allowed) {
+      const guardrailType = screenResult.intent === 'injection' ? 'injection' as const : 'off_topic' as const;
+      turnLog.push({ type: 'guardrail', guardrail: guardrailType, detail: screenResult.reason || `Blocked: ${screenResult.intent}`, ts: Date.now() });
+
+      const refusalText = screenResult.intent === 'injection'
+        ? 'I\'m here to help with your questions! What can I assist you with?'
+        : agent.guardrails.offTopicRefusal;
+
+      await prisma.conversationMessage.create({
+        data: { conversationId: conversation.id, role: 'ASSISTANT', content: refusalText, turnLog: turnLog.length > 0 ? (turnLog as unknown as Prisma.InputJsonValue) : undefined },
+      });
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { messageCount: { increment: 2 }, lastMessageAt: new Date() },
+      });
+
+      if (!params.testMode) {
+        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, refusalText, 'reactive', conversation.id, channelCtx);
+      }
+
+      return {
+        success: true,
+        replyText: refusalText,
+        conversationId: conversation.id,
+        isNewConversation: isNew,
+        status: ConversationStatus.ACTIVE,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        eventsEmitted,
+        turnLog,
+      };
+    }
+
+    // 7f. Inbound PII masking — scrub before the message enters the AI prompt
+    const piiResult = maskPiiForPrompt(params.messageText);
+    const maskedMessageText = piiResult.masked;
+    if (piiResult.hadPii) {
+      turnLog.push({ type: 'guardrail', guardrail: 'pii_scrubbed', detail: 'Masked PII in inbound message before AI prompt', ts: Date.now() });
+    }
+
     // 8. Load conversation history
     const history = await prisma.conversationMessage.findMany({
       where: { conversationId: conversation.id },
@@ -443,7 +603,7 @@ export async function handleInboundMessage(
       select: { role: true, content: true },
     });
 
-    // 9. Load reference files and build augmented system prompt
+    // 9. Load reference files and build hardened system prompt
     const basePrompt = params.systemPromptOverride || agent.systemPrompt;
     const refFiles = await prisma.agentFile.findMany({
       where: { agentId: agent.id },
@@ -451,20 +611,22 @@ export async function handleInboundMessage(
       orderBy: { createdAt: 'asc' },
     });
 
-    let systemPrompt = basePrompt;
-    if (refFiles.length > 0) {
-      const refBlock = refFiles
-        .map((f) => `## ${f.filename}\n${f.textContent}`)
-        .join('\n\n');
-      systemPrompt = `${basePrompt}\n\n--- Reference Documents ---\n\n${refBlock}`;
-    }
+    const hardened = hardenPrompt(basePrompt, refFiles, agent.name);
+    const systemPrompt = hardened.systemContent;
+
+    // The last USER message in history is the current turn (stored unmasked at step 6).
+    // Replace its content with the PII-masked version for the AI prompt.
+    const lastUserIdx = history.findLastIndex((m) => m.role === 'USER');
 
     const aiMessages: ChatMessage[] = [
       { role: 'developer', content: systemPrompt },
-      ...history.map((msg) => ({
+      ...history.map((msg, i) => ({
         role: mapRoleToAI(msg.role),
-        content: msg.content,
+        content: msg.role === 'USER'
+          ? wrapUserMessage(i === lastUserIdx ? maskedMessageText : msg.content)
+          : msg.content,
       })),
+      { role: 'developer', content: buildSandwich() },
     ];
 
     // 10. Resolve tools and call AI adapter with tool loop
@@ -690,7 +852,19 @@ export async function handleInboundMessage(
 
     const latencyMs = Math.round(performance.now() - aiStartMs);
     completion = { ...completion, usage: accumulatedUsage };
-    const replyText = completion.content || '';
+    let replyText = completion.content || '';
+
+    // 10a. Output guardrails — filter before any further processing
+    const outputResult = filterOutput(replyText, basePrompt, agent.guardrails);
+    if (outputResult.modifications.length > 0) {
+      replyText = outputResult.text;
+      for (const mod of outputResult.modifications) {
+        turnLog.push({ type: 'guardrail', guardrail: mod.type, detail: mod.detail, ts: Date.now() });
+      }
+      if (outputResult.blocked) {
+        turnLog.push({ type: 'guardrail', guardrail: 'output_blocked', detail: 'Response replaced by guardrail', ts: Date.now() });
+      }
+    }
 
     // 10b. Escalation detection
     const escPattern = agent.escalationPattern || '[ESCALATE]';
@@ -813,6 +987,13 @@ export async function handleInboundMessage(
 
       turnLog.push({ type: 'guardrail', guardrail: 'token_limit', detail: `Reached ${agent.maxTokensPerConversation} token limit`, ts: Date.now() });
       turnLog.push({ type: 'event', event: 'conversation_completed', ts: Date.now() });
+    }
+
+    // 13b. AI disclosure — prepend on first message of new conversation
+    if (isNew && !agent.guardrails.skipAiDisclosure && replyText) {
+      const disclosure = agent.guardrails.aiDisclosureMessage.replace('{agentName}', agent.name);
+      replyText = `${disclosure}\n\n${replyText}`;
+      turnLog.push({ type: 'guardrail', guardrail: 'ai_disclosure', detail: 'Prepended AI disclosure', ts: Date.now() });
     }
 
     // 14. Apply response delay then send reply via channel adapter
@@ -1138,7 +1319,7 @@ export async function initiateConversation(
       agentId: agent.id,
       conversationId: conversation.id,
       contactAddress: contactAddress || '',
-      channel: channelType,
+      channel: chType,
       leadId: params.leadId,
     });
     eventsEmitted.push('conversation_started');
@@ -1187,6 +1368,31 @@ export async function initiateConversation(
 // INTERNAL HELPERS
 // =============================================================================
 
+const AgentChannelsSchema = z.array(z.object({
+  channel: z.string(),
+  integration: z.string(),
+  address: z.string().optional(),
+})).catch([]);
+
+const StringArraySchema = z.array(z.string()).catch([]);
+
+const FollowUpSequenceSchema = z.array(z.object({
+  delayMinutes: z.number(),
+  message: z.string().optional(),
+  variants: z.array(z.string()).optional(),
+})).catch([]);
+
+const GuardrailsJsonSchema = z.object({
+  emergencyKeywords: z.array(z.string()).optional(),
+  prohibitedPhrases: z.array(z.string()).optional(),
+  allowedIntents: z.array(z.string()).optional(),
+  offTopicRefusal: z.string().optional(),
+  maxSmsSegments: z.number().optional(),
+  aiDisclosureMessage: z.string().optional(),
+  emergencyRefusal: z.string().optional(),
+  skipAiDisclosure: z.boolean().optional(),
+}).partial().nullable().catch(null);
+
 export async function loadAgent(
   workspaceId: string,
   agentId: string
@@ -1198,16 +1404,20 @@ export async function loadAgent(
 
   if (!agent) return null;
 
+  const channels = AgentChannelsSchema.parse(agent.channels);
+  const allowedEvents = StringArraySchema.parse(agent.allowedEvents);
+  const enabledTools = StringArraySchema.parse(agent.enabledTools);
+  const followUpSequence = FollowUpSequenceSchema.parse(agent.followUpSequence);
+  const guardrailsRaw = GuardrailsJsonSchema.parse(agent.guardrails);
+
   return {
     id: agent.id,
     name: agent.name,
-    channels: Array.isArray(agent.channels)
-      ? (agent.channels as Array<{ channel: string; integration: string; address?: string }>).map((c) => ({
-          channel: c.channel as 'SMS' | 'EMAIL' | 'WEB_CHAT',
-          integration: c.integration as 'TWILIO' | 'RESEND' | 'BUILT_IN',
-          address: c.address,
-        }))
-      : [],
+    channels: channels.map((c) => ({
+      channel: c.channel as 'SMS' | 'EMAIL' | 'WEB_CHAT',
+      integration: c.integration as 'TWILIO' | 'RESEND' | 'BUILT_IN',
+      address: c.address,
+    })),
     channelType: agent.channelType,
     channelIntegration: agent.channelIntegration,
     channelAddress: agent.channelAddress,
@@ -1226,16 +1436,15 @@ export async function loadAgent(
     fallbackMessage: agent.fallbackMessage,
     escalationPattern: agent.escalationPattern,
     faqOverrides: parseFaqOverrides(agent.faqOverrides),
-    allowedEvents: Array.isArray(agent.allowedEvents) ? agent.allowedEvents as string[] : [],
-    enabledTools: Array.isArray(agent.enabledTools) ? agent.enabledTools as string[] : [],
+    allowedEvents,
+    enabledTools,
     active: agent.active,
     timezone: agent.workspace.timezone,
     allowUnicode: agent.allowUnicode,
     followUpEnabled: agent.followUpEnabled,
     followUpAiGenerated: agent.followUpAiGenerated,
-    followUpSequence: Array.isArray(agent.followUpSequence)
-      ? (agent.followUpSequence as Array<{ delayMinutes: number; message?: string; variants?: string[] }>)
-      : [],
+    followUpSequence,
+    guardrails: resolveGuardrails(guardrailsRaw),
   };
 }
 
@@ -1439,6 +1648,27 @@ export async function sendReply(
   if (shouldSanitizeSms(chType) && !agent.allowUnicode) {
     sanitizedBody = sanitizeForGsm7(body);
   }
+
+  // SMS segment cap enforcement
+  if (shouldSanitizeSms(chType)) {
+    const preCapSegments = estimateSegments(sanitizedBody);
+    if (preCapSegments.segments > agent.guardrails.maxSmsSegments) {
+      sanitizedBody = truncateToSegments(sanitizedBody, agent.guardrails.maxSmsSegments);
+      logStructured({
+        correlationId: crypto.randomUUID(),
+        event: 'agent_sms_truncated',
+        workspaceId,
+        provider: chIntegration,
+        success: true,
+        metadata: {
+          agentId: agent.id,
+          originalSegments: preCapSegments.segments,
+          maxSegments: agent.guardrails.maxSmsSegments,
+        },
+      });
+    }
+  }
+
   const segments = estimateSegments(sanitizedBody);
   logStructured({
     correlationId: crypto.randomUUID(),

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { getUserIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { getWorkspaceAccess } from '@/app/_lib/workspace-access';
 import { PipedriveAdapter } from '@/app/_lib/integrations';
+import { ApiResponse } from '@/app/_lib/utils/api-response';
+import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 
 /**
  * POST /api/v1/integrations/[id]/test
@@ -13,13 +16,16 @@ import { PipedriveAdapter } from '@/app/_lib/integrations';
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+): Promise<NextResponse> {
   const userId = await getUserIdFromHeaders();
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiResponse.unauthorized();
   }
 
   const { id } = await params;
+  if (!z.string().uuid().safeParse(id).success) {
+    return ApiResponse.error('Invalid integration ID', 400);
+  }
 
   try {
     const integration = await prisma.workspaceIntegration.findUnique({
@@ -28,43 +34,59 @@ export async function POST(
     });
 
     if (!integration) {
-      return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
+      return ApiResponse.error('Integration not found', 404);
     }
 
     const access = await getWorkspaceAccess(userId, integration.workspaceId);
     if (!access) {
-      return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
+      return ApiResponse.error('Workspace not found', 404);
     }
 
     if (integration.integration === 'PIPEDRIVE') {
       const adapter = await PipedriveAdapter.forWorkspace(integration.workspaceId);
       if (!adapter) {
-        return NextResponse.json(
-          { success: false, error: 'Pipedrive adapter could not be loaded. Check that an API Token is configured.' },
-          { status: 400 }
+        await emitEvent({
+          workspaceId: integration.workspaceId,
+          system: EventSystem.PIPEDRIVE,
+          eventType: 'integration_test_failed',
+          success: false,
+          errorMessage: 'Adapter could not be loaded (missing API Token)',
+        });
+        return ApiResponse.error(
+          'Pipedrive adapter could not be loaded. Check that an API Token is configured.',
+          400
         );
       }
 
       const result = await adapter.validateConfig();
       if (!result.valid) {
-        return NextResponse.json(
-          { success: false, error: result.errors.join('; ') },
-          { status: 400 }
-        );
+        await emitEvent({
+          workspaceId: integration.workspaceId,
+          system: EventSystem.PIPEDRIVE,
+          eventType: 'integration_test_failed',
+          success: false,
+          errorMessage: result.errors.join('; '),
+        });
+        return ApiResponse.error(result.errors.join('; '), 400);
       }
 
-      return NextResponse.json({ success: true, message: 'Connected to Pipedrive successfully' });
+      await emitEvent({
+        workspaceId: integration.workspaceId,
+        system: EventSystem.PIPEDRIVE,
+        eventType: 'integration_test_success',
+        success: true,
+        metadata: { integrationType: 'PIPEDRIVE' },
+      });
+
+      return ApiResponse.success({ message: 'Connected to Pipedrive successfully' });
     }
 
-    return NextResponse.json(
-      { error: `Test not implemented for integration type: ${integration.integration}` },
-      { status: 400 }
+    return ApiResponse.error(
+      `Test not implemented for integration type: ${integration.integration}`,
+      400
     );
   } catch (error) {
     console.error('Test integration error:', error);
-    return NextResponse.json(
-      { error: 'Failed to test integration' },
-      { status: 500 }
-    );
+    return ApiResponse.error('Failed to test integration', 500);
   }
 }

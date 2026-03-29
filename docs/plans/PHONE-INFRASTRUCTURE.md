@@ -9,14 +9,14 @@
 
 | Feature | Status | Phase |
 |---------|--------|-------|
-| 1.1 `PhoneConfig` Prisma model + migration | NOT STARTED | 1 |
-| 1.2 Phone config CRUD API | NOT STARTED | 1 |
-| 1.3 Phone dashboard tab + sidebar | NOT STARTED | 1 |
-| 1.4 Phone config editor UI | NOT STARTED | 1 |
-| 2.1 Voice webhook (`POST /api/v1/twilio-voice`) | NOT STARTED | 2 |
-| 2.2 Missed-call handler (blocklist, lead upsert, auto-text) | NOT STARTED | 2 |
-| 2.3 Agent-mode conversation start (proactive outreach) | NOT STARTED | 2 |
-| 2.4 `missed_call` trigger in workflow registry | NOT STARTED | 2 |
+| 1.1 `PhoneConfig` Prisma model + migration | DONE | 1 |
+| 1.2 Phone config CRUD API | DONE | 1 |
+| 1.3 Phone dashboard tab + sidebar | DONE | 1 |
+| 1.4 Phone config editor UI | DONE | 1 |
+| 2.1 Voice webhook (`POST /api/v1/twilio-voice`) | DONE | 2 |
+| 2.2 Missed-call handler (blocklist, lead upsert, auto-text) | DONE | 2 |
+| 2.3 Agent-mode conversation start (proactive outreach) | DONE | 2 |
+| 2.4 `missed_call` trigger in workflow registry | DONE | 2 |
 | 3.1 SMS escalation in `notifyEscalation` | NOT STARTED | 3 |
 | 3.2 Resolution metadata on conversation completion | NOT STARTED | 3 |
 | 3.3 Resolution-driven notification templates | NOT STARTED | 3 |
@@ -263,13 +263,13 @@ Add `PhoneConfig` model as defined above. Add `phoneConfigs` relation on `Worksp
 Write manual migration SQL:
 ```sql
 CREATE TABLE "phone_configs" (
-  "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  "workspace_id" UUID NOT NULL REFERENCES "workspaces"("id") ON DELETE CASCADE,
+  "id" TEXT PRIMARY KEY NOT NULL,
+  "workspace_id" TEXT NOT NULL REFERENCES "workspaces"("id") ON DELETE CASCADE,
   "name" TEXT NOT NULL,
   "twilio_number_key" TEXT NOT NULL,
   "forwarding_number" TEXT NOT NULL,
   "mode" TEXT NOT NULL DEFAULT 'NOTIFICATION',
-  "agent_id" UUID REFERENCES "agents"("id") ON DELETE SET NULL,
+  "agent_id" TEXT REFERENCES "agents"("id") ON DELETE SET NULL,
   "auto_text_template" TEXT NOT NULL DEFAULT 'Hey! Sorry I missed your call. How can I help?',
   "voice_greeting" TEXT NOT NULL DEFAULT 'Thanks for calling. We''ll text you right away.',
   "notification_template" TEXT NOT NULL DEFAULT 'Missed call from {{callerPhone}}. Text them back!',
@@ -280,6 +280,7 @@ CREATE TABLE "phone_configs" (
 );
 
 CREATE INDEX "phone_configs_workspace_id_idx" ON "phone_configs"("workspace_id");
+CREATE INDEX "phone_configs_agent_id_idx" ON "phone_configs"("agent_id");
 CREATE UNIQUE INDEX "phone_configs_workspace_id_twilio_number_key_key"
   ON "phone_configs"("workspace_id", "twilio_number_key");
 ```

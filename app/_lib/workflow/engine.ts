@@ -10,6 +10,7 @@
  * - Failed actions are logged and stop workflow execution
  */
 
+import { z } from 'zod';
 import { prisma } from '@/app/_lib/db';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { Prisma } from '@prisma/client';
@@ -28,6 +29,7 @@ import {
   logStructured,
 } from '@/app/_lib/reliability';
 import { AlertService } from '@/app/_lib/alerts';
+import { enqueueFailedAction } from '@/app/_lib/services/integration-sync.service';
 
 // =============================================================================
 // MAIN ENTRY POINT
@@ -89,10 +91,32 @@ export async function emitTrigger(
   const executions: WorkflowExecutionResult[] = [];
   let workflowsExecuted = 0;
 
+  const WorkflowActionSchema = z.array(z.object({
+    adapter: z.string(),
+    operation: z.string(),
+    params: z.record(z.unknown()),
+    conditions: z.record(z.unknown()).optional(),
+    continueOnError: z.boolean().optional(),
+  }));
+
   for (const workflow of workflows) {
-    // Check trigger filter
-    const filter = workflow.triggerFilter as Record<string, unknown> | null;
+    const rawFilter = workflow.triggerFilter;
+    const filter = (rawFilter !== null && typeof rawFilter === 'object' && !Array.isArray(rawFilter))
+      ? rawFilter as Record<string, unknown>
+      : null;
     if (!matchesFilter(filter, payload)) {
+      continue;
+    }
+
+    const actionsResult = WorkflowActionSchema.safeParse(workflow.actions);
+    if (!actionsResult.success) {
+      executions.push({
+        workflowId: workflow.id,
+        workflowName: workflow.name,
+        status: 'FAILED',
+        actions: [],
+        error: `Malformed workflow actions: ${actionsResult.error.message}`,
+      });
       continue;
     }
 
@@ -101,7 +125,7 @@ export async function emitTrigger(
       {
         id: workflow.id,
         name: workflow.name,
-        actions: workflow.actions as unknown as WorkflowAction[],
+        actions: actionsResult.data,
       },
       { ...baseContext, leadId: undefined }
     );
@@ -244,6 +268,17 @@ async function executeWorkflow(
             actionIndex,
           },
         });
+
+        if (ctx.email) {
+          await enqueueFailedAction({
+            workspaceId: ctx.workspaceId,
+            email: ctx.email,
+            leadId: ctx.leadId,
+            adapter: action.adapter,
+            operation: action.operation,
+            params: action.params as Record<string, unknown>,
+          });
+        }
       } else {
         // Stop on error
         failed = true;
@@ -290,6 +325,17 @@ async function executeWorkflow(
             actionIndex,
           },
         });
+
+        if (ctx.email) {
+          await enqueueFailedAction({
+            workspaceId: ctx.workspaceId,
+            email: ctx.email,
+            leadId: ctx.leadId,
+            adapter: action.adapter,
+            operation: action.operation,
+            params: action.params as Record<string, unknown>,
+          });
+        }
       } else {
         failed = true;
         errorMessage = catchMessage;

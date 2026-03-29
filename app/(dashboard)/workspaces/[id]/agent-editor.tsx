@@ -18,6 +18,8 @@ import {
   HelpCircle,
   Wrench,
   Clock,
+  X,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface AgentChannelEntry {
@@ -52,6 +54,16 @@ interface AgentData {
   followUpEnabled: boolean;
   followUpAiGenerated: boolean;
   followUpSequence: Array<{ delayMinutes: number; unit: 'minutes' | 'hours' | 'days'; message: string; variants: string[] }>;
+  guardrails: {
+    emergencyKeywords: string[];
+    prohibitedPhrases: string[];
+    allowedIntents: string[];
+    offTopicRefusal: string;
+    maxSmsSegments: number;
+    aiDisclosureMessage: string;
+    emergencyRefusal: string;
+    skipAiDisclosure: boolean;
+  };
 }
 
 interface Integration {
@@ -133,6 +145,16 @@ const DEFAULT_DATA: AgentData = {
   followUpEnabled: false,
   followUpAiGenerated: true,
   followUpSequence: [],
+  guardrails: {
+    emergencyKeywords: [],
+    prohibitedPhrases: [],
+    allowedIntents: [],
+    offTopicRefusal: '',
+    maxSmsSegments: 3,
+    aiDisclosureMessage: '',
+    emergencyRefusal: '',
+    skipAiDisclosure: false,
+  },
 };
 
 export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEditorProps) {
@@ -255,6 +277,16 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
               return { delayMinutes: delay, unit, message: s.message || '', variants: s.variants || [] };
             }
           ),
+          guardrails: {
+            emergencyKeywords: (bot.guardrails as Record<string, unknown>)?.emergencyKeywords as string[] || [],
+            prohibitedPhrases: (bot.guardrails as Record<string, unknown>)?.prohibitedPhrases as string[] || [],
+            allowedIntents: (bot.guardrails as Record<string, unknown>)?.allowedIntents as string[] || [],
+            offTopicRefusal: ((bot.guardrails as Record<string, unknown>)?.offTopicRefusal as string) || '',
+            maxSmsSegments: ((bot.guardrails as Record<string, unknown>)?.maxSmsSegments as number) || 3,
+            aiDisclosureMessage: ((bot.guardrails as Record<string, unknown>)?.aiDisclosureMessage as string) || '',
+            emergencyRefusal: ((bot.guardrails as Record<string, unknown>)?.emergencyRefusal as string) || '',
+            skipAiDisclosure: ((bot.guardrails as Record<string, unknown>)?.skipAiDisclosure as boolean) || false,
+          },
         });
       }
     } catch (err) {
@@ -469,6 +501,16 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
             ...(filtered.length > 0 ? { variants: filtered } : {}),
           };
         }),
+        guardrails: {
+          emergencyKeywords: data.guardrails.emergencyKeywords.filter(Boolean),
+          prohibitedPhrases: data.guardrails.prohibitedPhrases.filter(Boolean),
+          allowedIntents: data.guardrails.allowedIntents.filter(Boolean),
+          ...(data.guardrails.offTopicRefusal.trim() ? { offTopicRefusal: data.guardrails.offTopicRefusal.trim() } : {}),
+          maxSmsSegments: data.guardrails.maxSmsSegments,
+          ...(data.guardrails.aiDisclosureMessage.trim() ? { aiDisclosureMessage: data.guardrails.aiDisclosureMessage.trim() } : {}),
+          ...(data.guardrails.emergencyRefusal.trim() ? { emergencyRefusal: data.guardrails.emergencyRefusal.trim() } : {}),
+          skipAiDisclosure: data.guardrails.skipAiDisclosure,
+        },
       };
 
       const url = agentId
@@ -1138,6 +1180,88 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
           </div>
         </Section>
 
+        {/* Content Safety */}
+        <Section icon={ShieldAlert} title="Content Safety">
+          <div className="space-y-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={data.guardrails.skipAiDisclosure}
+                onChange={(e) => setData({ ...data, guardrails: { ...data.guardrails, skipAiDisclosure: e.target.checked } })}
+                className="rounded border-zinc-700 bg-zinc-800 text-violet-500 focus:ring-violet-500"
+              />
+              <span className="text-zinc-300">Skip AI disclosure on first message</span>
+            </label>
+
+            <Field label="AI Disclosure" hint="Prepended to first message. Use {agentName} for substitution. Leave blank for default.">
+              <input
+                type="text"
+                value={data.guardrails.aiDisclosureMessage}
+                onChange={(e) => setData({ ...data, guardrails: { ...data.guardrails, aiDisclosureMessage: e.target.value } })}
+                placeholder="Just so you know, I'm an AI assistant for {agentName}."
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder:text-zinc-600 focus:border-violet-500 focus:outline-none"
+              />
+            </Field>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="SMS Segment Cap" hint="Max SMS segments per message (1-10)">
+                <input
+                  type="number"
+                  value={data.guardrails.maxSmsSegments}
+                  onChange={(e) => setData({ ...data, guardrails: { ...data.guardrails, maxSmsSegments: Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 3)) } })}
+                  min={1}
+                  max={10}
+                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-violet-500 focus:outline-none"
+                />
+              </Field>
+            </div>
+
+            <TagField
+              label="Emergency Keywords"
+              hint="Triggers immediate human escalation (e.g., gas leak, chest pain)"
+              tags={data.guardrails.emergencyKeywords}
+              onChange={(keywords) => setData({ ...data, guardrails: { ...data.guardrails, emergencyKeywords: keywords } })}
+              placeholder="Type keyword + Enter"
+            />
+
+            <TagField
+              label="Prohibited Phrases"
+              hint="Blocked from AI output (e.g., binding quote)"
+              tags={data.guardrails.prohibitedPhrases}
+              onChange={(phrases) => setData({ ...data, guardrails: { ...data.guardrails, prohibitedPhrases: phrases } })}
+              placeholder="Type phrase + Enter"
+            />
+
+            <TagField
+              label="Allowed Intents"
+              hint="Topic gating — leave empty to allow all topics"
+              tags={data.guardrails.allowedIntents}
+              onChange={(intents) => setData({ ...data, guardrails: { ...data.guardrails, allowedIntents: intents } })}
+              placeholder="Type intent + Enter (e.g., scheduling, pricing, general_inquiry)"
+            />
+
+            <Field label="Off-Topic Refusal" hint="Response when user asks about an unallowed topic. Leave blank for default.">
+              <input
+                type="text"
+                value={data.guardrails.offTopicRefusal}
+                onChange={(e) => setData({ ...data, guardrails: { ...data.guardrails, offTopicRefusal: e.target.value } })}
+                placeholder="I can only help with questions about our services."
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder:text-zinc-600 focus:border-violet-500 focus:outline-none"
+              />
+            </Field>
+
+            <Field label="Emergency Response" hint="Sent when an emergency keyword is detected. Leave blank for default.">
+              <textarea
+                value={data.guardrails.emergencyRefusal}
+                onChange={(e) => setData({ ...data, guardrails: { ...data.guardrails, emergencyRefusal: e.target.value } })}
+                placeholder="This sounds like an emergency. Please call 911 or your local emergency services immediately. I'm connecting you with a team member now."
+                rows={2}
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder:text-zinc-600 focus:border-violet-500 focus:outline-none resize-none"
+              />
+            </Field>
+          </div>
+        </Section>
+
         {/* Follow-Up Sequence */}
         <Section icon={Clock} title="Follow-Up Sequence">
           <div className="space-y-3">
@@ -1485,6 +1609,62 @@ function Field({
       </label>
       {children}
     </div>
+  );
+}
+
+function TagField({
+  label,
+  hint,
+  tags,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  hint?: string;
+  tags: string[];
+  onChange: (tags: string[]) => void;
+  placeholder?: string;
+}) {
+  const [input, setInput] = useState('');
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && input.trim()) {
+      e.preventDefault();
+      const trimmed = input.trim();
+      if (!tags.includes(trimmed)) {
+        onChange([...tags, trimmed]);
+      }
+      setInput('');
+    }
+    if (e.key === 'Backspace' && !input && tags.length > 0) {
+      onChange(tags.slice(0, -1));
+    }
+  };
+
+  return (
+    <Field label={label} hint={hint}>
+      <div className="flex flex-wrap gap-1.5 p-2 bg-zinc-800 border border-zinc-700 rounded min-h-[38px] focus-within:border-violet-500">
+        {tags.map((tag, i) => (
+          <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-zinc-700 rounded text-xs text-zinc-200">
+            {tag}
+            <button
+              type="button"
+              onClick={() => onChange(tags.filter((_, j) => j !== i))}
+              className="text-zinc-400 hover:text-white"
+            >
+              <X size={12} />
+            </button>
+          </span>
+        ))}
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={tags.length === 0 ? placeholder : ''}
+          className="flex-1 min-w-[120px] bg-transparent text-sm text-white outline-none placeholder:text-zinc-600"
+        />
+      </div>
+    </Field>
   );
 }
 

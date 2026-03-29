@@ -631,6 +631,25 @@ export const TWILIO_ADAPTER: AdapterDefinition = {
         { name: 'body', label: 'Message Body', type: 'text', required: true, placeholder: 'Hello!' },
       ],
     },
+    missed_call: {
+      name: 'missed_call',
+      label: 'Missed Call',
+      description: 'Fires when a forwarded missed call is received at the workspace Twilio number',
+      payloadSchema: z.object({
+        from: z.string().describe('Caller phone number (E.164)'),
+        to: z.string().describe('Twilio number that received the call (E.164)'),
+        callSid: z.string().describe('Twilio call SID'),
+        callerCity: z.string().optional(),
+        callerState: z.string().optional(),
+        callerCountry: z.string().optional(),
+        phoneConfigId: z.string().optional(),
+        mode: z.string().optional().describe('NOTIFICATION or AGENT'),
+      }),
+      testFields: [
+        { name: 'from', label: 'Caller Phone', type: 'text', required: true, placeholder: '+15551234567' },
+        { name: 'to', label: 'Twilio Number', type: 'text', required: true, placeholder: '+15559876543' },
+      ],
+    },
   },
   actions: {
     send_sms: {

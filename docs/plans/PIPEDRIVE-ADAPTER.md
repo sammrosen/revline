@@ -1,7 +1,7 @@
 # Pipedrive Adapter
 
 > **Created:** March 27, 2026
-> **Updated:** March 28, 2026 (v3 — workflow-driven architecture, subscribe route stays clean, continueOnError required)
+> **Updated:** March 28, 2026 (v4 — Phase 1 complete, Phase 2 field sync mostly done, trigger renamed to contact-submitted)
 > **Scope:** Full Pipedrive CRM integration — person sync from landing pages, bidirectional field mapping, agent activity logging to Pipedrive timeline, deal/pipeline management, and workflow actions for contact and deal management.
 
 ---
@@ -18,8 +18,14 @@
 | 1.6 `create_lead` executor — pipedrivePersonId linking | **DONE** | 1 |
 | 1.7 Dashboard wire-up (forms, config editor) | **DONE** | 1 |
 | 1.8 Visual branding (logo, integration-config, grid picker) | **DONE** | 1 |
+| 2.0 Trigger rename (`email_captured` → `contact-submitted`) | **DONE** | 2 |
+| 2.0 Static payload schema for `contact-submitted` | **DONE** | 2 |
+| 2.0 Test connection endpoint (`/api/v1/integrations/[id]/test`) | **DONE** | 2 |
+| 2.0 Pipedrive fields API (`/api/v1/integrations/[id]/pipedrive-fields`) | **DONE** | 2 |
+| 2.2a Field sync UI (Sync Fields, auto-mapping, create-and-map) | **DONE** | 2 |
+| 2.2b `pipedrivePersonId` auto-provisioning in workspace schema | **DONE** | 2 |
 | 2.1 Pipedrive webhook route (inbound triggers) | NOT STARTED | 2 |
-| 2.2 Field sync system | NOT STARTED | 2 |
+| 2.2c Inbound field sync (Pipedrive → RevLine on webhook) | NOT STARTED | 2 |
 | 2.3 Agent activity logging (post-send hook) | NOT STARTED | 2 |
 | 2.4 Reconciliation cron (pipedriveSyncPending) | NOT STARTED | 2 |
 | 3.1 Deal + pipeline management | NOT STARTED | 3 |
@@ -34,6 +40,8 @@
 - **Search-then-upsert pattern.** Pipedrive has no native upsert-by-email. The adapter searches first, then creates or updates. Two API calls for new contacts, one for existing — the adapter hides this complexity.
 - **Graceful degradation on Pipedrive failure.** If the Pipedrive workflow action fails (with `continueOnError: true`), RevLine still creates the lead. The lead is flagged with `pipedriveSyncPending: true` for later reconciliation.
 - **Field sync is per-workspace.** Each workspace defines its own mapping between RevLine lead properties and Pipedrive person fields in the adapter meta config.
+- **Trigger renamed from `email_captured` to `contact-submitted`.** The form captures more than email (name, phone, source). The trigger now aligns with the `landing-page` form definition in the form registry. All backend, frontend, and test references updated.
+- **`pipedrivePersonId` auto-provisioned in workspace schema.** When the `create_lead` executor stores a Pipedrive person ID on a lead, it ensures the workspace's `leadPropertySchema` includes a `pipedrivePersonId` property so it appears as a column in the leads table. Fail-safe and idempotent.
 
 ---
 
@@ -48,7 +56,7 @@ Landing Page Form
 POST /api/v1/subscribe                (unchanged — integration-agnostic)
     │
     └──► emitTrigger(workspaceId,
-             { adapter: 'revline', operation: 'email_captured' },
+             { adapter: 'revline', operation: 'contact-submitted' },
              { email, name, phone, source }
          )
              │
@@ -93,7 +101,7 @@ Every RevLine lead that syncs to Pipedrive carries the Pipedrive person ID as a 
 ### Dual Entry Points
 
 **Path A — RevLine landing page (workflow-driven):**
-1. Form submits to `/api/v1/subscribe` — emits `revline.email_captured`
+1. Form submits to `/api/v1/subscribe` — emits `revline.contact-submitted`
 2. Workflow action `pipedrive.create_or_update_person` creates person, returns ID
 3. Workflow action `revline.create_lead` stores the ID on the lead
 4. No changes to the subscribe route — all logic is in the workflow definition
@@ -153,6 +161,8 @@ Wired into the agent engine's `sendReply()` path as a post-send hook. Not a work
 | `app/_lib/integrations/pipedrive.adapter.ts` | `PipedriveAdapter extends BaseIntegrationAdapter<PipedriveMeta>` — persons, fields, activities |
 | `app/_lib/workflow/executors/pipedrive.ts` | Workflow action executors: `create_or_update_person`, `update_person_fields` |
 | `app/(dashboard)/workspaces/[id]/pipedrive-config-editor.tsx` | Structured meta editor — field mappings, test connection |
+| `app/api/v1/integrations/[id]/test/route.ts` | Test connection endpoint for any integration |
+| `app/api/v1/integrations/[id]/pipedrive-fields/route.ts` | Fetch Pipedrive person fields for sync UI |
 | `app/api/v1/pipedrive-webhook/route.ts` | Inbound Pipedrive webhook handler (Phase 2) |
 | `prisma/migrations/YYYYMMDD_add_pipedrive/migration.sql` | Prisma migration for enum additions |
 
@@ -171,7 +181,10 @@ Wired into the agent engine's `sendReply()` path as a post-send hook. Not a work
 | `app/_lib/workflow/executors/revline.ts` | `create_lead` reads `ctx.actionData.pipedrivePersonId` |
 | `app/(dashboard)/workspaces/[id]/add-integration-form.tsx` | Replace `<select>` dropdown with logo grid picker, add PIPEDRIVE |
 | `app/(dashboard)/workspaces/[id]/integration-actions.tsx` | Add PIPEDRIVE to `IntegrationType` union, `AVAILABLE_SECRET_NAMES`, import config editor |
-| `app/_lib/workflow/integration-config.ts` | Add `pipedrive` to `INTEGRATION_CONFIG` + Pipedrive operation labels |
+| `app/_lib/workflow/integration-config.ts` | Add `pipedrive` to `INTEGRATION_CONFIG` + Pipedrive operation labels; renamed `email_captured` → `contact-submitted` |
+| `app/_lib/forms/registry.ts` | `landing-page` form trigger declared as `contact-submitted` |
+| `app/api/v1/subscribe/route.ts` | Emits `contact-submitted` (renamed from `email_captured`) |
+| `app/_lib/services/capture.service.ts` | Updated trigger reference to `contact-submitted` |
 | `public/logos/pipedrive.png` | Pipedrive icon mark (152x152 PNG) |
 
 ---
@@ -232,7 +245,7 @@ Modify `revline.create_lead` to read `ctx.actionData.pipedrivePersonId`. If pres
 
 1. **Add Pipedrive integration in dashboard** — restart dev server first (`PIPEDRIVE` enum needs a fresh Prisma client load). Open workspace > Integrations > "+ Add Integration". You should see a grid of integration logos instead of a dropdown. Click Pipedrive, paste your API token, save.
 2. **Test connection** — after saving, open the Pipedrive integration, click "Test Connection" in the config editor. Should confirm the token is valid.
-3. **Create a workflow** — trigger: `revline.email_captured`, actions: `pipedrive.create_or_update_person` (set `continueOnError: true`) then `revline.create_lead`
+3. **Create a workflow** — trigger: `revline.contact-submitted`, actions: `pipedrive.create_or_update_person` (set `continueOnError: true`) then `revline.create_lead`
 4. **Submit a form on your landing page** — verify: person appears in Pipedrive, lead exists in RevLine with `pipedrivePersonId` on its properties
 5. **Kill test** — temporarily break the API token in the dashboard (edit the secret to a bad value), submit another form. Verify the lead is created in RevLine with `pipedriveSyncPending: true` and no crash. Restore the token after.
 6. **Dedup test** — submit the same email twice. Verify Pipedrive updates (not duplicates) the person — should see one person with the latest data, not two
@@ -241,31 +254,53 @@ Modify `revline.create_lead` to read `ctx.actionData.pipedrivePersonId`. If pres
 
 ## Phase 2 — Inbound Webhooks, Field Sync, Activity Logging
 
-### 2.1 Pipedrive Webhook Route
+### Infrastructure (DONE)
+
+These items were completed alongside Phase 1 polish:
+
+- **Trigger rename:** `email_captured` → `contact-submitted` across subscribe route, integration-config, capture service, event-logger, tests, and seed files. Aligns emitted trigger with form registry declaration.
+- **Static payload schema:** Added `ContactSubmittedPayloadSchema` to `REVLINE_ADAPTER.triggers` in the registry so the payload compatibility checker can introspect `contact-submitted` fields.
+- **Test connection endpoint:** `POST /api/v1/integrations/[id]/test` — loads adapter, calls `validateConfig()`, returns result.
+- **Pipedrive fields API:** `GET /api/v1/integrations/[id]/pipedrive-fields` — fetches person fields from Pipedrive for the sync UI.
+
+### 2.2a Field Sync UI (DONE)
+
+Built an ABC Ignite-style auto-mapping panel in `pipedrive-config-editor.tsx`:
+- **Sync Fields** button fetches Pipedrive fields + workspace properties in parallel
+- **Auto-mapping panel** categorizes into Matched (green), Suggested (yellow), Unmapped (manual)
+- **"Available from Pipedrive" chips** — Pipedrive fields not yet in the workspace schema appear as cyan clickable chips. Click to create the RevLine property AND add the field mapping in one action. "Add All" bulk button.
+- **Smart key normalization:** Custom fields with hash keys use the `name` field for key generation.
+- **Ignored system fields:** `IGNORED_PD_KEYS` filters out Pipedrive internal fields (IDs, counters, timestamps).
+
+### 2.2b pipedrivePersonId Auto-Provisioning (DONE)
+
+The `create_lead` executor calls `ensurePipedrivePropertyInSchema()` when storing a Pipedrive person ID. This auto-adds `pipedrivePersonId` (type: number) to the workspace's `leadPropertySchema` so it appears in the leads table. Fail-safe (try/catch), idempotent, emits `workspace_schema_auto_provisioned` event.
+
+### 2.1 Pipedrive Webhook Route (NOT STARTED)
 
 `app/api/v1/pipedrive-webhook/route.ts` — handles `added.person`, `updated.person`. HTTP Basic Auth verification. Workspace resolution via `?source={slug}`.
 
 Echo dedup: when the webhook fires for a person we just created, detect it (lead already exists with this `pipedrivePersonId`) and skip re-processing.
 
-### 2.2 Field Sync System
+### 2.2c Inbound Field Sync (NOT STARTED)
 
-Bidirectional via `fieldMap` in meta. Outbound: after `update_lead_properties` actions. Inbound: on `updated.person` webhook events. Custom field auto-creation via `ensureCustomFieldsExist`.
+Inbound direction of field sync: on `updated.person` webhook events, map changed Pipedrive fields back to RevLine lead properties using the `fieldMap`. Depends on 2.1 (webhook route).
 
-### 2.3 Agent Activity Logging
+### 2.3 Agent Activity Logging (NOT STARTED)
 
 Post-send hook in agent engine's `sendReply()`. Fire-and-forget. Maps SMS to `call` activity type, email to `email` type.
 
-### 2.4 Reconciliation Cron
+### 2.4 Reconciliation Cron (NOT STARTED)
 
 Picks up leads with `pipedriveSyncPending: true`, retries Pipedrive upsert, backfills person ID.
 
-### What You Test (Phase 2)
+### What You Test (Phase 2 — Remaining Items)
 
-1. Create a person directly in Pipedrive — verify a RevLine lead appears
-2. Update a custom field in Pipedrive — verify it syncs to RevLine lead properties
-3. Submit a form (creating person via RevLine) — verify webhook doesn't create a duplicate (echo dedup)
-4. Have the agent send a message — verify activity appears on person's Pipedrive timeline
-5. Break API token, submit form, fix token, wait for cron — verify reconciliation backfills person ID
+1. Create a person directly in Pipedrive — verify a RevLine lead appears (2.1)
+2. Update a custom field in Pipedrive — verify it syncs to RevLine lead properties (2.2c)
+3. Submit a form (creating person via RevLine) — verify webhook doesn't create a duplicate (echo dedup) (2.1)
+4. Have the agent send a message — verify activity appears on person's Pipedrive timeline (2.3)
+5. Break API token, submit form, fix token, wait for cron — verify reconciliation backfills person ID (2.4)
 
 ---
 
@@ -324,7 +359,7 @@ interface PipedriveMeta {
 {
   "name": "New lead from landing page",
   "triggerAdapter": "revline",
-  "triggerOperation": "email_captured",
+  "triggerOperation": "contact-submitted",
   "actions": [
     {
       "adapter": "pipedrive",

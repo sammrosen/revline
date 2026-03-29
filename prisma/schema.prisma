@@ -111,6 +111,8 @@ model Workspace {
   followUps          FollowUp[]
   consentRecords     ConsentRecord[]
   webchatConfigs     WebchatConfig[]
+  phoneConfigs       PhoneConfig[]
+  syncQueue          IntegrationSyncQueue[]
 
   @@index([organizationId])
   @@map("workspaces")
@@ -194,6 +196,7 @@ model Lead {
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   events        Event[]
   conversations Conversation[]
+  syncQueue     IntegrationSyncQueue[]
 
   @@unique([workspaceId, email])
   @@index([workspaceId, stage])
@@ -547,6 +550,9 @@ model Agent {
   // Enabled tools (JSON array of tool name strings from the tool registry)
   enabledTools Json @default("[]") @map("enabled_tools")
 
+  // Content guardrails — merged with universal defaults at runtime
+  guardrails Json @default("{}") @map("guardrails")
+
   active    Boolean  @default(true)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -556,6 +562,7 @@ model Agent {
   files          AgentFile[]
   followUps      FollowUp[]
   webchatConfigs WebchatConfig[]
+  phoneConfigs   PhoneConfig[]
 
   @@index([workspaceId, active])
   @@map("agents")
@@ -596,6 +603,36 @@ model WebchatConfig {
 
   @@index([workspaceId])
   @@map("webchat_configs")
+}
+
+model PhoneConfig {
+  id          String @id @default(uuid())
+  workspaceId String @map("workspace_id")
+  name        String
+
+  twilioNumberKey  String @map("twilio_number_key")
+  forwardingNumber String @map("forwarding_number")
+
+  mode    String  @default("NOTIFICATION")
+  agentId String? @map("agent_id")
+
+  autoTextTemplate     String @default("Hey! Sorry I missed your call. How can I help?") @map("auto_text_template") @db.Text
+  voiceGreeting        String @default("Thanks for calling. We'll text you right away.") @map("voice_greeting") @db.Text
+  notificationTemplate String @default("Missed call from {{callerPhone}}. Text them back!") @map("notification_template") @db.Text
+
+  blocklist Json @default("[]")
+
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([agentId])
+  @@unique([workspaceId, twilioNumberKey])
+  @@map("phone_configs")
 }
 
 model Conversation {
@@ -758,4 +795,45 @@ enum ConsentMethod {
   SMS_KEYWORD
   IN_PERSON
   API
+}
+
+// =============================================================================
+// INTEGRATION SYNC QUEUE (DB-backed retry queue for failed continueOnError actions)
+// =============================================================================
+
+enum IntegrationSyncStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model IntegrationSyncQueue {
+  id          String @id @default(uuid())
+  workspaceId String @map("workspace_id")
+  email       String
+  leadId      String? @map("lead_id")
+
+  adapter     String
+  operation   String
+  params      Json?
+
+  status      IntegrationSyncStatus @default(PENDING)
+  retries     Int                   @default(0)
+  maxRetries  Int                   @default(5) @map("max_retries")
+  nextRetryAt DateTime              @default(now()) @map("next_retry_at")
+  lastError   String?               @map("last_error")
+
+  resultData  Json? @map("result_data")
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  completedAt DateTime? @map("completed_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead      Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
+  @@index([workspaceId])
+  @@index([leadId])
+  @@map("integration_sync_queue")
 }

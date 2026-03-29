@@ -9,19 +9,19 @@
 
 | Feature | Status | Phase |
 |---------|--------|-------|
-| 1.1 Guardrail config schema + migration | NOT STARTED | 1 |
-| 1.2 Universal output filter (commitment, PII, prompt leak) | NOT STARTED | 1 |
-| 1.3 Prompt hardening pipeline (salt, XML tags, sandwich) | NOT STARTED | 1 |
-| 1.4 AI disclosure injection | NOT STARTED | 1 |
-| 1.5 Emergency keyword escalation | NOT STARTED | 1 |
-| 1.6 SMS segment cap enforcement | NOT STARTED | 1 |
-| 1.7 Engine wiring (input → guardrails → AI → guardrails → output) | NOT STARTED | 1 |
-| 1.8 GuardrailLog type extension + turn log integration | NOT STARTED | 1 |
-| 2.1 Input screening classifier (topic + injection) | NOT STARTED | 2 |
-| 2.2 Configurable allowed intents per agent | NOT STARTED | 2 |
-| 2.3 Prohibited phrases per agent | NOT STARTED | 2 |
-| 2.4 Agent editor UI — guardrails config section | NOT STARTED | 2 |
-| 2.5 PII detection on inbound messages | NOT STARTED | 2 |
+| 1.1 Guardrail config schema + migration | DONE | 1 |
+| 1.2 Universal output filter (commitment, PII, prompt leak) | DONE | 1 |
+| 1.3 Prompt hardening pipeline (salt, XML tags, sandwich) | DONE | 1 |
+| 1.4 AI disclosure injection | DONE | 1 |
+| 1.5 Emergency keyword escalation | DONE | 1 |
+| 1.6 SMS segment cap enforcement | DONE | 1 |
+| 1.7 Engine wiring (input → guardrails → AI → guardrails → output) | DONE | 1 |
+| 1.8 GuardrailLog type extension + turn log integration | DONE | 1 |
+| 2.1 Input screening classifier (topic + injection) | DONE | 2 |
+| 2.2 Configurable allowed intents per agent | DONE | 2 |
+| 2.3 Prohibited phrases per agent | DONE | 2 |
+| 2.4 Agent editor UI — guardrails config section | DONE | 2 |
+| 2.5 PII detection on inbound messages | DONE | 2 |
 
 ---
 
@@ -525,3 +525,15 @@ Before AI call, scan user message for PII patterns and mask before it enters the
 
 **Total Phase 1:** ~550 lines across 5 new files and 3 modified files.
 **Total Phase 2:** ~300 additional lines across 2 new + 1 modified file.
+
+---
+
+## Future Work
+
+Items identified in the gap analysis that are not yet implemented. None are blocking for launch.
+
+| Item | Description | Priority |
+|------|-------------|----------|
+| Content monitoring dashboard | Surface guardrail hits (output blocks, PII scrubs, emergency escalations) in the workspace UI so admins can review flagged conversations. Data is already captured in turn logs — needs a query + UI. | Medium |
+| Automated red-teaming (CI/CD) | Integrate Promptfoo or similar into the CI pipeline to run adversarial prompt tests against guardrails on every deploy. Covers role-play attacks, encoding tricks, multi-turn escalation, prompt extraction. | Medium |
+| CAN-SPAM compliance (email channel) | For agent email responses: physical postal address footer, functioning unsubscribe mechanism, accurate From/Subject headers, AI-generated email labeling per 2026 rules. | Medium |

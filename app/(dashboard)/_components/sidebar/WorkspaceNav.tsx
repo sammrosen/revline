@@ -10,6 +10,7 @@ import {
   Activity,
   Bot,
   MessageSquare,
+  Phone,
   FileText,
   FlaskConical,
   Settings,
@@ -43,7 +44,7 @@ interface WorkspaceListItem {
   slug: string;
 }
 
-type TabId = 'workflows' | 'integrations' | 'leads' | 'events' | 'agents' | 'pages' | 'testing' | 'settings';
+type TabId = 'workflows' | 'integrations' | 'leads' | 'events' | 'agents' | 'web-chats' | 'phone' | 'pages' | 'testing' | 'settings';
 
 const tabs: { id: TabId; label: string; icon: typeof Workflow; countKey?: keyof WorkspaceSummary['counts'] }[] = [
   { id: 'workflows', label: 'Workflows', icon: Workflow, countKey: 'workflows' },
@@ -52,6 +53,7 @@ const tabs: { id: TabId; label: string; icon: typeof Workflow; countKey?: keyof 
   { id: 'events', label: 'Events', icon: Activity, countKey: 'events' },
   { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'web-chats', label: 'Web Chats', icon: MessageSquare },
+  { id: 'phone', label: 'Phone', icon: Phone },
   { id: 'pages', label: 'Pages', icon: FileText },
   { id: 'testing', label: 'Testing', icon: FlaskConical },
   { id: 'settings', label: 'Settings', icon: Settings },

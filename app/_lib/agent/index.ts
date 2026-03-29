@@ -32,8 +32,11 @@ export type {
 export type { SendType, SendReplyResult } from './quiet-hours';
 export { checkSendWindow, shouldEnforceQuietHours } from './quiet-hours';
 export type { SegmentEstimate } from './sms-encoding';
-export { sanitizeForGsm7, isGsm7Compatible, estimateSegments, shouldSanitizeSms } from './sms-encoding';
+export { sanitizeForGsm7, isGsm7Compatible, estimateSegments, shouldSanitizeSms, truncateToSegments } from './sms-encoding';
 export type { RetryOptions } from './retry';
 export { retryWithBackoff } from './retry';
 export type { FollowUpRecord, ProcessResult } from './follow-up';
 export { scheduleFollowUp, cancelPendingFollowUps, processFollowUp, generateFollowUpMessage } from './follow-up';
+export type { GuardrailConfig, ResolvedGuardrailConfig } from './guardrails/types';
+export { resolveGuardrails } from './guardrails/constants';
+export { filterOutput, checkEmergencyKeywords, hardenPrompt } from './guardrails';

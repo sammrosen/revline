@@ -47,6 +47,8 @@ export type { SendEmailResult, SendEmailParams, SendTemplateParams, RemoteResend
 export { TwilioAdapter } from './twilio.adapter';
 export type { SendSmsResult, SendSmsParams, TwilioWebhookPayload } from './twilio.adapter';
 
+export { EMPTY_TWIML, twimlResponse, escapeXml, voiceTwimlResponse, parseFormBody, getWebhookUrl } from './twilio-utils';
+
 export { OpenAIAdapter } from './openai.adapter';
 export type { ChatCompletionParams, ChatCompletionResult, ChatMessage, ToolDefinition, ToolCall, OpenAIModel } from './openai.adapter';
 

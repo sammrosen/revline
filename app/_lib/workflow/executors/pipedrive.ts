@@ -6,10 +6,13 @@
  * Returns pipedrivePersonId in result.data for downstream context propagation.
  */
 
+import { z } from 'zod';
 import { PipedriveAdapter } from '@/app/_lib/integrations';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { prisma } from '@/app/_lib/db';
 import { WorkflowContext, ActionResult, ActionExecutor } from '../types';
+
+const PipedriveFieldsSchema = z.record(z.string(), z.string()).optional();
 
 // =============================================================================
 // EXECUTORS
@@ -29,7 +32,11 @@ const createOrUpdatePerson: ActionExecutor = {
     ctx: WorkflowContext,
     params: Record<string, unknown>
   ): Promise<ActionResult> {
-    const fields = params.fields as Record<string, string> | undefined;
+    const fieldsResult = PipedriveFieldsSchema.safeParse(params.fields);
+    if (!fieldsResult.success) {
+      return { success: false, error: `Invalid fields param: ${fieldsResult.error.message}` };
+    }
+    const fields = fieldsResult.data;
 
     if (ctx.isTest) {
       return {
@@ -53,7 +60,21 @@ const createOrUpdatePerson: ActionExecutor = {
       return { success: false, error: 'Pipedrive not configured for this workspace' };
     }
 
-    const result = await adapter.createOrUpdatePerson(ctx.email, ctx.name, fields);
+    let result;
+    try {
+      result = await adapter.createOrUpdatePerson(ctx.email, ctx.name, fields);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Unknown Pipedrive API error';
+      await emitEvent({
+        workspaceId: ctx.workspaceId,
+        leadId: ctx.leadId,
+        system: EventSystem.PIPEDRIVE,
+        eventType: 'pipedrive_person_upsert_failed',
+        success: false,
+        errorMessage: errMsg,
+      });
+      return { success: false, error: errMsg };
+    }
 
     await emitEvent({
       workspaceId: ctx.workspaceId,
@@ -93,7 +114,11 @@ const updatePersonFields: ActionExecutor = {
     ctx: WorkflowContext,
     params: Record<string, unknown>
   ): Promise<ActionResult> {
-    const fields = params.fields as Record<string, string> | undefined;
+    const fieldsResult = PipedriveFieldsSchema.safeParse(params.fields);
+    if (!fieldsResult.success) {
+      return { success: false, error: `Invalid fields param: ${fieldsResult.error.message}` };
+    }
+    const fields = fieldsResult.data;
 
     if (ctx.isTest) {
       return {
@@ -111,8 +136,8 @@ const updatePersonFields: ActionExecutor = {
       return { success: false, error: 'Missing or empty fields parameter' };
     }
 
-    // Resolve pipedrivePersonId from context or lead properties
-    let pipedrivePersonId = ctx.actionData.pipedrivePersonId as number | undefined;
+    const personIdResult = z.coerce.number().safeParse(ctx.actionData.pipedrivePersonId);
+    let pipedrivePersonId: number | undefined = personIdResult.success ? personIdResult.data : undefined;
 
     if (!pipedrivePersonId && ctx.leadId) {
       const lead = await prisma.lead.findUnique({
@@ -120,7 +145,10 @@ const updatePersonFields: ActionExecutor = {
         select: { properties: true },
       });
       const props = (lead?.properties as Record<string, unknown>) ?? {};
-      pipedrivePersonId = props.pipedrivePersonId as number | undefined;
+      const leadIdResult = z.coerce.number().safeParse(props.pipedrivePersonId);
+      if (leadIdResult.success) {
+        pipedrivePersonId = leadIdResult.data;
+      }
     }
 
     if (!pipedrivePersonId) {
@@ -135,7 +163,21 @@ const updatePersonFields: ActionExecutor = {
       return { success: false, error: 'Pipedrive not configured for this workspace' };
     }
 
-    const result = await adapter.updatePersonFields(pipedrivePersonId, fields);
+    let result;
+    try {
+      result = await adapter.updatePersonFields(pipedrivePersonId, fields);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Unknown Pipedrive API error';
+      await emitEvent({
+        workspaceId: ctx.workspaceId,
+        leadId: ctx.leadId,
+        system: EventSystem.PIPEDRIVE,
+        eventType: 'pipedrive_fields_update_failed',
+        success: false,
+        errorMessage: errMsg,
+      });
+      return { success: false, error: errMsg };
+    }
 
     await emitEvent({
       workspaceId: ctx.workspaceId,
