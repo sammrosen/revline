@@ -373,6 +373,50 @@ export class PipedriveAdapter extends BaseIntegrationAdapter<PipedriveMeta> {
   }
 
   // ==========================================================================
+  // Activity Logging
+  // ==========================================================================
+
+  /**
+   * Create an activity on a person's timeline in Pipedrive.
+   * Used for logging agent messages (SMS, email) as post-send hooks.
+   */
+  async createActivity(opts: {
+    personId: number;
+    type: string;
+    subject: string;
+    note: string;
+    done: boolean;
+  }): Promise<IntegrationResult<{ activityId: number }>> {
+    try {
+      const res = await this.request<{ id: number }>(
+        'POST',
+        '/v1/activities',
+        {
+          person_id: opts.personId,
+          type: opts.type,
+          subject: opts.subject,
+          note: opts.note,
+          done: opts.done ? 1 : 0,
+        },
+      );
+
+      if (!res.ok) {
+        await this.markUnhealthy();
+        return this.error(res.error, res.retryable, res.retryAfterMs);
+      }
+
+      await this.touch();
+      return this.success({ activityId: res.data.id });
+    } catch (err) {
+      await this.markUnhealthy();
+      return this.error(
+        err instanceof Error ? err.message : 'Failed to create Pipedrive activity',
+        true,
+      );
+    }
+  }
+
+  // ==========================================================================
   // Meta Helpers
   // ==========================================================================
 
@@ -386,5 +430,13 @@ export class PipedriveAdapter extends BaseIntegrationAdapter<PipedriveMeta> {
 
   getDefaultPipelineId(): number | undefined {
     return this.meta?.defaultPipelineId ?? undefined;
+  }
+
+  getWebhookSecret(): string | undefined {
+    return this.meta?.webhookSecret ?? undefined;
+  }
+
+  isActivityLoggingEnabled(): boolean {
+    return this.meta?.logActivities === true;
   }
 }

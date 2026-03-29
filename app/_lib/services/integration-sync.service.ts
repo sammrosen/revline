@@ -13,11 +13,22 @@
  * - Workspace Isolation: all operations scoped by workspaceId
  */
 
+import { z } from 'zod';
 import { prisma } from '@/app/_lib/db';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { withTransaction } from '@/app/_lib/utils/transaction';
+import { PipedriveAdapter } from '@/app/_lib/integrations/pipedrive.adapter';
+import { logStructured } from '@/app/_lib/reliability';
 import type { LeadPropertyDefinition } from '@/app/_lib/types';
 import type { Prisma } from '@prisma/client';
+
+const JsonRecord = z.record(z.unknown()).catch({});
+const LeadPropertySchemaArray = z.array(z.object({
+  key: z.string(),
+  label: z.string().optional(),
+  type: z.string().optional(),
+  required: z.boolean().optional(),
+}).passthrough()).catch([]);
 
 // =============================================================================
 // CONSTANTS
@@ -50,6 +61,12 @@ export interface ApplyResultOptions {
   leadId: string;
   workspaceId: string;
   resultData: Record<string, unknown>;
+}
+
+export interface SyncInboundFieldsOptions {
+  workspaceId: string;
+  pipedrivePersonId: number;
+  pipedriveData: Record<string, unknown>;
 }
 
 // =============================================================================
@@ -112,12 +129,12 @@ export async function enqueueFailedAction(opts: EnqueueOptions): Promise<void> {
       },
     });
   } catch (err) {
-    console.error('[IntegrationSync] Failed to enqueue:', {
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'integration_sync_enqueue_error',
       workspaceId: opts.workspaceId,
-      adapter: opts.adapter,
-      operation: opts.operation,
-      email: opts.email,
       error: err instanceof Error ? err.message : 'Unknown',
+      metadata: { adapter: opts.adapter, operation: opts.operation, email: opts.email },
     });
   }
 }
@@ -146,7 +163,7 @@ export async function applyRetryResult(opts: ApplyResultOptions): Promise<void> 
         select: { properties: true },
       });
 
-      const existingProps = (lead?.properties as Record<string, unknown>) ?? {};
+      const existingProps = JsonRecord.parse(lead?.properties);
       const merged = { ...existingProps, ...opts.resultData };
 
       await tx.lead.update({
@@ -162,10 +179,12 @@ export async function applyRetryResult(opts: ApplyResultOptions): Promise<void> 
       try {
         await ensurePipedrivePropertyInSchema(opts.workspaceId);
       } catch (schemaErr) {
-        console.error('[IntegrationSync] Schema update failed after successful queue completion:', {
+        logStructured({
+          correlationId: crypto.randomUUID(),
+          event: 'integration_sync_schema_update_error',
           workspaceId: opts.workspaceId,
-          queueId: opts.queueId,
           error: schemaErr instanceof Error ? schemaErr.message : 'Unknown',
+          metadata: { queueId: opts.queueId },
         });
       }
     }
@@ -178,13 +197,112 @@ export async function applyRetryResult(opts: ApplyResultOptions): Promise<void> 
       metadata: { queueId: opts.queueId, resultData: opts.resultData },
     });
   } catch (err) {
-    console.error('[IntegrationSync] applyRetryResult failed:', {
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'integration_sync_apply_result_error',
       workspaceId: opts.workspaceId,
-      queueId: opts.queueId,
-      leadId: opts.leadId,
       error: err instanceof Error ? err.message : 'Unknown',
+      metadata: { queueId: opts.queueId, leadId: opts.leadId },
     });
     throw err;
+  }
+}
+
+/**
+ * Sync inbound field values from Pipedrive to the RevLine lead.
+ *
+ * Called from the Pipedrive webhook route on updated.person events.
+ * Inverts the workspace's fieldMap (RevLine key -> Pipedrive key becomes
+ * Pipedrive key -> RevLine key) and merges changed values into lead.properties.
+ *
+ * Fail-safe: never throws to the caller. Logs and emits events on failure.
+ */
+export async function syncInboundFields(opts: SyncInboundFieldsOptions): Promise<void> {
+  try {
+    const adapter = await PipedriveAdapter.forWorkspace(opts.workspaceId);
+    if (!adapter) return;
+
+    const fieldMap = adapter.getFieldMap();
+    if (Object.keys(fieldMap).length === 0) return;
+
+    // Invert: { revlineKey: pipedriveKey } -> { pipedriveKey: revlineKey }
+    const invertedMap: Record<string, string> = {};
+    for (const [revlineKey, pipedriveKey] of Object.entries(fieldMap)) {
+      invertedMap[pipedriveKey] = revlineKey;
+    }
+
+    // F1: Filter by pipedrivePersonId via Prisma JSON path (not arbitrary findFirst)
+    // F2: Wrap read+write in withTransaction to prevent TOCTOU
+    let updatedFields: string[] = [];
+    let leadId: string | undefined;
+
+    await withTransaction(async (tx) => {
+      const lead = await tx.lead.findFirst({
+        where: {
+          workspaceId: opts.workspaceId,
+          properties: {
+            path: ['pipedrivePersonId'],
+            equals: opts.pipedrivePersonId,
+          },
+        },
+        select: { id: true, properties: true },
+      });
+
+      if (!lead) return;
+      leadId = lead.id;
+
+      const props = JsonRecord.parse(lead.properties);
+
+      const updates: Record<string, unknown> = {};
+      for (const [pdKey, revKey] of Object.entries(invertedMap)) {
+        const value = opts.pipedriveData[pdKey];
+        if (value !== undefined && value !== props[revKey]) {
+          updates[revKey] = value;
+        }
+      }
+
+      if (Object.keys(updates).length === 0) return;
+      updatedFields = Object.keys(updates);
+
+      await tx.lead.update({
+        where: { id: lead.id },
+        data: {
+          properties: { ...props, ...updates } as Prisma.InputJsonValue,
+          lastEventAt: new Date(),
+        },
+      });
+    });
+
+    if (updatedFields.length === 0) return;
+
+    await emitEvent({
+      workspaceId: opts.workspaceId,
+      system: EventSystem.PIPEDRIVE,
+      eventType: 'pipedrive_fields_synced_inbound',
+      success: true,
+      metadata: {
+        leadId,
+        pipedrivePersonId: opts.pipedrivePersonId,
+        fieldsUpdated: updatedFields,
+      },
+    });
+
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'pipedrive_inbound_field_sync',
+      workspaceId: opts.workspaceId,
+      provider: 'pipedrive',
+      success: true,
+      metadata: { leadId, fieldsUpdated: updatedFields },
+    });
+  } catch (err) {
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'pipedrive_inbound_field_sync_error',
+      workspaceId: opts.workspaceId,
+      provider: 'pipedrive',
+      error: err instanceof Error ? err.message : 'Unknown sync error',
+    });
   }
 }
 
@@ -194,21 +312,25 @@ export async function applyRetryResult(opts: ApplyResultOptions): Promise<void> 
 
 async function ensurePipedrivePropertyInSchema(workspaceId: string): Promise<void> {
   try {
-    const workspace = await prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: { leadPropertySchema: true },
-    });
-    const schema = (workspace?.leadPropertySchema as LeadPropertyDefinition[] | null) ?? [];
+    await withTransaction(async (tx) => {
+      const workspace = await tx.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { leadPropertySchema: true },
+      });
+      const schema = LeadPropertySchemaArray.parse(workspace?.leadPropertySchema) as LeadPropertyDefinition[];
 
-    if (schema.some((p) => p.key === 'pipedrivePersonId')) return;
+      if (schema.some((p) => p.key === 'pipedrivePersonId')) return;
 
-    const updated = [...schema, PIPEDRIVE_PERSON_ID_DEF];
-    await prisma.workspace.update({
-      where: { id: workspaceId },
-      data: { leadPropertySchema: updated as unknown as Prisma.InputJsonValue },
+      const updated = [...schema, PIPEDRIVE_PERSON_ID_DEF];
+      await tx.workspace.update({
+        where: { id: workspaceId },
+        data: { leadPropertySchema: updated as unknown as Prisma.InputJsonValue },
+      });
     });
   } catch (err) {
-    console.error('[IntegrationSync] Failed to auto-provision pipedrivePersonId schema:', {
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'integration_sync_schema_provision_error',
       workspaceId,
       error: err instanceof Error ? err.message : 'Unknown',
     });

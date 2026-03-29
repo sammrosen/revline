@@ -820,7 +820,9 @@ export interface PipedriveMeta {
   autoCreateDeal?: boolean;
   /** Default deal title template (supports {name}, {email} placeholders) */
   dealTitleTemplate?: string;
-  /** Whether to log agent activities to Pipedrive (default: true if configured) */
+  /** Shared secret for inbound webhook verification (timing-safe compared) */
+  webhookSecret?: string;
+  /** Whether to log agent messages as Pipedrive activities */
   logActivities?: boolean;
   /** Custom activity type key for SMS (if configured in Pipedrive, otherwise uses "call") */
   smsActivityType?: string;
@@ -892,7 +894,7 @@ export function isAnthropicMeta(meta: IntegrationMeta | null): meta is Anthropic
 
 export function isPipedriveMeta(meta: IntegrationMeta | null): meta is PipedriveMeta {
   if (!meta) return false;
-  return 'fieldMap' in meta || 'defaultPipelineId' in meta || 'stageMap' in meta;
+  return 'fieldMap' in meta || 'defaultPipelineId' in meta || 'stageMap' in meta || 'webhookSecret' in meta;
 }
 
 // =============================================================================

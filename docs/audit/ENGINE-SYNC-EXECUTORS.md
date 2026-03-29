@@ -1,233 +1,194 @@
-# Audit Fixes: Engine / Executors / Pipedrive / Sync
+# Audit Fixes: Engine / Sync / Pipedrive Phase 2
 
 > **Assignee:** Agent 1 — Pipedrive, sync, executors, engine
-> **Generated:** March 28, 2026
+> **Generated:** March 29, 2026 (Round 3)
 > **Reference:** `docs/STANDARDS.md`
 
 ---
 
 ## FAIL — Must Fix
 
-### F2 — `agents/route.ts`: No try/catch around Prisma calls
-**File:** `app/api/v1/workspaces/[id]/agents/route.ts`
-**Severity:** HIGH
+### F1 — `syncInboundFields()`: Query fetches arbitrary lead (CRITICAL)
+**File:** `app/_lib/services/integration-sync.service.ts` — `syncInboundFields()`
+**Severity:** CRITICAL
 
-GET handler calls `prisma.agent.findMany` with no try/catch. POST handler calls `prisma.agent.create` with no try/catch. DB errors (connection, constraint violation) return unstructured 500s.
+`prisma.lead.findFirst({ where: { workspaceId } })` fetches an **arbitrary** lead in the workspace, then manually checks if `pipedrivePersonId` matches. In any workspace with more than one lead, this will almost always pick the wrong lead and silently no-op. Field sync is completely broken for multi-lead workspaces.
 
-**Fix:** Wrap both handlers in try/catch, return `ApiResponse.error(...)` on failure.
-
----
-
-### F3 — `agents/route.ts`: Path param not Zod-validated
-**File:** `app/api/v1/workspaces/[id]/agents/route.ts`
-**Severity:** HIGH
-
-`const { id: workspaceId } = await params` — raw string goes straight to `getWorkspaceAccess` and Prisma with no UUID validation.
-
-**Fix:** Add `z.string().uuid().safeParse(id)` guard at the top of both handlers.
-
----
-
-### F4 — `agents/route.ts`: No event on agent creation
-**File:** `app/api/v1/workspaces/[id]/agents/route.ts`
-**Severity:** HIGH
-
-Creating an agent is a significant state change with zero event emission. Standards require all meaningful state changes emit events.
-
-**Fix:** After successful `prisma.agent.create`, emit `agent_created` event with `workspaceId`, `agentId`, `channelType`.
-
----
-
-### F5 — `engine.ts` `loadAgent()`: Unsafe `as` casts on 5 JsonValue fields
-**File:** `app/_lib/agent/engine.ts` (in `loadAgent()`)
-**Severity:** HIGH
-
-Five Prisma `JsonValue` fields are cast without runtime validation:
-- `agent.channels as Array<{...}>`
-- `agent.allowedEvents as string[]`
-- `agent.enabledTools as string[]`
-- `agent.followUpSequence as Array<{delayMinutes: number; ...}>`
-- `agent.guardrails as Partial<GuardrailConfig> | null`
-
-A single corrupt DB row causes silent runtime failures across the entire agent engine.
-
-**Fix:** Create Zod schemas for each shape. Use `.safeParse()` with fallback defaults (empty array, `{}`, etc). Example pattern:
+**Fix:** Filter by `pipedrivePersonId` inside the query using Prisma's JSON path filter:
 
 ```typescript
-const ChannelsSchema = z.array(z.object({
-  type: z.string(),
-  integrationId: z.string().optional(),
-})).catch([]);
+const lead = await prisma.lead.findFirst({
+  where: {
+    workspaceId: opts.workspaceId,
+    properties: {
+      path: ['pipedrivePersonId'],
+      equals: opts.pipedrivePersonId,
+    },
+  },
+  select: { id: true, properties: true },
+});
+```
 
-const channels = ChannelsSchema.parse(agent.channels);
+Remove the manual `pipedrivePersonId` comparison after the query.
+
+---
+
+### F2 — `syncInboundFields()`: Read-then-write without transaction
+**File:** `app/_lib/services/integration-sync.service.ts` — `syncInboundFields()`
+**Severity:** HIGH
+
+Reads `lead.properties`, merges new fields, then writes back in two separate DB calls. A concurrent update between the read and write loses data (classic TOCTOU).
+
+**Fix:** Wrap in `withTransaction`:
+
+```typescript
+await withTransaction(async (tx) => {
+  const lead = await tx.lead.findFirst({ where: { ... }, select: { id: true, properties: true } });
+  // ... merge logic ...
+  await tx.lead.update({ where: { id: lead.id }, data: { properties: merged } });
+});
 ```
 
 ---
 
-### F6 — `workflow/engine.ts`: Unsafe double cast on `workflow.actions`
-**File:** `app/_lib/workflow/engine.ts` ~L105
+### F3 — `PipedriveMeta`: Duplicate `logActivities` property
+**File:** `app/_lib/types/index.ts` — `PipedriveMeta` interface
 **Severity:** HIGH
 
-`workflow.actions as unknown as WorkflowAction[]` — if stored JSON is malformed, the action execution loop crashes with no structured error.
+`logActivities?: boolean` is declared **twice** (~L826 and ~L828) with different JSDoc comments. Copy-paste error. TypeScript silently merges duplicates of the same type, but the second shadows the first's documentation.
 
-**Fix:** Validate with a Zod schema for `WorkflowAction[]` before iterating. On parse failure, mark execution as failed with a clear error message.
-
----
-
-### F7 — `revline.ts`: Unsafe casts on `leadPropertySchema` and `leadStages`
-**File:** `app/_lib/workflow/executors/revline.ts` ~L37, ~L224
-**Severity:** HIGH
-
-`workspace?.leadPropertySchema as LeadPropertyDefinition[] | null` and `workspace?.leadStages as LeadStageDefinition[] | null` — these control all lead property/stage validation. Corrupt values propagate silently.
-
-**Fix:** Create Zod schemas for `LeadPropertyDefinition[]` and `LeadStageDefinition[]`. Use `.safeParse()` with `[]` fallback.
-
----
-
-### F10 — `test/route.ts`: No events on integration test
-**File:** `app/api/v1/integrations/[id]/test/route.ts`
-**Severity:** MEDIUM
-
-Testing an integration connection emits no events on success or failure.
-
-**Fix:** Emit `integration_test_success` / `integration_test_failed` with `workspaceId`, `integrationType`.
-
----
-
-### F11a — Missing explicit return types
-**Files:**
-- `app/api/v1/workspaces/[id]/agents/route.ts` — both `GET` and `POST`
-- `app/api/v1/integrations/[id]/test/route.ts` — `POST`
-- `app/api/v1/resend-inbound/route.ts` — `POST`
-
-**Severity:** MEDIUM
-
-Standards require explicit return types on all exported functions.
-
-**Fix:** Add `Promise<NextResponse>` (or `Promise<Response>`) return type to each.
+**Fix:** Remove the duplicate declaration. Keep whichever JSDoc is more accurate.
 
 ---
 
 ## WARN — Should Fix
 
-### W3 — `revline.ts`: `console.error`/`console.warn` instead of `logStructured`
-**File:** `app/_lib/workflow/executors/revline.ts` ~L70, ~L148
+### W1 — `integration-sync.service.ts`: 3 unsafe `as` casts on JsonValue
+**File:** `app/_lib/services/integration-sync.service.ts` ~L157, L229, L294
 **Severity:** Medium
 
-Two calls use `console.error`/`console.warn` — invisible to structured observability tooling.
+`lead.properties as Record<string, unknown>` and `leadPropertySchema as LeadPropertyDefinition[]` — Prisma `JsonValue` without Zod validation.
 
-**Fix:** Replace with `logStructured()` including `workspaceId` in metadata.
+**Fix:** Use a shared utility pattern:
+
+```typescript
+const properties = z.record(z.unknown()).catch({}).parse(lead.properties);
+```
+
+Or create a reusable `parseJsonProperties(value: Prisma.JsonValue)` helper.
 
 ---
 
-### W4 — `pipedrive.ts`: No local try/catch around adapter calls
-**File:** `app/_lib/workflow/executors/pipedrive.ts` ~L63, ~L152
+### W2 — `integration-sync.service.ts`: 4 `console.error` calls remain
+**File:** `app/_lib/services/integration-sync.service.ts` ~L123, L173, L189, L304
 **Severity:** Medium
 
-`adapter.createOrUpdatePerson()` and `adapter.updatePersonFields()` have no local try/catch. Errors propagate to the workflow engine's generic catch block, losing Pipedrive-specific failure events.
+Still using `console.error` instead of `logStructured`. These are invisible to structured observability.
 
-**Fix:** Wrap each in try/catch, emit `pipedrive_*_failed` on error, then re-throw or return error result.
+**Fix:** Replace all four with `logStructured()` including `workspaceId` in metadata.
 
 ---
 
-### W9 — `integration-sync.service.ts`: `applyRetryResult` has no try/catch
+### W3 — `ensurePipedrivePropertyInSchema()`: TOCTOU on workspace schema
 **File:** `app/_lib/services/integration-sync.service.ts`
 **Severity:** Medium
 
-Errors propagate raw to the cron caller. Service should be self-contained.
+Same read-then-write pattern as F2 but on the workspace's `leadPropertySchema`. Concurrent calls could drop a newly added property.
 
-**Fix:** Wrap in try/catch, return structured result.
+**Fix:** Wrap in `withTransaction`, or use Prisma's JSONB append if available.
 
 ---
 
-### W10 — `integration-sync.service.ts`: Schema update outside transaction
-**File:** `app/_lib/services/integration-sync.service.ts`
+### W4 — `verifySecret()`: Secret length leak via timing side-channel
+**File:** `app/api/v1/pipedrive-webhook/route.ts` — `verifySecret()`
 **Severity:** Medium
 
-`ensurePipedrivePropertyInSchema` runs outside `withTransaction` in `applyRetryResult`. If it fails, the queue entry is already marked COMPLETED but workspace schema is inconsistent.
+`if (provided.length !== stored.length) return false` reveals the exact length of the webhook secret through response time measurement.
 
-**Fix:** Move inside transaction, or add standalone try/catch with recovery logic.
+**Fix:** Hash both values with SHA-256 before comparing (hashes are always 32 bytes):
+
+```typescript
+function verifySecret(provided: string, stored: string): boolean {
+  const a = crypto.createHash('sha256').update(provided).digest();
+  const b = crypto.createHash('sha256').update(stored).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+```
 
 ---
 
-### W11 — `cron/integration-sync/route.ts`: Cron auth uses `===`
-**File:** `app/api/v1/cron/integration-sync/route.ts` ~L36
+### W5 — Pipedrive webhook returns 401 on invalid secret
+**File:** `app/api/v1/pipedrive-webhook/route.ts` ~L116
 **Severity:** Medium
 
-`authHeader === \`Bearer ${cronSecret}\`` uses regular string comparison instead of timing-safe comparison.
+Invalid webhook secret returns `ApiResponse.error(401)`. Pipedrive will retry failed deliveries, creating unnecessary load. Standards say webhooks return 200 on failures.
 
-**Fix:** Use `crypto.timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected))` with length check.
+**Fix:** Change to `ApiResponse.webhookAck()` and emit a warning event instead. The event already fires — just change the HTTP response.
 
 ---
 
-### W12 — Integration routes: Initial DB lookup not scoped by workspaceId
-**Files:**
-- `app/api/v1/integrations/[id]/pipedrive-fields/route.ts`
-- `app/api/v1/integrations/[id]/test/route.ts`
-
+### W6 — `pipedrive-activity.ts`: Unsafe `as` cast on lead.properties
+**File:** `app/_lib/agent/pipedrive-activity.ts` ~L44
 **Severity:** Medium
 
-`findUnique({ where: { id } })` fetches by PK alone. Access is checked afterward, but defense-in-depth says the query itself should be scoped.
+`lead.properties as Record<string, unknown>` — Prisma `JsonValue` without Zod.
 
-**Fix:** Include `workspaceId` in the query or use a compound lookup.
+**Fix:** Same pattern as W1 — use `z.record(z.unknown()).catch({}).parse(...)`.
 
 ---
 
-### W13 — Integration routes: Raw `NextResponse.json()` instead of `ApiResponse`
-**Files:** Same as W12
+### W7 — `pipedrive-activity.ts`: Silent catch with zero logging
+**File:** `app/_lib/agent/pipedrive-activity.ts` ~L84-86
 **Severity:** Low
 
-Inconsistent error response shape.
+Outer catch block swallows all errors with no logging. Failures are completely invisible.
 
-**Fix:** Switch to `ApiResponse.success()` / `ApiResponse.error()`.
+**Fix:** Add `logStructured` at warn level with `workspaceId` and error message.
 
 ---
 
-### W14 — `agents/route.ts`: No transaction around integration checks + create
-**File:** `app/api/v1/workspaces/[id]/agents/route.ts`
+### W8 — `deriveResolution`: No branch for PAUSED status
+**File:** `app/_lib/agent/engine.ts` — `deriveResolution()`
 **Severity:** Medium
 
-POST does multiple reads (integration checks) then a create. TOCTOU race: an integration could be deleted between check and create.
+`PAUSED` is a valid `ConversationStatus` but `deriveResolution` has no explicit branch for it. Not a bug today (never called with PAUSED), but a defensive gap.
 
-**Fix:** Wrap the integration checks + `prisma.agent.create` in `withTransaction`.
-
----
-
-### W15 — `engine.ts`: `turnLog` double casts
-**File:** `app/_lib/agent/engine.ts` ~L462, L568, L880, L963
-**Severity:** Low
-
-`turnLog as unknown as Prisma.InputJsonValue` — acceptable for writes, but a Zod schema validating `TurnLogEntry[]` before storage would be safer.
+**Fix:** Add an explicit `case ConversationStatus.PAUSED:` branch, or add a comment explaining why it's excluded.
 
 ---
 
-### W16 — `workflow/engine.ts`: `triggerFilter` unsafe cast
-**File:** `app/_lib/workflow/engine.ts` ~L95
+### W9 — `engine.ts`: Dead `finalStatus` variable
+**File:** `app/_lib/agent/engine.ts` ~L994
 **Severity:** Low
 
-`triggerFilter as Record<string, unknown> | null` — non-object values would cause silent bugs in `matchesFilter`.
+`finalStatus` is declared but never referenced. The actual status update uses `ConversationStatus.COMPLETED` inline.
 
-**Fix:** Zod parse or `typeof` guard.
+**Fix:** Remove the dead variable.
+
+---
+
+### W10 — `engine.ts`: `tokenResolution!` non-null assertions
+**File:** `app/_lib/agent/engine.ts` ~L1018, L1036
+**Severity:** Low
+
+Logically safe (guarded by `hitTokenLimit`) but non-null assertions are a code smell.
+
+**Fix:** Extract the token-limit block into a conditional that narrows the type naturally.
 
 ---
 
 ## Checklist
 
-- [ ] F2 — try/catch on agents route GET/POST
-- [ ] F3 — Zod validate path param on agents route
-- [ ] F4 — emit `agent_created` event
-- [ ] F5 — Zod schemas for 5 JsonValue fields in `loadAgent()`
-- [ ] F6 — Zod validate `workflow.actions` before execution loop
-- [ ] F7 — Zod validate `leadPropertySchema` and `leadStages`
-- [ ] F10 — emit events on integration test
-- [ ] F11a — add return types to exported route handlers
-- [ ] W3 — replace console.error/warn with logStructured in revline.ts
-- [ ] W4 — add try/catch in pipedrive executor
-- [ ] W9 — add try/catch in applyRetryResult
-- [ ] W10 — move schema update inside transaction
-- [ ] W11 — timing-safe comparison for cron auth
-- [ ] W12 — scope integration lookups by workspaceId
-- [ ] W13 — switch to ApiResponse helper
-- [ ] W14 — wrap agent creation in transaction
-- [ ] W15 — optional: Zod validate turnLog before write
-- [ ] W16 — optional: Zod validate triggerFilter
+- [ ] F1 — Fix syncInboundFields query to filter by pipedrivePersonId via JSON path
+- [ ] F2 — Wrap syncInboundFields read+write in withTransaction
+- [ ] F3 — Remove duplicate logActivities property from PipedriveMeta
+- [ ] W1 — Replace 3 unsafe as casts with Zod in integration-sync.service.ts
+- [ ] W2 — Migrate 4 console.error calls to logStructured
+- [ ] W3 — Wrap ensurePipedrivePropertyInSchema in transaction
+- [ ] W4 — Hash both sides before timingSafeEqual in verifySecret
+- [ ] W5 — Return 200 (webhookAck) on invalid Pipedrive webhook secret
+- [ ] W6 — Zod validate lead.properties in pipedrive-activity.ts
+- [ ] W7 — Add logStructured to silent catch in pipedrive-activity.ts
+- [ ] W8 — Add PAUSED branch or comment to deriveResolution
+- [ ] W9 — Remove dead finalStatus variable
+- [ ] W10 — Narrow tokenResolution type instead of non-null assertion

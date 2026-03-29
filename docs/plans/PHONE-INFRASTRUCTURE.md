@@ -17,9 +17,16 @@
 | 2.2 Missed-call handler (blocklist, lead upsert, auto-text) | DONE | 2 |
 | 2.3 Agent-mode conversation start (proactive outreach) | DONE | 2 |
 | 2.4 `missed_call` trigger in workflow registry | DONE | 2 |
-| 3.1 SMS escalation in `notifyEscalation` | NOT STARTED | 3 |
-| 3.2 Resolution metadata on conversation completion | NOT STARTED | 3 |
-| 3.3 Resolution-driven notification templates | NOT STARTED | 3 |
+| Audit: Workspace-scoped PATCH/DELETE (F1) | DONE | Audit |
+| Audit: GET try/catch (F8+W5) | DONE | Audit |
+| Audit: Voice webhook Zod validation (F9) | DONE | Audit |
+| Audit: logStructured in catch blocks (W6) | DONE | Audit |
+| Audit: Event name prefixes (W7) | DONE | Audit |
+| Audit: Shared TwiML utilities (W8) | DONE | Audit |
+| Audit: PhoneConfig.mode Prisma enum (W17) | DEFERRED | Audit |
+| 3.1 SMS escalation in `notifyEscalation` | DONE | 3 |
+| 3.2 Resolution metadata on conversation completion | DONE | 3 |
+| 3.3 Resolution-driven notification templates | DONE | 3 |
 
 **Key decisions:**
 - **Carrier-side forwarding.** The contractor configures "forward unanswered calls" on their carrier. By the time Twilio receives the call, it's already missed. No `<Dial>`, no Twilio-side call bridging. The voice webhook plays a greeting, hangs up, and fires the missed-call flow asynchronously.

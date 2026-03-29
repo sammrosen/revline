@@ -1,7 +1,7 @@
 # Pipedrive Adapter
 
 > **Created:** March 27, 2026
-> **Updated:** March 28, 2026 (v4 — Phase 1 complete, Phase 2 field sync mostly done, trigger renamed to contact-submitted)
+> **Updated:** March 28, 2026 (v5 — Phase 2 complete: webhook route, inbound field sync, activity logging, reconciliation cron, validation audit)
 > **Scope:** Full Pipedrive CRM integration — person sync from landing pages, bidirectional field mapping, agent activity logging to Pipedrive timeline, deal/pipeline management, and workflow actions for contact and deal management.
 
 ---
@@ -24,10 +24,11 @@
 | 2.0 Pipedrive fields API (`/api/v1/integrations/[id]/pipedrive-fields`) | **DONE** | 2 |
 | 2.2a Field sync UI (Sync Fields, auto-mapping, create-and-map) | **DONE** | 2 |
 | 2.2b `pipedrivePersonId` auto-provisioning in workspace schema | **DONE** | 2 |
-| 2.1 Pipedrive webhook route (inbound triggers) | NOT STARTED | 2 |
-| 2.2c Inbound field sync (Pipedrive → RevLine on webhook) | NOT STARTED | 2 |
-| 2.3 Agent activity logging (post-send hook) | NOT STARTED | 2 |
-| 2.4 Reconciliation cron (pipedriveSyncPending) | NOT STARTED | 2 |
+| 2.1 Pipedrive webhook route (inbound triggers) | **DONE** | 2 |
+| 2.2c Inbound field sync (Pipedrive → RevLine on webhook) | **DONE** | 2 |
+| 2.3 Agent activity logging (post-send hook) | **DONE** | 2 |
+| 2.4 Reconciliation cron (IntegrationSyncQueue) | **DONE** | 2 |
+| 2.5 Validation audit (Zod hardening, timing-safe auth, structured logging) | **DONE** | 2 |
 | 3.1 Deal + pipeline management | NOT STARTED | 3 |
 | 3.2 Deal stage mapping | NOT STARTED | 3 |
 | 3.3 Organization linking | NOT STARTED | 3 |
@@ -38,10 +39,14 @@
 - **API Token auth.** Workspaces connect their own Pipedrive accounts via an API token (single secret). No OAuth dance needed. Token is found in Pipedrive Settings > Personal Preferences > API.
 - **Raw fetch, no SDK.** Pipedrive's REST API is simple (`?api_token=` query param). Raw fetch is consistent with how other adapters work and avoids SDK dependency risk.
 - **Search-then-upsert pattern.** Pipedrive has no native upsert-by-email. The adapter searches first, then creates or updates. Two API calls for new contacts, one for existing — the adapter hides this complexity.
-- **Graceful degradation on Pipedrive failure.** If the Pipedrive workflow action fails (with `continueOnError: true`), RevLine still creates the lead. The lead is flagged with `pipedriveSyncPending: true` for later reconciliation.
-- **Field sync is per-workspace.** Each workspace defines its own mapping between RevLine lead properties and Pipedrive person fields in the adapter meta config.
+- **Graceful degradation on Pipedrive failure.** If the Pipedrive workflow action fails (with `continueOnError: true`), RevLine still creates the lead. Failed actions are enqueued in `IntegrationSyncQueue` for automatic retry with exponential backoff.
+- **DB-backed retry queue (not flags).** `IntegrationSyncQueue` replaces the original `pipedriveSyncPending` flag approach. Generic model supporting any adapter/operation. Processed by a cron job (`/api/v1/cron/integration-sync`) with exponential backoff, idempotent enqueue, and atomic result application. Future-proof for BullMQ migration.
+- **Field sync is per-workspace.** Each workspace defines its own mapping between RevLine lead properties and Pipedrive person fields in the adapter meta config. Inbound sync (Pipedrive → RevLine) inverts the same `fieldMap`.
 - **Trigger renamed from `email_captured` to `contact-submitted`.** The form captures more than email (name, phone, source). The trigger now aligns with the `landing-page` form definition in the form registry. All backend, frontend, and test references updated.
 - **`pipedrivePersonId` auto-provisioned in workspace schema.** When the `create_lead` executor stores a Pipedrive person ID on a lead, it ensures the workspace's `leadPropertySchema` includes a `pipedrivePersonId` property so it appears as a column in the leads table. Fail-safe and idempotent.
+- **Webhook auth via shared secret.** Pipedrive has no HMAC signatures. The webhook URL includes a `?secret=` param validated with `crypto.timingSafeEqual`. Replay protection via `meta.timestamp` (3-minute window). Rate limited via `rateLimitByClient`.
+- **Activity logging is fire-and-forget.** `logPipedriveActivity()` in `pipedrive-activity.ts` is called after every successful agent send with `.catch(() => {})`. Respects `meta.logActivities` opt-in. Never blocks message delivery.
+- **Validation hardened across the stack.** All executor `as` casts replaced with Zod `.safeParse()`. API route path params validated. Cron auth uses `crypto.timingSafeEqual`. Structured logging replaces `console.error`. `ApiResponse` used consistently.
 
 ---
 
@@ -75,7 +80,7 @@ POST /api/v1/subscribe                (unchanged — integration-agnostic)
              └──► agent.route_to_agent (or other actions)
 ```
 
-The subscribe route does not change. The workflow action order determines whether Pipedrive runs first. If Pipedrive is down, `continueOnError` lets the workflow continue — `create_lead` detects the missing `pipedrivePersonId` and sets `pipedriveSyncPending: true`.
+The subscribe route does not change. The workflow action order determines whether Pipedrive runs first. If Pipedrive is down, `continueOnError` lets the workflow continue — `create_lead` detects the missing `pipedrivePersonId` and enqueues the action in `IntegrationSyncQueue` for automatic retry.
 
 ### Person ID Linking
 
@@ -95,8 +100,8 @@ Every RevLine lead that syncs to Pipedrive carries the Pipedrive person ID as a 
 **Failure handling:**
 - If the Pipedrive action fails with `continueOnError: true`, the engine continues
 - `ctx.actionData.pipedrivePersonId` is absent — `create_lead` creates the lead without it
-- `lead.properties.pipedriveSyncPending = true` is set for reconciliation
-- A cron job (Phase 2) retries the Pipedrive upsert and backfills the ID
+- The failed action is enqueued in `IntegrationSyncQueue` with exponential backoff
+- The reconciliation cron (`/api/v1/cron/integration-sync`) retries the action and backfills the person ID atomically
 
 ### Dual Entry Points
 
@@ -163,7 +168,10 @@ Wired into the agent engine's `sendReply()` path as a post-send hook. Not a work
 | `app/(dashboard)/workspaces/[id]/pipedrive-config-editor.tsx` | Structured meta editor — field mappings, test connection |
 | `app/api/v1/integrations/[id]/test/route.ts` | Test connection endpoint for any integration |
 | `app/api/v1/integrations/[id]/pipedrive-fields/route.ts` | Fetch Pipedrive person fields for sync UI |
-| `app/api/v1/pipedrive-webhook/route.ts` | Inbound Pipedrive webhook handler (Phase 2) |
+| `app/api/v1/pipedrive-webhook/route.ts` | Inbound Pipedrive webhook handler — shared secret auth, replay protection, echo dedup |
+| `app/_lib/services/integration-sync.service.ts` | DB-backed retry queue service — `enqueueFailedAction()`, `applyRetryResult()`, `syncInboundFields()` |
+| `app/api/v1/cron/integration-sync/route.ts` | Cron route for processing the IntegrationSyncQueue with exponential backoff |
+| `app/_lib/agent/pipedrive-activity.ts` | Fire-and-forget agent activity logging to Pipedrive timeline |
 | `prisma/migrations/YYYYMMDD_add_pipedrive/migration.sql` | Prisma migration for enum additions |
 
 ### Modified Files
@@ -227,7 +235,7 @@ Executors: follow the MailerLite executor pattern — load adapter, handle `ctx.
 
 ### 1.6 `create_lead` Executor Update
 
-Modify `revline.create_lead` to read `ctx.actionData.pipedrivePersonId`. If present, include it in the `properties` passed to `upsertLead`. If absent and the workflow has Pipedrive actions (detectable by checking if `ctx.actionData.pipedriveSyncPending` or if `pipedrivePersonId` is undefined when expected), set `pipedriveSyncPending: true`.
+Modify `revline.create_lead` to read `ctx.actionData.pipedrivePersonId`. If present, include it in the `properties` passed to `upsertLead`. If absent, the lead is created without a Pipedrive link — the failed action is enqueued in `IntegrationSyncQueue` by the engine for later reconciliation.
 
 ### 1.7 Dashboard Wire-Up
 
@@ -247,7 +255,7 @@ Modify `revline.create_lead` to read `ctx.actionData.pipedrivePersonId`. If pres
 2. **Test connection** — after saving, open the Pipedrive integration, click "Test Connection" in the config editor. Should confirm the token is valid.
 3. **Create a workflow** — trigger: `revline.contact-submitted`, actions: `pipedrive.create_or_update_person` (set `continueOnError: true`) then `revline.create_lead`
 4. **Submit a form on your landing page** — verify: person appears in Pipedrive, lead exists in RevLine with `pipedrivePersonId` on its properties
-5. **Kill test** — temporarily break the API token in the dashboard (edit the secret to a bad value), submit another form. Verify the lead is created in RevLine with `pipedriveSyncPending: true` and no crash. Restore the token after.
+5. **Kill test** — temporarily break the API token in the dashboard (edit the secret to a bad value), submit another form. Verify the lead is created in RevLine (without `pipedrivePersonId`) and a PENDING entry appears in `IntegrationSyncQueue`. Restore the token after.
 6. **Dedup test** — submit the same email twice. Verify Pipedrive updates (not duplicates) the person — should see one person with the latest data, not two
 
 ---
@@ -276,31 +284,60 @@ Built an ABC Ignite-style auto-mapping panel in `pipedrive-config-editor.tsx`:
 
 The `create_lead` executor calls `ensurePipedrivePropertyInSchema()` when storing a Pipedrive person ID. This auto-adds `pipedrivePersonId` (type: number) to the workspace's `leadPropertySchema` so it appears in the leads table. Fail-safe (try/catch), idempotent, emits `workspace_schema_auto_provisioned` event.
 
-### 2.1 Pipedrive Webhook Route (NOT STARTED)
+### 2.1 Pipedrive Webhook Route (DONE)
 
-`app/api/v1/pipedrive-webhook/route.ts` — handles `added.person`, `updated.person`. HTTP Basic Auth verification. Workspace resolution via `?source={slug}`.
+`app/api/v1/pipedrive-webhook/route.ts` — handles `added.person`, `updated.person` events from Pipedrive.
 
-Echo dedup: when the webhook fires for a person we just created, detect it (lead already exists with this `pipedrivePersonId`) and skip re-processing.
+**Auth:** Shared secret via `?secret=` query param, validated with `crypto.timingSafeEqual`. No HMAC (Pipedrive doesn't provide one).
 
-### 2.2c Inbound Field Sync (NOT STARTED)
+**Replay protection:** Validates `meta.timestamp` is within 3-minute window (STANDARDS.md Section 1.3).
 
-Inbound direction of field sync: on `updated.person` webhook events, map changed Pipedrive fields back to RevLine lead properties using the `fieldMap`. Depends on 2.1 (webhook route).
+**Rate limiting:** `rateLimitByClient(slug)` applied before any DB work (STANDARDS.md Section 4).
 
-### 2.3 Agent Activity Logging (NOT STARTED)
+**Echo dedup:** When the webhook fires for a person we just created/updated (lead with matching `pipedrivePersonId` updated within 30s), skip re-processing to prevent feedback loops.
 
-Post-send hook in agent engine's `sendReply()`. Fire-and-forget. Maps SMS to `call` activity type, email to `email` type.
+**Flow:** Parse params → rate limit → resolve workspace → load adapter → verify secret → register in WebhookProcessor → dedup → Zod validate → replay check → echo check → emit trigger → field sync (for updates) → mark processed.
 
-### 2.4 Reconciliation Cron (NOT STARTED)
+### 2.2c Inbound Field Sync (DONE)
 
-Picks up leads with `pipedriveSyncPending: true`, retries Pipedrive upsert, backfills person ID.
+`syncInboundFields()` in `integration-sync.service.ts` — inverts the workspace's `fieldMap` (RevLine key → Pipedrive key becomes Pipedrive key → RevLine key), finds the lead by `pipedrivePersonId`, and merges changed values into `lead.properties`. Called from the webhook route for `updated.person` events. Emits `pipedrive_fields_synced_inbound` event.
 
-### What You Test (Phase 2 — Remaining Items)
+### 2.3 Agent Activity Logging (DONE)
 
-1. Create a person directly in Pipedrive — verify a RevLine lead appears (2.1)
-2. Update a custom field in Pipedrive — verify it syncs to RevLine lead properties (2.2c)
-3. Submit a form (creating person via RevLine) — verify webhook doesn't create a duplicate (echo dedup) (2.1)
-4. Have the agent send a message — verify activity appears on person's Pipedrive timeline (2.3)
-5. Break API token, submit form, fix token, wait for cron — verify reconciliation backfills person ID (2.4)
+`logPipedriveActivity()` in `app/_lib/agent/pipedrive-activity.ts` — fire-and-forget hook called from `sendReply()` after every successful agent message. Checks `meta.logActivities` opt-in, looks up lead's `pipedrivePersonId`, calls `adapter.createActivity()`. Maps SMS → `call` type, email → `email` type. Truncates note body to 2000 chars. Never throws, never blocks delivery.
+
+`createActivity()` method added to `PipedriveAdapter` — uses `POST /v1/activities` with `person_id`, `type`, `subject`, `note`, `done`.
+
+### 2.4 Reconciliation Cron (DONE)
+
+Replaced the original `pipedriveSyncPending` flag approach with a generic `IntegrationSyncQueue` table (DB-backed retry queue). The cron at `/api/v1/cron/integration-sync` processes the queue with exponential backoff, dispatching to the existing executor registry. Idempotent enqueue via `enqueueFailedAction()`, atomic result application via `applyRetryResult()`. Auth uses `crypto.timingSafeEqual`.
+
+### 2.5 Validation Audit (DONE)
+
+Comprehensive validation hardening across the Pipedrive integration stack:
+- Pipedrive executor `as Record<string, string>` casts → Zod `.safeParse()`
+- Resend inbound payload cast → Zod schema
+- Path param UUID validation on Pipedrive fields/test routes
+- Agent engine JSON field casts → Zod schemas
+- Agent route wrapped in `withTransaction` (TOCTOU prevention)
+- `console.error` → `logStructured`, `NextResponse.json` → `ApiResponse`
+- Cron auth → `crypto.timingSafeEqual`
+
+### What You Test (Phase 2)
+
+**Webhook route (2.1):**
+1. Configure `webhookSecret` in Pipedrive adapter meta and register a webhook in Pipedrive pointing to `POST /api/v1/pipedrive-webhook?source={slug}&secret={webhookSecret}`
+2. Create a person directly in Pipedrive — verify `pipedrive.person_created` trigger fires and a RevLine lead appears
+3. Submit a form (creating person via RevLine) — verify the webhook echo is detected and skipped (no duplicate processing)
+
+**Inbound field sync (2.2c):**
+4. Update a custom field on a person in Pipedrive — verify the mapped RevLine lead property updates automatically
+
+**Activity logging (2.3):**
+5. Set `logActivities: true` in adapter meta. Have the agent send a message to a lead with a `pipedrivePersonId` — verify an activity appears on the person's Pipedrive timeline
+
+**Reconciliation cron (2.4):**
+6. Break API token, submit form (creates lead without `pipedrivePersonId`), fix token, trigger cron (`POST /api/v1/cron/integration-sync`) — verify person ID is backfilled on the lead
 
 ---
 
@@ -335,7 +372,8 @@ interface PipedriveMeta {
   stageMap?: Record<string, number>;
   autoCreateDeal?: boolean;
   dealTitleTemplate?: string;
-  logActivities?: boolean;
+  webhookSecret?: string;       // Shared secret for inbound webhook verification
+  logActivities?: boolean;      // Opt-in for agent activity logging
   smsActivityType?: string;
   fieldKeyCache?: Record<string, string>;
 }
@@ -346,9 +384,9 @@ interface PipedriveMeta {
 {
   pipedrivePersonId?: number;      // e.g., 842
   pipedriveDealId?: number;        // e.g., 1337 (Phase 3)
-  pipedriveSyncPending?: boolean;  // true if Pipedrive creation failed
 }
 ```
+Note: `pipedriveSyncPending` flag was replaced by the `IntegrationSyncQueue` table in Phase 2.4.
 
 ---
 

@@ -36,7 +36,9 @@ import type { SendType, SendReplyResult } from './quiet-hours';
 import { sanitizeForGsm7, estimateSegments, shouldSanitizeSms } from './sms-encoding';
 import { retryWithBackoff } from './retry';
 import { cancelPendingFollowUps } from './follow-up';
+import { notifyResolution } from '@/app/_lib/phone';
 import { checkConsent, revokeConsent } from '@/app/_lib/services/consent.service';
+import { logPipedriveActivity } from './pipedrive-activity';
 import { withTransaction } from '@/app/_lib/utils/transaction';
 import { maskContact } from '@/app/_lib/utils/validation';
 import { resolveGuardrails } from './guardrails/constants';
@@ -265,18 +267,29 @@ export async function handleInboundMessage(
 
     // 4. Check timeout
     if (isConversationTimedOut(conversation.lastMessageAt || conversation.startedAt, agent.conversationTimeoutMinutes)) {
+      const resolution = deriveResolution(ConversationStatus.TIMED_OUT, [], conversation.messageCount);
       await prisma.conversation.update({
         where: { id: conversation.id },
-        data: { status: ConversationStatus.TIMED_OUT, endedAt: new Date() },
+        data: {
+          status: ConversationStatus.TIMED_OUT,
+          endedAt: new Date(),
+          metadata: mergeResolutionMetadata(conversation.metadata, resolution),
+        },
       });
 
       await emitAgentEvent(params.workspaceId, 'conversation_completed', {
         agentId: agent.id,
         conversationId: conversation.id,
         reason: 'timeout',
+        resolution,
         leadId: params.leadId,
       });
       eventsEmitted.push('conversation_completed');
+
+      notifyResolution({
+        workspaceId: params.workspaceId, agentId: agent.id, conversationId: conversation.id,
+        contactAddress: params.contactAddress, resolution, channel: params.channel, channelIntegration: params.channelIntegration,
+      }).catch(() => {});
 
       turnLog.push({ type: 'guardrail', guardrail: 'timeout', detail: `Timed out after ${agent.conversationTimeoutMinutes}m`, ts: Date.now() });
       turnLog.push({ type: 'event', event: 'conversation_completed', ts: Date.now() });
@@ -296,18 +309,29 @@ export async function handleInboundMessage(
 
     // 5. Check message limit
     if (conversation.messageCount >= agent.maxMessagesPerConversation) {
+      const resolution = deriveResolution(ConversationStatus.COMPLETED, [], conversation.messageCount);
       await prisma.conversation.update({
         where: { id: conversation.id },
-        data: { status: ConversationStatus.COMPLETED, endedAt: new Date() },
+        data: {
+          status: ConversationStatus.COMPLETED,
+          endedAt: new Date(),
+          metadata: mergeResolutionMetadata(conversation.metadata, resolution),
+        },
       });
 
       await emitAgentEvent(params.workspaceId, 'conversation_completed', {
         agentId: agent.id,
         conversationId: conversation.id,
         reason: 'message_limit',
+        resolution,
         leadId: params.leadId,
       });
       eventsEmitted.push('conversation_completed');
+
+      notifyResolution({
+        workspaceId: params.workspaceId, agentId: agent.id, conversationId: conversation.id,
+        contactAddress: params.contactAddress, resolution, channel: params.channel, channelIntegration: params.channelIntegration,
+      }).catch(() => {});
 
       turnLog.push({ type: 'guardrail', guardrail: 'message_limit', detail: `Reached ${agent.maxMessagesPerConversation} message limit`, ts: Date.now() });
       turnLog.push({ type: 'event', event: 'conversation_completed', ts: Date.now() });
@@ -498,6 +522,7 @@ export async function handleInboundMessage(
         data: { conversationId: conversation.id, role: 'ASSISTANT', content: emergencyReply },
       });
 
+      const emergencyResolution = deriveResolution(ConversationStatus.ESCALATED, [], conversation.messageCount + 2);
       await prisma.conversation.update({
         where: { id: conversation.id },
         data: {
@@ -505,6 +530,7 @@ export async function handleInboundMessage(
           endedAt: new Date(),
           messageCount: { increment: 2 },
           lastMessageAt: new Date(),
+          metadata: mergeResolutionMetadata(conversation.metadata, emergencyResolution),
         },
       });
 
@@ -517,6 +543,7 @@ export async function handleInboundMessage(
         conversationId: conversation.id,
         reason: 'emergency_keyword',
         keyword: emergencyCheck.keyword,
+        resolution: emergencyResolution,
         leadId: params.leadId,
       });
       eventsEmitted.push('escalation_requested');
@@ -542,6 +569,11 @@ export async function handleInboundMessage(
           metadata: { agentId: agent.id, conversationId: conversation.id, reason: 'emergency_keyword' },
         });
       }
+
+      notifyResolution({
+        workspaceId: params.workspaceId, agentId: agent.id, conversationId: conversation.id,
+        contactAddress: params.contactAddress, resolution: emergencyResolution, channel: params.channel, channelIntegration: params.channelIntegration,
+      }).catch(() => {});
 
       return {
         success: true,
@@ -882,6 +914,7 @@ export async function handleInboundMessage(
         },
       });
 
+      const aiEscResolution = deriveResolution(ConversationStatus.ESCALATED, toolsUsed, conversation.messageCount + 2);
       await prisma.conversation.update({
         where: { id: conversation.id },
         data: {
@@ -890,6 +923,7 @@ export async function handleInboundMessage(
           messageCount: { increment: 2 },
           totalTokens: { increment: completion.usage.totalTokens },
           lastMessageAt: new Date(),
+          metadata: mergeResolutionMetadata(conversation.metadata, aiEscResolution),
         },
       });
 
@@ -904,6 +938,7 @@ export async function handleInboundMessage(
         agentId: agent.id,
         conversationId: conversation.id,
         reason: 'ai_escalation',
+        resolution: aiEscResolution,
         leadId: params.leadId,
       });
       eventsEmitted.push('escalation_requested');
@@ -932,6 +967,11 @@ export async function handleInboundMessage(
         });
       }
 
+      notifyResolution({
+        workspaceId: params.workspaceId, agentId: agent.id, conversationId: conversation.id,
+        contactAddress: params.contactAddress, resolution: aiEscResolution, channel: params.channel, channelIntegration: params.channelIntegration,
+      }).catch(() => {});
+
       return {
         success: true,
         replyText: cleanedReply,
@@ -952,6 +992,7 @@ export async function handleInboundMessage(
     const newTotalTokens = conversation.totalTokens + completion.usage.totalTokens;
     const hitTokenLimit = newTotalTokens >= agent.maxTokensPerConversation;
     const finalStatus: ConversationStatus = hitTokenLimit ? ConversationStatus.COMPLETED : ConversationStatus.ACTIVE;
+    const tokenResolution: string | null = hitTokenLimit ? deriveResolution(ConversationStatus.COMPLETED, toolsUsed, newMessageCount) : null;
 
     await withTransaction(async (tx) => {
       await tx.conversationMessage.create({
@@ -965,25 +1006,37 @@ export async function handleInboundMessage(
         },
       });
 
+      const tokenLimitData = hitTokenLimit && tokenResolution ? {
+        status: ConversationStatus.COMPLETED,
+        endedAt: new Date(),
+        metadata: mergeResolutionMetadata(conversation.metadata, tokenResolution),
+      } : {};
+
       await tx.conversation.update({
         where: { id: conversation.id },
         data: {
           messageCount: newMessageCount,
           totalTokens: newTotalTokens,
           lastMessageAt: new Date(),
-          ...(hitTokenLimit ? { status: ConversationStatus.COMPLETED, endedAt: new Date() } : {}),
+          ...tokenLimitData,
         },
       });
     });
 
-    if (hitTokenLimit) {
+    if (hitTokenLimit && tokenResolution) {
       await emitAgentEvent(params.workspaceId, 'conversation_completed', {
         agentId: agent.id,
         conversationId: conversation.id,
         reason: 'token_limit',
+        resolution: tokenResolution,
         leadId: params.leadId,
       });
       eventsEmitted.push('conversation_completed');
+
+      notifyResolution({
+        workspaceId: params.workspaceId, agentId: agent.id, conversationId: conversation.id,
+        contactAddress: params.contactAddress, resolution: tokenResolution, channel: params.channel, channelIntegration: params.channelIntegration,
+      }).catch(() => {});
 
       turnLog.push({ type: 'guardrail', guardrail: 'token_limit', detail: `Reached ${agent.maxTokensPerConversation} token limit`, ts: Date.now() });
       turnLog.push({ type: 'event', event: 'conversation_completed', ts: Date.now() });
@@ -1451,7 +1504,7 @@ export async function loadAgent(
 async function findOrCreateConversation(
   params: InboundMessageParams,
   agent: AgentConfig
-): Promise<{ conversation: { id: string; status: ConversationStatus; messageCount: number; totalTokens: number; startedAt: Date; lastMessageAt: Date | null; pausedAt: Date | null }; isNew: boolean }> {
+): Promise<{ conversation: { id: string; status: ConversationStatus; messageCount: number; totalTokens: number; startedAt: Date; lastMessageAt: Date | null; pausedAt: Date | null; metadata: Prisma.JsonValue | null }; isNew: boolean }> {
   const isTest = params.testMode ?? false;
   const selectFields = {
     id: true,
@@ -1461,6 +1514,7 @@ async function findOrCreateConversation(
     startedAt: true,
     lastMessageAt: true,
     pausedAt: true,
+    metadata: true,
   } as const;
 
   if (params.conversationId) {
@@ -1505,6 +1559,29 @@ async function findOrCreateConversation(
   });
 
   return { conversation: created, isNew: true };
+}
+
+function deriveResolution(
+  status: ConversationStatus,
+  toolsUsed: string[],
+  messageCount: number,
+): string {
+  if (status === ConversationStatus.ESCALATED) return 'hard_escalation';
+  if (status === ConversationStatus.PAUSED) return 'paused';
+  if (toolsUsed.includes('book_appointment')) return 'booked';
+  if (status === ConversationStatus.TIMED_OUT && messageCount <= 1) return 'no_response';
+  if (status === ConversationStatus.COMPLETED && messageCount > 2) return 'soft_escalation';
+  return 'completed';
+}
+
+function mergeResolutionMetadata(
+  existing: Prisma.JsonValue | null,
+  resolution: string,
+): Prisma.InputJsonValue {
+  const base = (existing && typeof existing === 'object' && !Array.isArray(existing))
+    ? existing as Record<string, unknown>
+    : {};
+  return { ...base, resolution } satisfies Prisma.JsonObject;
 }
 
 function isConversationTimedOut(
@@ -1750,6 +1827,8 @@ export async function sendReply(
       });
     }
   }
+
+  logPipedriveActivity(workspaceId, agent, toAddress, sanitizedBody, chType).catch(() => {});
 
   return { sent: true };
 }

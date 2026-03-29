@@ -1,13 +1,16 @@
 /**
  * Agent Escalation Notification
  *
- * Sends email notifications to workspace owners/admins when an agent
- * conversation escalates to human intervention.
+ * Sends email notifications to workspace owners/admins and SMS to the
+ * contractor's forwarding number when an agent conversation escalates
+ * to human intervention.
  */
 
 import { EmailService } from '@/app/_lib/email';
 import { getWorkspaceMembers } from '@/app/_lib/workspace-access';
 import { logStructured } from '@/app/_lib/reliability';
+import { prisma } from '@/app/_lib/db';
+import { TwilioAdapter } from '@/app/_lib/integrations';
 
 interface EscalationParams {
   workspaceId: string;
@@ -71,6 +74,34 @@ export async function notifyEscalation(params: EscalationParams): Promise<void> 
         metadata: { recipient: email, conversationId },
       });
     }
+  }
+
+  // SMS to contractor's forwarding number (if phone config exists for this agent)
+  try {
+    const phoneConfig = await prisma.phoneConfig.findFirst({
+      where: { workspaceId, agentId: params.agentId, enabled: true, mode: 'AGENT' },
+    });
+
+    if (phoneConfig) {
+      const twilioAdapter = await TwilioAdapter.forWorkspace(workspaceId);
+      if (twilioAdapter) {
+        const truncatedSummary = summary.length > 300 ? summary.slice(0, 297) + '...' : summary;
+        await twilioAdapter.sendSms({
+          to: phoneConfig.forwardingNumber,
+          body: `Agent escalation — ${contactAddress}. ${truncatedSummary}`,
+          from: phoneConfig.twilioNumberKey,
+        });
+      }
+    }
+  } catch (err) {
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'agent_escalation_sms_failed',
+      workspaceId,
+      provider: 'twilio',
+      error: err instanceof Error ? err.message : 'Failed to send escalation SMS',
+      metadata: { agentId: params.agentId, conversationId },
+    });
   }
 }
 
