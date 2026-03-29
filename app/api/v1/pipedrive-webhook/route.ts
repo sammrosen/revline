@@ -42,8 +42,8 @@ const ECHO_WINDOW_MS = 30_000;
 const PipedriveWebhookPayloadSchema = z.object({
   v: z.number(),
   event: z.string(),
-  current: z.record(z.unknown()),
-  previous: z.record(z.unknown()).nullable(),
+  current: z.record(z.string(), z.unknown()),
+  previous: z.record(z.string(), z.unknown()).nullable(),
   meta: z.object({
     id: z.number(),
     timestamp: z.string(),
@@ -204,7 +204,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const existingLead = await prisma.lead.findFirst({
       where: {
         workspaceId: workspace.id,
-        updatedAt: { gte: echoThreshold },
+        lastEventAt: { gte: echoThreshold },
       },
       select: { id: true, properties: true },
     });

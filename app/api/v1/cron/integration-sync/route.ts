@@ -22,6 +22,7 @@ import { getActionExecutor } from '@/app/_lib/workflow/executors';
 import { applyRetryResult } from '@/app/_lib/services/integration-sync.service';
 import { logStructured } from '@/app/_lib/reliability';
 import type { WorkflowContext } from '@/app/_lib/workflow/types';
+import type { Prisma } from '@prisma/client';
 
 // =============================================================================
 // CONSTANTS
@@ -131,7 +132,7 @@ async function processSyncQueue(): Promise<CronStats> {
               where: { id: task.id },
               data: {
                 status: 'COMPLETED',
-                resultData: result.data ? (result.data as Record<string, unknown>) : undefined,
+                resultData: result.data ? (result.data as unknown as Prisma.InputJsonValue) : undefined,
                 completedAt: new Date(),
               },
             });

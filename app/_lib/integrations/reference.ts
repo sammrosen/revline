@@ -15,10 +15,7 @@ import type { IntegrationReference } from '@/app/_lib/types';
 // =============================================================================
 
 /** Triggers defined in the registry but without a live webhook/ingest route yet */
-const PLANNED_TRIGGERS = new Set([
-  'pipedrive.person_created',
-  'pipedrive.person_updated',
-]);
+const PLANNED_TRIGGERS = new Set<string>([]);
 
 /** Actions with executor stubs (log + skip, not fully implemented) */
 const STUB_ACTIONS = new Set([
@@ -52,6 +49,7 @@ const INTEGRATION_ROUTES: Record<string, IntegrationReference['routes']> = {
   PIPEDRIVE: [
     { method: 'GET', path: '/api/v1/integrations/[id]/pipedrive-fields', description: 'List person fields' },
     { method: 'POST', path: '/api/v1/integrations/[id]/test', description: 'Test connection' },
+    { method: 'POST', path: '/api/v1/pipedrive-webhook', description: 'Inbound person webhook' },
   ],
   OPENAI: [
     { method: 'GET', path: '/api/v1/integrations/[id]/openai-models', description: 'List available models' },
@@ -65,6 +63,16 @@ const INTEGRATION_ROUTES: Record<string, IntegrationReference['routes']> = {
 const INTEGRATION_SCENARIOS: Record<string, string[]> = {
   ABC_IGNITE: ['Member Lookup → Add to CRM', 'Member Sync Preview'],
   RESEND: ['Resend Webhook Status'],
+};
+
+/** Workflow design tips shown in the reference dialog */
+const INTEGRATION_BEST_PRACTICES: Record<string, string[]> = {
+  PIPEDRIVE: [
+    'Workflow order: Pipedrive create_or_update_person first, then RevLine create_lead — this stores the Pipedrive person ID on the lead for activity logging and sync.',
+    'Enable "Log agent activity" in the Pipedrive config to see agent messages on the person\'s timeline.',
+    'Generate a webhook secret and register the webhook URL in Pipedrive Settings > Webhooks for inbound sync.',
+    'Use "Sync Fields" in the config editor to auto-detect and map Pipedrive fields before building workflows.',
+  ],
 };
 
 /** Raw API endpoint counts from adapter.knownEndpoints (only wired for ABC Ignite) */
@@ -111,6 +119,7 @@ export function getIntegrationReference(integrationType: string): IntegrationRef
 
   const routes = INTEGRATION_ROUTES[integrationType] ?? [];
   const scenarios = INTEGRATION_SCENARIOS[integrationType] ?? [];
+  const bestPractices = INTEGRATION_BEST_PRACTICES[integrationType] ?? [];
 
   return {
     integration: integrationType,
@@ -128,6 +137,7 @@ export function getIntegrationReference(integrationType: string): IntegrationRef
       secrets: adapter.requirements?.secrets ?? [],
       metaKeys: adapter.requirements?.metaKeys ?? [],
     },
+    bestPractices,
   };
 }
 

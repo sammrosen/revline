@@ -121,7 +121,10 @@ export async function handleMissedCall(params: MissedCallParams): Promise<void> 
   if (phoneConfig.mode === 'NOTIFICATION') {
     await handleNotificationMode(twilioAdapter, phoneConfig, callerPhone, templateVars, correlationId, workspaceId);
   } else if (phoneConfig.mode === 'AGENT' && phoneConfig.agentId) {
-    await handleAgentMode(phoneConfig, callerPhone, twilioNumber, templateVars, leadId, correlationId, workspaceId);
+    const agentOk = await handleAgentMode(phoneConfig, callerPhone, twilioNumber, templateVars, leadId, correlationId, workspaceId);
+    if (!agentOk) {
+      await sendContractorFallback(twilioAdapter, phoneConfig, callerPhone, templateVars, correlationId, workspaceId);
+    }
   }
 
   logStructured({
@@ -213,7 +216,7 @@ async function handleAgentMode(
   leadId: string | undefined,
   correlationId: string,
   workspaceId: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const proactiveMessage = interpolateTemplate(phoneConfig.autoTextTemplate, templateVars);
 
@@ -242,6 +245,8 @@ async function handleAgentMode(
         error: result.error,
       },
     });
+
+    return result.success;
   } catch (err) {
     logStructured({
       correlationId,
@@ -249,6 +254,47 @@ async function handleAgentMode(
       workspaceId,
       provider: 'twilio',
       error: err instanceof Error ? err.message : 'Unknown error',
+    });
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fallback: notify contractor when agent mode can't reach the caller
+// (e.g., landline number that can't receive SMS)
+// ---------------------------------------------------------------------------
+
+async function sendContractorFallback(
+  twilioAdapter: TwilioAdapter,
+  phoneConfig: PhoneConfig,
+  callerPhone: string,
+  templateVars: Record<string, string | undefined>,
+  correlationId: string,
+  workspaceId: string,
+): Promise<void> {
+  try {
+    const notification = interpolateTemplate(phoneConfig.notificationTemplate, templateVars);
+    await twilioAdapter.sendSms({
+      to: phoneConfig.forwardingNumber,
+      body: notification,
+      from: phoneConfig.twilioNumberKey,
+    });
+    logStructured({
+      correlationId,
+      event: 'twilio_missed_call_agent_fallback_sent',
+      workspaceId,
+      provider: 'twilio',
+      success: true,
+      metadata: { to: phoneConfig.forwardingNumber, reason: 'agent_start_failed' },
+    });
+  } catch (err) {
+    logStructured({
+      correlationId,
+      event: 'twilio_missed_call_agent_fallback_failed',
+      workspaceId,
+      provider: 'twilio',
+      error: err instanceof Error ? err.message : 'Unknown error',
+      metadata: { to: phoneConfig.forwardingNumber },
     });
   }
 }

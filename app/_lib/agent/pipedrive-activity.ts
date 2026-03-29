@@ -16,17 +16,12 @@ import { PipedriveAdapter } from '@/app/_lib/integrations/pipedrive.adapter';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { logStructured } from '@/app/_lib/reliability';
 import { prisma } from '@/app/_lib/db';
-import type { AgentConfig } from './types';
+import type { PostSendContext } from './post-send-hooks';
 
-const JsonRecord = z.record(z.unknown()).catch({});
+const JsonRecord = z.record(z.string(), z.unknown()).catch({});
 
-export async function logPipedriveActivity(
-  workspaceId: string,
-  agent: AgentConfig,
-  contactAddress: string,
-  body: string,
-  channelType: string | undefined,
-): Promise<void> {
+export async function logPipedriveActivity(ctx: PostSendContext): Promise<void> {
+  const { workspaceId, agent, contactAddress, body, channelType } = ctx;
   try {
     const adapter = await PipedriveAdapter.forWorkspace(workspaceId);
     if (!adapter || !adapter.isActivityLoggingEnabled()) return;
@@ -34,10 +29,7 @@ export async function logPipedriveActivity(
     const lead = await prisma.lead.findFirst({
       where: {
         workspaceId,
-        OR: [
-          { email: contactAddress },
-          { phone: contactAddress },
-        ],
+        email: contactAddress,
       },
       select: { id: true, properties: true },
     });

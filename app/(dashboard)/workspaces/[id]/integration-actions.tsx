@@ -413,6 +413,7 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
               error={error}
               integrationId={integration.id}
               workspaceId={workspaceId}
+              workspaceSlug={workspaceSlug}
             />
           ) : (
             <>

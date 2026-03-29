@@ -94,8 +94,8 @@ export async function emitTrigger(
   const WorkflowActionSchema = z.array(z.object({
     adapter: z.string(),
     operation: z.string(),
-    params: z.record(z.unknown()),
-    conditions: z.record(z.unknown()).optional(),
+    params: z.record(z.string(), z.unknown()),
+    conditions: z.record(z.string(), z.unknown()).optional(),
     continueOnError: z.boolean().optional(),
   }));
 
@@ -113,8 +113,10 @@ export async function emitTrigger(
       executions.push({
         workflowId: workflow.id,
         workflowName: workflow.name,
-        status: 'FAILED',
-        actions: [],
+        status: 'failed',
+        actionsExecuted: 0,
+        actionsTotal: 0,
+        results: [],
         error: `Malformed workflow actions: ${actionsResult.error.message}`,
       });
       continue;

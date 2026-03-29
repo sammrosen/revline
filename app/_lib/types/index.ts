@@ -1097,6 +1097,7 @@ export interface IntegrationReference {
     secrets: string[];
     metaKeys: string[];
   };
+  bestPractices: string[];
 }
 
 // =============================================================================

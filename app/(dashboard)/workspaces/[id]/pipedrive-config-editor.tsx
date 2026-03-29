@@ -6,6 +6,8 @@ interface PipedriveMetaConfig {
   fieldMap: Record<string, string>;
   defaultPipelineId: number | null;
   stageMap: Record<string, number>;
+  logActivities: boolean;
+  webhookSecret: string;
 }
 
 interface PipedriveField {
@@ -28,12 +30,15 @@ interface PipedriveConfigEditorProps {
   error?: string;
   integrationId?: string;
   workspaceId?: string;
+  workspaceSlug?: string;
 }
 
 const DEFAULT_CONFIG: PipedriveMetaConfig = {
   fieldMap: {},
   defaultPipelineId: null,
   stageMap: {},
+  logActivities: false,
+  webhookSecret: '',
 };
 
 function parseMeta(value: string): PipedriveMetaConfig {
@@ -44,6 +49,8 @@ function parseMeta(value: string): PipedriveMetaConfig {
       fieldMap: parsed.fieldMap ?? {},
       defaultPipelineId: parsed.defaultPipelineId ?? null,
       stageMap: parsed.stageMap ?? {},
+      logActivities: parsed.logActivities ?? false,
+      webhookSecret: parsed.webhookSecret ?? '',
     };
   } catch {
     return DEFAULT_CONFIG;
@@ -542,6 +549,7 @@ export function PipedriveConfigEditor({
   error: externalError,
   integrationId,
   workspaceId,
+  workspaceSlug,
 }: PipedriveConfigEditorProps) {
   const [isJsonMode, setIsJsonMode] = useState(false);
   const [jsonText, setJsonText] = useState(value);
@@ -612,6 +620,8 @@ export function PipedriveConfigEditor({
       const obj: Record<string, unknown> = { fieldMap: meta.fieldMap };
       if (meta.defaultPipelineId !== null) obj.defaultPipelineId = meta.defaultPipelineId;
       if (Object.keys(meta.stageMap).length > 0) obj.stageMap = meta.stageMap;
+      if (meta.logActivities) obj.logActivities = true;
+      if (meta.webhookSecret) obj.webhookSecret = meta.webhookSecret;
       const newJson = JSON.stringify(obj, null, 2);
       onChange(newJson);
     }
@@ -630,6 +640,8 @@ export function PipedriveConfigEditor({
         fieldMap: parsed.fieldMap ?? {},
         defaultPipelineId: parsed.defaultPipelineId ?? null,
         stageMap: parsed.stageMap ?? {},
+        logActivities: parsed.logActivities ?? false,
+        webhookSecret: parsed.webhookSecret ?? '',
       });
       setIsJsonMode(false);
       setJsonError(null);
@@ -778,6 +790,85 @@ export function PipedriveConfigEditor({
           {testMessage}
         </p>
       )}
+
+      {/* Activity Logging Toggle */}
+      <div className="flex items-center justify-between p-3 rounded-lg border border-zinc-800 bg-zinc-900/60">
+        <div>
+          <h4 className="text-sm font-medium text-zinc-300">Log agent activity</h4>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Automatically log agent SMS and email messages to the person&apos;s Pipedrive timeline.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={meta.logActivities}
+          onClick={() => setMeta(prev => ({ ...prev, logActivities: !prev.logActivities }))}
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+            meta.logActivities ? 'bg-green-600' : 'bg-zinc-700'
+          }`}
+        >
+          <span
+            className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+              meta.logActivities ? 'translate-x-5' : 'translate-x-0'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* Webhook Secret + URL */}
+      <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
+        <h4 className="text-sm font-medium text-zinc-300">Inbound Webhook</h4>
+        <p className="text-xs text-zinc-500">
+          Receive person created/updated events from Pipedrive. Generate a secret, then register this URL as a webhook in Pipedrive.
+        </p>
+
+        <div className="flex items-end gap-2">
+          <div className="flex-1">
+            <label className="text-xs text-zinc-500 block mb-1">Webhook Secret</label>
+            <input
+              type="text"
+              value={meta.webhookSecret}
+              onChange={(e) => setMeta(prev => ({ ...prev, webhookSecret: e.target.value }))}
+              placeholder="Click Generate to create a secret"
+              className="w-full px-2 py-1.5 bg-zinc-950 border border-zinc-800 rounded text-sm font-mono text-white"
+              readOnly={false}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setMeta(prev => ({ ...prev, webhookSecret: crypto.randomUUID() }))}
+            className="px-3 py-1.5 text-sm bg-zinc-800 text-white rounded hover:bg-zinc-700 transition-colors"
+          >
+            Generate
+          </button>
+        </div>
+
+        {meta.webhookSecret && (
+          <div>
+            <label className="text-xs text-zinc-500 block mb-1">Webhook URL (copy to Pipedrive)</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/pipedrive-webhook?source=${workspaceSlug || 'YOUR_SLUG'}&secret=${meta.webhookSecret}`}
+                className="flex-1 px-2 py-1.5 bg-zinc-950 border border-zinc-800 rounded text-xs font-mono text-zinc-400"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const url = `${window.location.origin}/api/v1/pipedrive-webhook?source=${workspaceSlug || 'YOUR_SLUG'}&secret=${meta.webhookSecret}`;
+                  navigator.clipboard.writeText(url);
+                }}
+                className="px-2.5 py-1.5 text-xs bg-zinc-800 text-zinc-400 hover:text-white rounded hover:bg-zinc-700 transition-colors"
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Field Mappings — Auto-Mapping Panel */}
       <FieldMappingPanel

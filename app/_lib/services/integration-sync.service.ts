@@ -22,7 +22,7 @@ import { logStructured } from '@/app/_lib/reliability';
 import type { LeadPropertyDefinition } from '@/app/_lib/types';
 import type { Prisma } from '@prisma/client';
 
-const JsonRecord = z.record(z.unknown()).catch({});
+const JsonRecord = z.record(z.string(), z.unknown()).catch({});
 const LeadPropertySchemaArray = z.array(z.object({
   key: z.string(),
   label: z.string().optional(),

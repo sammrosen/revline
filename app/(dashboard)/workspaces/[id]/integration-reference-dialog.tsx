@@ -9,6 +9,7 @@ import {
   Globe,
   FlaskConical,
   KeyRound,
+  Lightbulb,
 } from 'lucide-react';
 import type { IntegrationReference } from '@/app/_lib/types';
 import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
@@ -213,6 +214,22 @@ export function IntegrationReferenceDialog({ reference }: IntegrationReferenceDi
                   </div>
                 )}
               </Section>
+
+              {/* Best Practices */}
+              {reference.bestPractices?.length > 0 && (
+                <Section icon={Lightbulb} label="Best Practices">
+                  <div className="space-y-1.5">
+                    {reference.bestPractices.map((tip) => (
+                      <p
+                        key={tip}
+                        className="text-xs text-zinc-400 pl-2 border-l-2 border-zinc-700"
+                      >
+                        {tip}
+                      </p>
+                    ))}
+                  </div>
+                </Section>
+              )}
             </div>
           </div>
         </div>

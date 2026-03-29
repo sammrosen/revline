@@ -21,13 +21,12 @@ import {
 } from '@/app/_lib/services/lead-properties';
 import { WorkflowContext, ActionResult, ActionExecutor } from '../types';
 import { Prisma } from '@prisma/client';
-import { enqueueFailedAction } from '@/app/_lib/services/integration-sync.service';
 import { logStructured } from '@/app/_lib/reliability';
 
 const LeadPropertySchemaValidator = z.array(z.object({
   key: z.string(),
   label: z.string(),
-  type: z.string(),
+  type: z.enum(['string', 'number', 'boolean', 'email', 'url']),
   required: z.boolean(),
 }));
 
@@ -51,46 +50,6 @@ async function getPropertySchema(workspaceId: string): Promise<LeadPropertyDefin
   });
   const result = LeadPropertySchemaValidator.safeParse(workspace?.leadPropertySchema);
   return result.success ? result.data : [];
-}
-
-const PIPEDRIVE_PERSON_ID_DEF: LeadPropertyDefinition = {
-  key: 'pipedrivePersonId',
-  label: 'Pipedrive Person ID',
-  type: 'number',
-  required: false,
-};
-
-/**
- * Auto-provision pipedrivePersonId in the workspace's leadPropertySchema
- * so it appears as a column in the leads table. Idempotent — skips if
- * the property already exists. Fail-safe: never blocks lead creation.
- */
-async function ensurePipedrivePropertyInSchema(workspaceId: string): Promise<void> {
-  try {
-    const schema = await getPropertySchema(workspaceId);
-    if (schema.some(p => p.key === 'pipedrivePersonId')) return;
-
-    const updated = [...schema, PIPEDRIVE_PERSON_ID_DEF];
-    await prisma.workspace.update({
-      where: { id: workspaceId },
-      data: { leadPropertySchema: updated as unknown as Prisma.InputJsonValue },
-    });
-
-    await emitEvent({
-      workspaceId,
-      system: EventSystem.BACKEND,
-      eventType: 'workspace_schema_auto_provisioned',
-      success: true,
-    });
-  } catch (err) {
-    logStructured({
-      correlationId: workspaceId,
-      event: 'workspace_schema_auto_provision_failed',
-      workspaceId,
-      success: false,
-      error: err instanceof Error ? err.message : 'Unknown',
-    });
-  }
 }
 
 /**
@@ -174,10 +133,12 @@ const createLead: ActionExecutor = {
       }
 
       let mergedProperties = properties ?? {};
-      const pipedrivePersonId = ctx.actionData.pipedrivePersonId as number | undefined;
-      if (pipedrivePersonId) {
-        mergedProperties = { ...mergedProperties, pipedrivePersonId };
-        await ensurePipedrivePropertyInSchema(ctx.workspaceId);
+
+      // Merge all upstream action data into lead properties generically.
+      // e.g. Pipedrive returns { pipedrivePersonId: 842 }, HubSpot could
+      // return { hubspotContactId: 123 } — all propagate without executor changes.
+      if (Object.keys(ctx.actionData).length > 0) {
+        mergedProperties = { ...mergedProperties, ...ctx.actionData };
       }
 
       const hasProperties = Object.keys(mergedProperties).length > 0;
@@ -188,18 +149,6 @@ const createLead: ActionExecutor = {
         source,
         properties: hasProperties ? mergedProperties : undefined,
       });
-
-      // Fallback enqueue: if Pipedrive should have run but didn't produce a person ID,
-      // enqueue for async retry now that the lead exists.
-      if (!pipedrivePersonId && ctx.email) {
-        await enqueueFailedAction({
-          workspaceId: ctx.workspaceId,
-          email: ctx.email,
-          leadId,
-          adapter: 'pipedrive',
-          operation: 'create_or_update_person',
-        });
-      }
 
       await emitEvent({
         workspaceId: ctx.workspaceId,
@@ -214,7 +163,6 @@ const createLead: ActionExecutor = {
         data: {
           leadId,
           source,
-          ...(pipedrivePersonId ? { pipedrivePersonId } : {}),
           ...(hasProperties ? { properties: mergedProperties } : {}),
         },
       };

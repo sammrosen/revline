@@ -38,7 +38,7 @@ import { retryWithBackoff } from './retry';
 import { cancelPendingFollowUps } from './follow-up';
 import { notifyResolution } from '@/app/_lib/phone';
 import { checkConsent, revokeConsent } from '@/app/_lib/services/consent.service';
-import { logPipedriveActivity } from './pipedrive-activity';
+import { dispatchPostSendHooks } from './post-send-hooks';
 import { withTransaction } from '@/app/_lib/utils/transaction';
 import { maskContact } from '@/app/_lib/utils/validation';
 import { resolveGuardrails } from './guardrails/constants';
@@ -1828,7 +1828,7 @@ export async function sendReply(
     }
   }
 
-  logPipedriveActivity(workspaceId, agent, toAddress, sanitizedBody, chType).catch(() => {});
+  dispatchPostSendHooks({ workspaceId, agent, contactAddress: toAddress, body: sanitizedBody, channelType: chType ?? undefined }).catch(() => {});
 
   return { sent: true };
 }
