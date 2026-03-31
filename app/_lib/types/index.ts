@@ -683,6 +683,8 @@ export interface HeaderStyle {
 export interface PageStyleOverrides {
   typography?: TypographyConfig;
   headerStyle?: HeaderStyle;
+  /** Logo size multiplier: 0.5 (small) to 2.0 (xlarge), default 1 */
+  logoSize?: number;
 }
 
 export interface RevlineMeta {

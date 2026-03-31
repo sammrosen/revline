@@ -262,8 +262,8 @@ export function isValidHexColor(color: string): boolean {
 export function isValidLogoUrl(url: string): boolean {
   if (!url) return true; // Empty is valid (no logo)
   
-  // Accept data URLs (base64 encoded images)
-  if (url.startsWith('data:image/')) return true;
+  // Accept data URLs (base64 encoded images) up to ~500KB encoded
+  if (url.startsWith('data:image/')) return url.length < 500_000;
   
   // Accept https URLs
   try {

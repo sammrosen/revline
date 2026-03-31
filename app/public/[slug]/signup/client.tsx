@@ -112,6 +112,7 @@ interface SignupClientProps {
   plans: SignupPlan[];
   copy: ResolvedSignupCopy;
   policies: ResolvedSignupPolicies;
+  logoSize?: number;
   features: ResolvedFeatures;
   signupFeatures: ResolvedSignupFeatures;
   previewMode?: boolean;
@@ -212,6 +213,7 @@ export function SignupClient({
   plans,
   copy,
   policies,
+  logoSize = 1,
   features,
   signupFeatures,
   previewMode = false,
@@ -394,7 +396,8 @@ export function SignupClient({
               <img 
                 src={branding.logo} 
                 alt={workspaceName} 
-                className="h-8 object-contain"
+                className="object-contain"
+                style={{ height: `${2 * logoSize}rem`, margin: `${-(logoSize - 1)}rem 0` }}
               />
             ) : (() => {
               const hs = headerStyle || {};
@@ -542,7 +545,8 @@ export function SignupClient({
                 <img 
                   src={branding.logo} 
                   alt={workspaceName} 
-                  className="h-6 object-contain opacity-60"
+                  className="object-contain opacity-60"
+                  style={{ height: `${1.5 * logoSize}rem` }}
                 />
               ) : (
                 <span className="text-sm font-semibold" style={{ color: brand.textMuted }}>
