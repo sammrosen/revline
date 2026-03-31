@@ -30,6 +30,7 @@ export interface LandingClientProps {
   typography?: ResolvedTypography;
   copy: ResolvedLandingCopy;
   features: ResolvedFeatures;
+  logoSize?: number;
   webchat?: {
     agentId: string;
     enabled: boolean;
@@ -96,6 +97,7 @@ export function LandingClient({
   typography,
   copy,
   features,
+  logoSize = 1,
   webchat,
 }: LandingClientProps) {
   const resolvedTheme = theme || DEFAULT_THEME_MAPPING;
@@ -187,7 +189,8 @@ export function LandingClient({
               <img
                 src={branding.logo}
                 alt={workspaceName}
-                className="h-8 sm:h-10 w-auto object-contain shrink-0"
+                className="w-auto object-contain shrink-0"
+                style={{ height: `${2 * logoSize}rem`, margin: `${-(logoSize - 1)}rem 0` }}
               />
             ) : hsVariant === 'pill' ? (
               <div className="bg-white px-3 py-2 rounded shrink-0">
@@ -275,7 +278,7 @@ export function LandingClient({
                   <>
                     {branding.logo && (
                       <div className="flex justify-center mb-4">
-                        <img src={branding.logo} alt="" className="h-14 w-auto object-contain" />
+                        <img src={branding.logo} alt="" className="w-auto object-contain" style={{ height: `${3.5 * logoSize}rem` }} />
                       </div>
                     )}
                     <h2

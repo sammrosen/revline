@@ -134,6 +134,7 @@ interface TypographyConfig {
 interface PageStyleOverrides {
   typography?: TypographyConfig;
   headerStyle?: HeaderStyleConfig;
+  logoSize?: number;
 }
 
 interface RevlineMeta {
@@ -567,6 +568,7 @@ export function RevlineConfigEditor({
                           theme={meta.theme}
                           headerStyle={ps?.headerStyle ?? meta.headerStyle}
                           typography={ps?.typography ?? meta.typography}
+                          logoSize={ps?.logoSize}
                           copy={meta.copy?.booking}
                           landingCopy={meta.copy?.landing}
                           workspaceName={workspaceSlug}
@@ -859,6 +861,7 @@ const JPEG_QUALITY = 0.8;
 const MAX_UPLOAD_MB = 10;
 
 function compressImage(file: File, maxDim: number, quality: number): Promise<string> {
+  const preserveAlpha = file.type === 'image/png' || file.type === 'image/webp';
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
@@ -876,7 +879,10 @@ function compressImage(file: File, maxDim: number, quality: number): Promise<str
       const ctx = canvas.getContext('2d');
       if (!ctx) { reject(new Error('Canvas not supported')); return; }
       ctx.drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
+      resolve(preserveAlpha
+        ? canvas.toDataURL('image/png')
+        : canvas.toDataURL('image/jpeg', quality)
+      );
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
     img.src = url;
@@ -886,16 +892,16 @@ function compressImage(file: File, maxDim: number, quality: number): Promise<str
 function ImageUploadField({
   value,
   onChange,
-  maxSizeKB: _unused,
   previewHeight = 'h-10',
   previewAspect,
+  previewBgClass,
   label = 'image',
 }: {
   value: string;
   onChange: (v: string) => void;
-  maxSizeKB?: number;
   previewHeight?: string;
   previewAspect?: string;
+  previewBgClass?: string;
   label?: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -935,13 +941,15 @@ function ImageUploadField({
     <div className="space-y-2">
       {value && (
         <div className="flex items-center gap-3 p-2 bg-zinc-900 rounded border border-zinc-700">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={value}
-            alt={`${label} preview`}
-            className={`${previewHeight} ${previewAspect ?? 'w-auto max-w-[120px]'} object-cover rounded`}
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
+          <div className={previewBgClass}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={value}
+              alt={`${label} preview`}
+              className={`${previewHeight} ${previewAspect ?? 'w-auto max-w-[120px] object-cover'} rounded`}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs text-zinc-400 truncate">
               {isDataUrl ? 'Uploaded image' : value}
@@ -1000,7 +1008,7 @@ function ImageUploadField({
 }
 
 function LogoUploadField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return <ImageUploadField value={value} onChange={onChange} maxSizeKB={500} label="logo" />;
+  return <ImageUploadField value={value} onChange={onChange} label="logo" previewAspect="w-auto max-w-[120px] object-contain" previewBgClass="bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%3Crect%20width%3D%228%22%20height%3D%228%22%20fill%3D%22%23e5e7eb%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%228%22%20width%3D%228%22%20height%3D%228%22%20fill%3D%22%23e5e7eb%22%2F%3E%3Crect%20x%3D%228%22%20width%3D%228%22%20height%3D%228%22%20fill%3D%22%23fff%22%2F%3E%3Crect%20y%3D%228%22%20width%3D%228%22%20height%3D%228%22%20fill%3D%22%23fff%22%2F%3E%3C%2Fsvg%3E')] rounded" />;
 }
 
 function GalleryAddImage({ onAdd }: { onAdd: (url: string) => void }) {
@@ -1251,6 +1259,7 @@ function BuildTab({
       {isBookingForm && (
         <>
           <BookingCopySection meta={meta} updateMeta={updateMeta} />
+          <LogoSizeControl meta={meta} updateMeta={updateMeta} formType="booking" />
           <TypographySection meta={meta} updateMeta={updateMeta} formType="booking" />
         </>
       )}
@@ -1259,6 +1268,7 @@ function BuildTab({
         <>
           <SignupCopySection meta={meta} updateMeta={updateMeta} />
           <SignupConfigSection meta={meta} updateMeta={updateMeta} />
+          <LogoSizeControl meta={meta} updateMeta={updateMeta} formType="signup" />
           <TypographySection meta={meta} updateMeta={updateMeta} formType="signup" />
         </>
       )}
@@ -1266,6 +1276,7 @@ function BuildTab({
       {isLandingForm && (
         <>
           <LandingBuildSection meta={meta} updateMeta={updateMeta} agents={agents} />
+          <LogoSizeControl meta={meta} updateMeta={updateMeta} formType="landing" />
           <TypographySection meta={meta} updateMeta={updateMeta} formType="landing" />
         </>
       )}
@@ -1584,6 +1595,69 @@ function TypographySection({
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// LOGO SIZE STEPPER (for Build tab — per-form)
+// =============================================================================
+
+const LOGO_SIZE_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
+const LOGO_SIZE_LABELS: Record<number, string> = {
+  0.5: 'XS', 0.75: 'S', 1: 'M', 1.25: 'L', 1.5: 'XL', 1.75: 'XXL', 2: 'Max',
+};
+
+function LogoSizeControl({
+  meta,
+  updateMeta,
+  formType,
+}: {
+  meta: RevlineMeta;
+  updateMeta: (m: RevlineMeta) => void;
+  formType: string;
+}) {
+  const ps = meta.pageStyles?.[formType];
+  const current = ps?.logoSize ?? 1;
+  const idx = LOGO_SIZE_STEPS.indexOf(current as typeof LOGO_SIZE_STEPS[number]);
+  const stepIdx = idx === -1 ? 2 : idx; // default to index 2 (1 = "M")
+
+  const setLogoSize = (size: number) => {
+    updateMeta({
+      ...meta,
+      pageStyles: {
+        ...meta.pageStyles,
+        [formType]: { ...ps, logoSize: size },
+      },
+    });
+  };
+
+  return (
+    <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-4">
+      <h4 className="text-sm font-medium text-zinc-300 mb-1">Logo Size</h4>
+      <p className="text-xs text-zinc-500 mb-3">Adjust the logo size on the public page</p>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          disabled={stepIdx <= 0}
+          onClick={() => setLogoSize(LOGO_SIZE_STEPS[stepIdx - 1])}
+          className="w-8 h-8 flex items-center justify-center rounded bg-zinc-900 border border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-lg font-medium"
+        >
+          −
+        </button>
+        <span className="text-sm text-zinc-200 font-medium w-8 text-center">
+          {LOGO_SIZE_LABELS[current] ?? `${current}x`}
+        </span>
+        <button
+          type="button"
+          disabled={stepIdx >= LOGO_SIZE_STEPS.length - 1}
+          onClick={() => setLogoSize(LOGO_SIZE_STEPS[stepIdx + 1])}
+          className="w-8 h-8 flex items-center justify-center rounded bg-zinc-900 border border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-lg font-medium"
+        >
+          +
+        </button>
+        <span className="text-xs text-zinc-500 ml-1">({current}×)</span>
       </div>
     </div>
   );
@@ -2526,7 +2600,6 @@ function LandingBuildSection({
             <ImageUploadField
               value={val}
               onChange={(v) => updateCopy(key, v)}
-              maxSizeKB={2048}
               previewHeight="h-20"
               previewAspect="w-40 aspect-video"
               label="hero background"
@@ -2747,7 +2820,6 @@ function LandingBuildSection({
                 <ImageUploadField
                   value={svc.image || ''}
                   onChange={(v) => updateServiceAt(i, { image: v || undefined })}
-                  maxSizeKB={2048}
                   previewHeight="h-16"
                   previewAspect="aspect-video w-28"
                   label="service image"

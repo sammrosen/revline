@@ -82,6 +82,8 @@ interface MagicLinkBookingClientProps {
   typography?: ResolvedTypography;
   /** Copy configuration for booking template */
   copy: ResolvedBookingCopy;
+  /** Logo size multiplier */
+  logoSize?: number;
   /** Feature flags */
   features: ResolvedFeatures;
   /** Preview mode - uses mock data, no API calls */
@@ -193,6 +195,7 @@ export function MagicLinkBookingClient({
   headerStyle,
   typography,
   copy,
+  logoSize = 1,
   features,
   previewMode = false,
 }: MagicLinkBookingClientProps) {
@@ -420,7 +423,8 @@ export function MagicLinkBookingClient({
               <img 
                 src={branding.logo} 
                 alt={workspaceName} 
-                className="h-8 object-contain"
+                className="object-contain"
+                style={{ height: `${2 * logoSize}rem`, margin: `${-(logoSize - 1)}rem 0` }}
               />
             ) : (() => {
               const hs = headerStyle || {};

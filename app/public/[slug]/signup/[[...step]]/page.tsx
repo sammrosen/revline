@@ -105,6 +105,7 @@ export default async function PublicSignupPage({ params }: SignupPageProps) {
       plans={config.plans}
       copy={config.copy}
       policies={config.policies}
+      logoSize={config.logoSize}
       features={config.features}
       signupFeatures={config.signupFeatures}
     />

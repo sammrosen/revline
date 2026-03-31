@@ -74,6 +74,7 @@ interface MockPreviewProps {
   landingCopy?: LandingCopyConfig;
   workspaceName: string;
   formType: 'booking' | 'signup' | 'landing';
+  logoSize?: number;
   signupConfig?: SignupConfig;
   webchat?: {
     agentId: string;
@@ -95,6 +96,7 @@ export function FormPreviewMock({
   landingCopy,
   workspaceName,
   formType,
+  logoSize,
   signupConfig,
   webchat,
 }: MockPreviewProps) {
@@ -199,6 +201,7 @@ export function FormPreviewMock({
         typography={resolvedTypography}
         copy={resolvedLandingCopy}
         features={DEFAULT_FEATURES}
+        logoSize={logoSize}
         webchat={webchat}
       />
     );
@@ -244,6 +247,7 @@ export function FormPreviewMock({
           terms: signupConfig?.policies?.terms || DEFAULT_SIGNUP_POLICIES.terms,
         }}
         features={DEFAULT_FEATURES}
+        logoSize={logoSize}
         signupFeatures={{
           showPromoCode: signupConfig?.features?.showPromoCode ?? DEFAULT_SIGNUP_FEATURES.showPromoCode,
           showPoweredBy: signupConfig?.features?.showPoweredBy ?? DEFAULT_SIGNUP_FEATURES.showPoweredBy,
@@ -283,6 +287,7 @@ export function FormPreviewMock({
       headerStyle={resolvedHeaderStyle}
       typography={resolvedTypography}
       copy={resolvedCopy}
+      logoSize={logoSize}
       features={resolvedFeatures}
       previewMode={true}
     />

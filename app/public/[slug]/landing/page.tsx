@@ -60,6 +60,7 @@ export default async function PublicLandingPage({ params }: LandingPageProps) {
       typography={config.typography}
       copy={config.copy}
       features={config.features}
+      logoSize={config.logoSize}
       webchat={config.webchat}
     />
   );

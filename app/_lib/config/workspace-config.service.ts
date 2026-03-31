@@ -139,6 +139,7 @@ export interface ResolvedWorkspaceConfig {
   headerStyle: ResolvedHeaderStyle;
   typography: ResolvedTypography;
   features: ResolvedFeatures;
+  logoSize: number;
 }
 
 /**
@@ -293,6 +294,7 @@ export class WorkspaceConfigService {
       headerStyle: this.resolveHeaderStyle(meta?.headerStyle),
       typography: this.resolveTypography(meta?.typography),
       features: this.resolveFeatures(meta?.features),
+      logoSize: 1,
     };
   }
 
@@ -330,6 +332,7 @@ export class WorkspaceConfigService {
       headerStyle: this.resolveHeaderStyle(ps?.headerStyle ?? meta?.headerStyle),
       typography: this.resolveTypography(ps?.typography ?? meta?.typography),
       features: this.resolveFeatures(meta?.features),
+      logoSize: ps?.logoSize ?? 1,
       copy: this.resolveBookingCopy(mergedCopy),
     };
   }
@@ -370,6 +373,7 @@ export class WorkspaceConfigService {
       headerStyle: this.resolveHeaderStyle(ps?.headerStyle ?? meta?.headerStyle),
       typography: this.resolveTypography(ps?.typography ?? meta?.typography),
       features: this.resolveFeatures(meta?.features),
+      logoSize: ps?.logoSize ?? 1,
       enabled: signupConfig?.enabled ?? false,
       club: this.resolveSignupClub(signupConfig?.club),
       plans: this.resolveSignupPlans(signupConfig?.plans),
@@ -410,6 +414,7 @@ export class WorkspaceConfigService {
       headerStyle: this.resolveHeaderStyle(ps?.headerStyle ?? meta?.headerStyle),
       typography: this.resolveTypography(ps?.typography ?? meta?.typography),
       features: this.resolveFeatures(meta?.features),
+      logoSize: ps?.logoSize ?? 1,
       copy: this.resolveLandingCopy(mergedCopy),
       webchat: meta?.webchat?.enabled ? meta.webchat : undefined,
     };

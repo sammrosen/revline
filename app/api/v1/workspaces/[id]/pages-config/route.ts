@@ -71,10 +71,21 @@ export async function GET(
   const access = await getWorkspaceAccess(userId, id);
   if (!access) return ApiResponse.error('Workspace not found', 404, ErrorCodes.NOT_FOUND);
 
-  const workspace = await prisma.workspace.findUnique({
-    where: { id },
-    select: { pagesConfig: true },
-  });
+  try {
+    const workspace = await prisma.workspace.findUnique({
+      where: { id },
+      select: { pagesConfig: true },
+    });
 
-  return ApiResponse.success({ pagesConfig: workspace?.pagesConfig ?? null });
+    return ApiResponse.success({ pagesConfig: workspace?.pagesConfig ?? null });
+  } catch (error) {
+    logStructured({
+      correlationId: id,
+      event: 'pages_config_get_failed',
+      workspaceId: id,
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown',
+    });
+    return ApiResponse.internalError();
+  }
 }
