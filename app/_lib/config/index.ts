@@ -47,6 +47,7 @@ export {
   DEFAULT_SIGNUP_POLICIES,
   EXAMPLE_SIGNUP_PLAN,
   isValidHexColor,
+  isValidImageUrl,
   isValidLogoUrl,
   sanitizeCopyText,
 } from './defaults';

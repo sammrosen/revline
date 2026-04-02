@@ -166,6 +166,7 @@ enum IntegrationType {
   TWILIO
   ANTHROPIC
   OPENAI
+  PIPEDRIVE
 }
 
 enum HealthStatus {

@@ -45,6 +45,7 @@ import {
   DEFAULT_SIGNUP_FEATURES,
   DEFAULT_SIGNUP_POLICIES,
   isValidHexColor,
+  isValidImageUrl,
   isValidLogoUrl,
   sanitizeCopyText,
 } from './defaults';
@@ -914,7 +915,7 @@ export class WorkspaceConfigService {
     if (overrides.heroCtaLink) {
       result.heroCtaLink = sanitizeCopyText(overrides.heroCtaLink, 200);
     }
-    if (overrides.heroBackgroundImage && isValidLogoUrl(overrides.heroBackgroundImage)) {
+    if (overrides.heroBackgroundImage && isValidImageUrl(overrides.heroBackgroundImage)) {
       result.heroBackgroundImage = overrides.heroBackgroundImage;
     }
     if (overrides.heroBackgroundPosition) {
@@ -933,14 +934,14 @@ export class WorkspaceConfigService {
       result.services = overrides.services.slice(0, 12).map(s => ({
         title: sanitizeCopyText(s.title || '', 60),
         description: sanitizeCopyText(s.description || '', 200),
-        ...(s.image && isValidLogoUrl(s.image) ? { image: s.image } : {}),
+        ...(s.image && isValidImageUrl(s.image) ? { image: s.image } : {}),
         ...(s.ctaLink ? { ctaLink: sanitizeCopyText(s.ctaLink, 200) } : {}),
       }));
     }
     if (Array.isArray(overrides.images) && overrides.images.length > 0) {
       result.images = this.normalizeImages(overrides.images)
         .slice(0, 9)
-        .filter(img => isValidLogoUrl(img.url));
+        .filter(img => isValidImageUrl(img.url));
     }
     if (overrides.contactTitle) {
       result.contactTitle = sanitizeCopyText(overrides.contactTitle, 60);
