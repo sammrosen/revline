@@ -256,22 +256,22 @@ export function isValidHexColor(color: string): boolean {
 }
 
 /**
- * Validate a logo URL or data URL
- * Accepts https URLs or base64 data URLs for uploaded images
+ * Validate an image URL or data URL.
+ * @param maxDataUrlLen – cap for base64 data URLs (default 2MB encoded covers hero backgrounds)
  */
-export function isValidLogoUrl(url: string): boolean {
-  if (!url) return true; // Empty is valid (no logo)
-  
-  // Accept data URLs (base64 encoded images) up to ~500KB encoded
-  if (url.startsWith('data:image/')) return url.length < 500_000;
-  
-  // Accept https URLs
+export function isValidImageUrl(url: string, maxDataUrlLen = 2_000_000): boolean {
+  if (!url) return true;
+  if (url.startsWith('data:image/')) return url.length <= maxDataUrlLen;
   try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:';
+    return new URL(url).protocol === 'https:';
   } catch {
     return false;
   }
+}
+
+/** Alias kept for call-sites that validate logos (tighter 500KB cap). */
+export function isValidLogoUrl(url: string): boolean {
+  return isValidImageUrl(url, 500_000);
 }
 
 /**

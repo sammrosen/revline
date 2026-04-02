@@ -856,12 +856,25 @@ const IMAGE_ICON = (
   </svg>
 );
 
-const MAX_IMAGE_DIMENSION = 1920;
-const JPEG_QUALITY = 0.8;
 const MAX_UPLOAD_MB = 10;
 
-function compressImage(file: File, maxDim: number, quality: number): Promise<string> {
-  const preserveAlpha = file.type === 'image/png' || file.type === 'image/webp';
+const IMAGE_LIMITS = {
+  logo:       { maxDim: 512,  maxBytes: 400_000, quality: 0.85 },
+  hero:       { maxDim: 1920, maxBytes: 1_500_000, quality: 0.75 },
+  gallery:    { maxDim: 1280, maxBytes: 600_000, quality: 0.75 },
+  service:    { maxDim: 800,  maxBytes: 400_000, quality: 0.75 },
+  image:      { maxDim: 1280, maxBytes: 800_000, quality: 0.8 },
+} as const;
+
+type ImagePreset = keyof typeof IMAGE_LIMITS;
+
+function compressImage(
+  file: File,
+  preset: ImagePreset = 'image',
+): Promise<string> {
+  const { maxDim, maxBytes, quality } = IMAGE_LIMITS[preset];
+  const preserveAlpha = (preset === 'logo') && (file.type === 'image/png' || file.type === 'image/webp');
+
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
@@ -879,10 +892,24 @@ function compressImage(file: File, maxDim: number, quality: number): Promise<str
       const ctx = canvas.getContext('2d');
       if (!ctx) { reject(new Error('Canvas not supported')); return; }
       ctx.drawImage(img, 0, 0, width, height);
-      resolve(preserveAlpha
-        ? canvas.toDataURL('image/png')
-        : canvas.toDataURL('image/jpeg', quality)
-      );
+
+      if (preserveAlpha) {
+        const result = canvas.toDataURL('image/png');
+        if (result.length > maxBytes) {
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } else {
+          resolve(result);
+        }
+        return;
+      }
+
+      let q = quality;
+      let result = canvas.toDataURL('image/jpeg', q);
+      while (result.length > maxBytes && q > 0.3) {
+        q -= 0.1;
+        result = canvas.toDataURL('image/jpeg', q);
+      }
+      resolve(result);
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
     img.src = url;
@@ -892,6 +919,7 @@ function compressImage(file: File, maxDim: number, quality: number): Promise<str
 function ImageUploadField({
   value,
   onChange,
+  preset = 'image',
   previewHeight = 'h-10',
   previewAspect,
   previewBgClass,
@@ -899,6 +927,7 @@ function ImageUploadField({
 }: {
   value: string;
   onChange: (v: string) => void;
+  preset?: ImagePreset;
   previewHeight?: string;
   previewAspect?: string;
   previewBgClass?: string;
@@ -926,7 +955,7 @@ function ImageUploadField({
 
     try {
       setCompressing(true);
-      const dataUrl = await compressImage(file, MAX_IMAGE_DIMENSION, JPEG_QUALITY);
+      const dataUrl = await compressImage(file, preset);
       onChange(dataUrl);
     } catch {
       setError('Failed to process image');
@@ -1008,7 +1037,7 @@ function ImageUploadField({
 }
 
 function LogoUploadField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return <ImageUploadField value={value} onChange={onChange} label="logo" previewAspect="w-auto max-w-[120px] object-contain" previewBgClass="bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%3Crect%20width%3D%228%22%20height%3D%228%22%20fill%3D%22%23e5e7eb%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%228%22%20width%3D%228%22%20height%3D%228%22%20fill%3D%22%23e5e7eb%22%2F%3E%3Crect%20x%3D%228%22%20width%3D%228%22%20height%3D%228%22%20fill%3D%22%23fff%22%2F%3E%3Crect%20y%3D%228%22%20width%3D%228%22%20height%3D%228%22%20fill%3D%22%23fff%22%2F%3E%3C%2Fsvg%3E')] rounded" />;
+  return <ImageUploadField value={value} onChange={onChange} preset="logo" label="logo" previewAspect="w-auto max-w-[120px] object-contain" previewBgClass="bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%3Crect%20width%3D%228%22%20height%3D%228%22%20fill%3D%22%23e5e7eb%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%228%22%20width%3D%228%22%20height%3D%228%22%20fill%3D%22%23e5e7eb%22%2F%3E%3Crect%20x%3D%228%22%20width%3D%228%22%20height%3D%228%22%20fill%3D%22%23fff%22%2F%3E%3Crect%20y%3D%228%22%20width%3D%228%22%20height%3D%228%22%20fill%3D%22%23fff%22%2F%3E%3C%2Fsvg%3E')] rounded" />;
 }
 
 function GalleryAddImage({ onAdd }: { onAdd: (url: string) => void }) {
@@ -1033,7 +1062,7 @@ function GalleryAddImage({ onAdd }: { onAdd: (url: string) => void }) {
 
     try {
       setCompressing(true);
-      const dataUrl = await compressImage(file, MAX_IMAGE_DIMENSION, JPEG_QUALITY);
+      const dataUrl = await compressImage(file, 'gallery');
       onAdd(dataUrl);
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch {
@@ -2600,6 +2629,7 @@ function LandingBuildSection({
             <ImageUploadField
               value={val}
               onChange={(v) => updateCopy(key, v)}
+              preset="hero"
               previewHeight="h-20"
               previewAspect="w-40 aspect-video"
               label="hero background"
@@ -2820,6 +2850,7 @@ function LandingBuildSection({
                 <ImageUploadField
                   value={svc.image || ''}
                   onChange={(v) => updateServiceAt(i, { image: v || undefined })}
+                  preset="service"
                   previewHeight="h-16"
                   previewAspect="aspect-video w-28"
                   label="service image"

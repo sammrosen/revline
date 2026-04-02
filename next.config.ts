@@ -6,7 +6,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
-  /* config options here */
+  experimental: {
+    proxyClientMaxBodySize: '25mb',
+  },
 };
 
 // Wrap with Sentry for error tracking and source maps
