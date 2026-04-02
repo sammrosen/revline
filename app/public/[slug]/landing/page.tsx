@@ -9,9 +9,9 @@
  */
 
 import { notFound } from 'next/navigation';
-import { prisma } from '@/app/_lib/db';
 import { WorkspaceStatus } from '@prisma/client';
 import { WorkspaceConfigService } from '@/app/_lib/config';
+import { getWorkspaceBySlug } from '@/app/_lib/public-page';
 import { LandingClient } from './client';
 
 interface LandingPageProps {
@@ -23,15 +23,7 @@ interface LandingPageProps {
 export default async function PublicLandingPage({ params }: LandingPageProps) {
   const { slug } = await params;
 
-  const workspace = await prisma.workspace.findUnique({
-    where: { slug: slug.toLowerCase() },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      status: true,
-    },
-  });
+  const workspace = await getWorkspaceBySlug(slug);
 
   if (!workspace) {
     notFound();
@@ -69,13 +61,17 @@ export default async function PublicLandingPage({ params }: LandingPageProps) {
 export async function generateMetadata({ params }: LandingPageProps) {
   const { slug } = await params;
 
-  const workspace = await prisma.workspace.findUnique({
-    where: { slug: slug.toLowerCase() },
-    select: { name: true },
-  });
+  const workspace = await getWorkspaceBySlug(slug);
 
   if (!workspace) {
     return { title: 'Page Not Found' };
+  }
+
+  if (workspace.status !== WorkspaceStatus.ACTIVE) {
+    return {
+      title: workspace.name,
+      robots: { index: false, follow: false },
+    };
   }
 
   return {

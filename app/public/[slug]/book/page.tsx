@@ -12,10 +12,11 @@
  */
 
 import { notFound } from 'next/navigation';
-import { prisma } from '@/app/_lib/db';
 import { WorkspaceStatus } from '@prisma/client';
 import { getBookingCapabilities, hasBookingProvider } from '@/app/_lib/booking';
 import { WorkspaceConfigService } from '@/app/_lib/config';
+import { getWorkspaceBySlug } from '@/app/_lib/public-page';
+import { logStructured } from '@/app/_lib/reliability/types';
 import { MagicLinkBookingClient } from './client';
 
 interface BookingPageProps {
@@ -28,7 +29,6 @@ interface BookingPageProps {
   }>;
 }
 
-// Error messages for confirmation redirects
 const ERROR_MESSAGES: Record<string, string> = {
   invalid: 'This booking link is invalid or has already been used.',
   expired: 'This booking link has expired. Please request a new booking.',
@@ -39,23 +39,12 @@ export default async function PublicBookingPage({ params, searchParams }: Bookin
   const { slug } = await params;
   const { barcode, error: errorCode } = await searchParams;
   
-  // Find workspace by slug
-  const workspace = await prisma.workspace.findUnique({
-    where: { slug: slug.toLowerCase() },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      status: true,
-    },
-  });
+  const workspace = await getWorkspaceBySlug(slug);
 
-  // 404 if workspace not found
   if (!workspace) {
     notFound();
   }
 
-  // Show paused message if workspace is paused
   if (workspace.status !== WorkspaceStatus.ACTIVE) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
@@ -67,7 +56,6 @@ export default async function PublicBookingPage({ params, searchParams }: Bookin
     );
   }
 
-  // Check if workspace has a booking provider
   const hasProvider = await hasBookingProvider(workspace.id);
   
   if (!hasProvider) {
@@ -81,10 +69,16 @@ export default async function PublicBookingPage({ params, searchParams }: Bookin
     );
   }
 
-  // Get provider capabilities
   const capabilities = await getBookingCapabilities(workspace.id);
   
   if (!capabilities) {
+    logStructured({
+      correlationId: workspace.id,
+      event: 'booking_provider_init_failed',
+      workspaceId: workspace.id,
+      success: false,
+      metadata: { reason: 'hasBookingProvider=true but getBookingCapabilities=null' },
+    });
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-lg p-8 text-center max-w-md">
@@ -95,10 +89,8 @@ export default async function PublicBookingPage({ params, searchParams }: Bookin
     );
   }
 
-  // Load workspace branding and copy configuration
   const config = await WorkspaceConfigService.resolveForBooking(workspace.id);
 
-  // Show error message if redirected from confirm with error
   const errorMessage = errorCode ? ERROR_MESSAGES[errorCode] : null;
 
   return (
@@ -132,20 +124,19 @@ export default async function PublicBookingPage({ params, searchParams }: Bookin
   );
 }
 
-/**
- * Generate metadata for SEO
- */
 export async function generateMetadata({ params }: BookingPageProps) {
   const { slug } = await params;
   
-  const workspace = await prisma.workspace.findUnique({
-    where: { slug: slug.toLowerCase() },
-    select: { name: true },
-  });
+  const workspace = await getWorkspaceBySlug(slug);
 
   if (!workspace) {
+    return { title: 'Booking Not Found' };
+  }
+
+  if (workspace.status !== WorkspaceStatus.ACTIVE) {
     return {
-      title: 'Booking Not Found',
+      title: `Book a Session - ${workspace.name}`,
+      robots: { index: false, follow: false },
     };
   }
 
