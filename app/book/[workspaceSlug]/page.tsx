@@ -7,9 +7,10 @@
  */
 
 import { notFound } from 'next/navigation';
-import { prisma } from '@/app/_lib/db';
 import { WorkspaceStatus } from '@prisma/client';
 import { getBookingCapabilities, hasBookingProvider } from '@/app/_lib/booking';
+import { getWorkspaceBySlug } from '@/app/_lib/public-page';
+import { logStructured } from '@/app/_lib/reliability/types';
 import { BookingPageClient } from './client';
 
 interface BookingPageProps {
@@ -21,23 +22,12 @@ interface BookingPageProps {
 export default async function BookingPage({ params }: BookingPageProps) {
   const { clientSlug } = await params;
   
-  // Get client
-  const client = await prisma.workspace.findUnique({
-    where: { slug: clientSlug.toLowerCase() },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      status: true,
-    },
-  });
+  const client = await getWorkspaceBySlug(clientSlug);
 
-  // 404 if not found
   if (!client) {
     notFound();
   }
 
-  // Show paused message if client is paused
   if (client.status !== WorkspaceStatus.ACTIVE) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4">
@@ -49,7 +39,6 @@ export default async function BookingPage({ params }: BookingPageProps) {
     );
   }
 
-  // Check if client has booking provider
   const hasProvider = await hasBookingProvider(client.id);
   
   if (!hasProvider) {
@@ -63,10 +52,16 @@ export default async function BookingPage({ params }: BookingPageProps) {
     );
   }
 
-  // Get provider capabilities
   const capabilities = await getBookingCapabilities(client.id);
   
   if (!capabilities) {
+    logStructured({
+      correlationId: client.id,
+      event: 'booking_provider_init_failed',
+      workspaceId: client.id,
+      success: false,
+      metadata: { reason: 'hasBookingProvider=true but getBookingCapabilities=null' },
+    });
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4">
         <div className="text-center">
@@ -86,20 +81,19 @@ export default async function BookingPage({ params }: BookingPageProps) {
   );
 }
 
-/**
- * Generate metadata for SEO
- */
 export async function generateMetadata({ params }: BookingPageProps) {
   const { clientSlug } = await params;
   
-  const client = await prisma.workspace.findUnique({
-    where: { slug: clientSlug.toLowerCase() },
-    select: { name: true },
-  });
+  const client = await getWorkspaceBySlug(clientSlug);
 
   if (!client) {
+    return { title: 'Booking Not Found' };
+  }
+
+  if (client.status !== WorkspaceStatus.ACTIVE) {
     return {
-      title: 'Booking Not Found',
+      title: `Book an Appointment - ${client.name}`,
+      robots: { index: false, follow: false },
     };
   }
 

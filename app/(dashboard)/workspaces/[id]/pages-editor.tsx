@@ -19,10 +19,12 @@ export function PagesEditor({ workspaceId, workspaceSlug, pagesConfig, agents }:
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Array<{ code: string; message: string; param?: string }>>([]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     setError('');
+    setFieldErrors([]);
     setSaveStatus('idle');
 
     try {
@@ -47,6 +49,9 @@ export function PagesEditor({ workspaceId, workspaceSlug, pagesConfig, agents }:
 
       if (!res.ok) {
         setError(data.error || 'Failed to save');
+        if (data.validationErrors) {
+          setFieldErrors(data.validationErrors);
+        }
         setSaveStatus('error');
         return;
       }
@@ -85,6 +90,17 @@ export function PagesEditor({ workspaceId, workspaceSlug, pagesConfig, agents }:
           </button>
         </div>
       </div>
+
+      {fieldErrors.length > 0 && (
+        <div className="mb-4 p-3 bg-red-950/50 border border-red-800 rounded-lg">
+          <p className="text-sm font-medium text-red-400 mb-1">Validation errors:</p>
+          <ul className="text-xs text-red-300 space-y-0.5 list-disc list-inside">
+            {fieldErrors.map((e, i) => (
+              <li key={i}>{e.param ? <code className="text-red-400">{e.param}</code> : null}{e.param ? ': ' : ''}{e.message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <RevlineConfigEditor
         value={metaText}

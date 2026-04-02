@@ -13,9 +13,9 @@
  */
 
 import { notFound } from 'next/navigation';
-import { prisma } from '@/app/_lib/db';
 import { WorkspaceStatus } from '@prisma/client';
 import { WorkspaceConfigService } from '@/app/_lib/config';
+import { getWorkspaceBySlug } from '@/app/_lib/public-page';
 import { SignupClient } from '../client';
 
 interface SignupPageProps {
@@ -28,7 +28,6 @@ interface SignupPageProps {
 export default async function PublicSignupPage({ params }: SignupPageProps) {
   const { slug, step } = await params;
   
-  // Parse initial step from URL (e.g., /signup/step/2 -> step = ['step', '2'])
   let initialStep = 1;
   if (step && step.length === 2 && step[0] === 'step') {
     const parsed = parseInt(step[1], 10);
@@ -37,23 +36,12 @@ export default async function PublicSignupPage({ params }: SignupPageProps) {
     }
   }
   
-  // Find workspace by slug
-  const workspace = await prisma.workspace.findUnique({
-    where: { slug: slug.toLowerCase() },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      status: true,
-    },
-  });
+  const workspace = await getWorkspaceBySlug(slug);
 
-  // 404 if workspace not found
   if (!workspace) {
     notFound();
   }
 
-  // Show paused message if workspace is paused
   if (workspace.status !== WorkspaceStatus.ACTIVE) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
@@ -65,10 +53,8 @@ export default async function PublicSignupPage({ params }: SignupPageProps) {
     );
   }
 
-  // Load workspace signup configuration
   const config = await WorkspaceConfigService.resolveForSignup(workspace.id);
 
-  // Check if signup is enabled
   if (!config.enabled) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
@@ -80,7 +66,6 @@ export default async function PublicSignupPage({ params }: SignupPageProps) {
     );
   }
 
-  // Check if there are any plans configured
   if (config.plans.length === 0) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
@@ -112,20 +97,19 @@ export default async function PublicSignupPage({ params }: SignupPageProps) {
   );
 }
 
-/**
- * Generate metadata for SEO
- */
 export async function generateMetadata({ params }: SignupPageProps) {
   const { slug } = await params;
   
-  const workspace = await prisma.workspace.findUnique({
-    where: { slug: slug.toLowerCase() },
-    select: { name: true },
-  });
+  const workspace = await getWorkspaceBySlug(slug);
 
   if (!workspace) {
+    return { title: 'Signup Not Found' };
+  }
+
+  if (workspace.status !== WorkspaceStatus.ACTIVE) {
     return {
-      title: 'Signup Not Found',
+      title: `Join ${workspace.name} - Membership Signup`,
+      robots: { index: false, follow: false },
     };
   }
 

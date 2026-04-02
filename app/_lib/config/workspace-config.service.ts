@@ -49,6 +49,17 @@ import {
   isValidLogoUrl,
   sanitizeCopyText,
 } from './defaults';
+import { logStructured } from '@/app/_lib/reliability/types';
+
+function configWarning(workspaceId: string, field: string, reason: string) {
+  logStructured({
+    correlationId: workspaceId,
+    event: 'config_field_rejected',
+    workspaceId,
+    metadata: { field, reason },
+    success: false,
+  });
+}
 
 // =============================================================================
 // RESOLVED CONFIG TYPES
@@ -290,10 +301,10 @@ export class WorkspaceConfigService {
     
     return {
       workspaceId,
-      branding: this.resolveBranding(meta?.branding),
-      theme: this.resolveThemeMapping(meta?.theme),
-      headerStyle: this.resolveHeaderStyle(meta?.headerStyle),
-      typography: this.resolveTypography(meta?.typography),
+      branding: this.resolveBranding(workspaceId, meta?.branding),
+      theme: this.resolveThemeMapping(workspaceId, meta?.theme),
+      headerStyle: this.resolveHeaderStyle(workspaceId, meta?.headerStyle),
+      typography: this.resolveTypography(workspaceId, meta?.typography),
       features: this.resolveFeatures(meta?.features),
       logoSize: 1,
     };
@@ -328,10 +339,10 @@ export class WorkspaceConfigService {
 
     return {
       workspaceId,
-      branding: this.resolveBranding(mergedBranding),
-      theme: this.resolveThemeMapping(meta?.theme),
-      headerStyle: this.resolveHeaderStyle(ps?.headerStyle ?? meta?.headerStyle),
-      typography: this.resolveTypography(ps?.typography ?? meta?.typography),
+      branding: this.resolveBranding(workspaceId, mergedBranding),
+      theme: this.resolveThemeMapping(workspaceId, meta?.theme),
+      headerStyle: this.resolveHeaderStyle(workspaceId, ps?.headerStyle ?? meta?.headerStyle),
+      typography: this.resolveTypography(workspaceId, ps?.typography ?? meta?.typography),
       features: this.resolveFeatures(meta?.features),
       logoSize: ps?.logoSize ?? 1,
       copy: this.resolveBookingCopy(mergedCopy),
@@ -369,15 +380,15 @@ export class WorkspaceConfigService {
 
     return {
       workspaceId,
-      branding: this.resolveBranding(mergedBranding),
-      theme: this.resolveThemeMapping(meta?.theme),
-      headerStyle: this.resolveHeaderStyle(ps?.headerStyle ?? meta?.headerStyle),
-      typography: this.resolveTypography(ps?.typography ?? meta?.typography),
+      branding: this.resolveBranding(workspaceId, mergedBranding),
+      theme: this.resolveThemeMapping(workspaceId, meta?.theme),
+      headerStyle: this.resolveHeaderStyle(workspaceId, ps?.headerStyle ?? meta?.headerStyle),
+      typography: this.resolveTypography(workspaceId, ps?.typography ?? meta?.typography),
       features: this.resolveFeatures(meta?.features),
       logoSize: ps?.logoSize ?? 1,
       enabled: signupConfig?.enabled ?? false,
       club: this.resolveSignupClub(signupConfig?.club),
-      plans: this.resolveSignupPlans(signupConfig?.plans),
+      plans: this.resolveSignupPlans(workspaceId, signupConfig?.plans),
       copy: this.resolveSignupCopy(mergedCopy),
       policies: this.resolveSignupPolicies(signupConfig?.policies),
       signupFeatures: this.resolveSignupFeatures(signupConfig?.features),
@@ -410,13 +421,13 @@ export class WorkspaceConfigService {
 
     return {
       workspaceId,
-      branding: this.resolveBranding(mergedBranding),
-      theme: this.resolveThemeMapping(meta?.theme),
-      headerStyle: this.resolveHeaderStyle(ps?.headerStyle ?? meta?.headerStyle),
-      typography: this.resolveTypography(ps?.typography ?? meta?.typography),
+      branding: this.resolveBranding(workspaceId, mergedBranding),
+      theme: this.resolveThemeMapping(workspaceId, meta?.theme),
+      headerStyle: this.resolveHeaderStyle(workspaceId, ps?.headerStyle ?? meta?.headerStyle),
+      typography: this.resolveTypography(workspaceId, ps?.typography ?? meta?.typography),
       features: this.resolveFeatures(meta?.features),
       logoSize: ps?.logoSize ?? 1,
-      copy: this.resolveLandingCopy(mergedCopy),
+      copy: this.resolveLandingCopy(workspaceId, mergedCopy),
       webchat: meta?.webchat?.enabled ? meta.webchat : undefined,
     };
   }
@@ -438,8 +449,11 @@ export class WorkspaceConfigService {
 
       return workspace.pagesConfig as unknown as RevlineMeta;
     } catch (error) {
-      console.error('Failed to load pages config:', {
+      logStructured({
+        correlationId: workspaceId,
+        event: 'pages_config_load_failed',
         workspaceId,
+        success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
       return null;
@@ -492,10 +506,13 @@ export class WorkspaceConfigService {
         defaultBranding: template.defaultBranding as BrandingConfig | null,
       };
     } catch (error) {
-      console.error('Failed to load org template:', {
+      logStructured({
+        correlationId: workspaceId,
+        event: 'org_template_load_failed',
         workspaceId,
-        templateType,
+        success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
+        metadata: { templateType },
       });
       return null;
     }
@@ -505,28 +522,31 @@ export class WorkspaceConfigService {
    * Resolve branding config by merging with defaults
    * Validates values and falls back to defaults for invalid values
    */
-  private static resolveBranding(overrides?: BrandingConfig): ResolvedBranding {
+  private static resolveBranding(workspaceId: string, overrides?: BrandingConfig): ResolvedBranding {
     const result = { ...DEFAULT_BRANDING };
 
     if (!overrides) {
       return result;
     }
 
-    // Palette colors 1-5
     for (const key of ['color1', 'color2', 'color3', 'color4', 'color5'] as const) {
-      if (overrides[key] && isValidHexColor(overrides[key]!)) {
-        result[key] = overrides[key]!;
+      if (overrides[key]) {
+        if (isValidHexColor(overrides[key]!)) {
+          result[key] = overrides[key]!;
+        } else {
+          configWarning(workspaceId, `branding.${key}`, `Invalid hex color: ${overrides[key]}`);
+        }
       }
     }
 
-    // Logo URL
     if (overrides.logo !== undefined) {
       if (isValidLogoUrl(overrides.logo)) {
         result.logo = overrides.logo;
+      } else {
+        configWarning(workspaceId, 'branding.logo', `Invalid logo URL (len=${overrides.logo.length})`);
       }
     }
 
-    // Font family
     if (overrides.fontFamily) {
       result.fontFamily = overrides.fontFamily;
     }
@@ -538,7 +558,7 @@ export class WorkspaceConfigService {
    * Resolve theme mapping by merging overrides with defaults.
    * Clamps palette indices to 1-5.
    */
-  private static resolveThemeMapping(overrides?: ThemeMapping): ResolvedThemeMapping {
+  private static resolveThemeMapping(workspaceId: string, overrides?: ThemeMapping): ResolvedThemeMapping {
     const result = { ...DEFAULT_THEME_MAPPING };
 
     if (!overrides) {
@@ -549,7 +569,11 @@ export class WorkspaceConfigService {
 
     for (const key of ['primary', 'primaryHover', 'background', 'card', 'text', 'header'] as const) {
       if (typeof overrides[key] === 'number') {
-        result[key] = clamp(overrides[key]!);
+        const clamped = clamp(overrides[key]!);
+        if (clamped !== overrides[key]) {
+          configWarning(workspaceId, `theme.${key}`, `Clamped ${overrides[key]} to ${clamped}`);
+        }
+        result[key] = clamped;
       }
     }
 
@@ -559,7 +583,7 @@ export class WorkspaceConfigService {
   /**
    * Resolve header style by merging overrides with defaults.
    */
-  private static resolveHeaderStyle(overrides?: HeaderStyle): ResolvedHeaderStyle {
+  private static resolveHeaderStyle(workspaceId: string, overrides?: HeaderStyle): ResolvedHeaderStyle {
     const result = { ...DEFAULT_HEADER_STYLE };
 
     if (!overrides) {
@@ -595,7 +619,7 @@ export class WorkspaceConfigService {
   /**
    * Resolve typography by merging per-role overrides with defaults.
    */
-  private static resolveTypography(overrides?: TypographyConfig): ResolvedTypography {
+  private static resolveTypography(workspaceId: string, overrides?: TypographyConfig): ResolvedTypography {
     const result = {
       sectionHeader: { ...DEFAULT_TYPOGRAPHY.sectionHeader },
       pageTitle: { ...DEFAULT_TYPOGRAPHY.pageTitle },
@@ -722,36 +746,47 @@ export class WorkspaceConfigService {
   /**
    * Resolve signup plans, using default example if none provided
    */
-  private static resolveSignupPlans(plans?: SignupPlan[]): SignupPlan[] {
+  private static resolveSignupPlans(workspaceId: string, plans?: SignupPlan[]): SignupPlan[] {
     if (!plans || plans.length === 0) {
       return DEFAULT_SIGNUP_CONFIG.plans;
     }
 
-    // Validate and sanitize each plan
-    return plans.map(plan => ({
-      id: plan.id || `plan-${Date.now()}`,
-      name: sanitizeCopyText(plan.name || 'Membership', 100),
-      price: typeof plan.price === 'number' ? plan.price : 0,
-      period: plan.period === 'year' ? 'year' : 'month',
-      image: plan.image && isValidLogoUrl(plan.image) ? plan.image : '',
-      benefits: Array.isArray(plan.benefits) 
-        ? plan.benefits.map(b => sanitizeCopyText(b, 100)).slice(0, 20)
-        : [],
-      pricingDetails: Array.isArray(plan.pricingDetails)
-        ? plan.pricingDetails.map(d => ({
-            label: sanitizeCopyText(d.label || '', 50),
-            value: sanitizeCopyText(d.value || '', 50),
-            strikethrough: d.strikethrough ? sanitizeCopyText(d.strikethrough, 50) : undefined,
-          })).slice(0, 10)
-        : [],
-      promoNote: plan.promoNote ? sanitizeCopyText(plan.promoNote, 100) : undefined,
-      disclaimer: plan.disclaimer ? sanitizeCopyText(plan.disclaimer, 300) : undefined,
-      paymentDetails: {
-        dueToday: typeof plan.paymentDetails?.dueToday === 'number' ? plan.paymentDetails.dueToday : 0,
-        recurring: typeof plan.paymentDetails?.recurring === 'number' ? plan.paymentDetails.recurring : 0,
-        fees: typeof plan.paymentDetails?.fees === 'number' ? plan.paymentDetails.fees : 0,
-      },
-    }));
+    return plans.map((plan, i) => {
+      if (!plan.id) {
+        configWarning(workspaceId, `signup.plans[${i}].id`, 'Missing plan ID, generated synthetic');
+      }
+      if (typeof plan.price !== 'number') {
+        configWarning(workspaceId, `signup.plans[${i}].price`, `Non-numeric price coerced to 0`);
+      }
+      if (plan.image && !isValidImageUrl(plan.image)) {
+        configWarning(workspaceId, `signup.plans[${i}].image`, 'Invalid image URL dropped');
+      }
+
+      return {
+        id: plan.id || `plan-${Date.now()}`,
+        name: sanitizeCopyText(plan.name || 'Membership', 100),
+        price: typeof plan.price === 'number' ? plan.price : 0,
+        period: plan.period === 'year' ? 'year' : 'month',
+        image: plan.image && isValidImageUrl(plan.image) ? plan.image : '',
+        benefits: Array.isArray(plan.benefits) 
+          ? plan.benefits.map(b => sanitizeCopyText(b, 100)).slice(0, 20)
+          : [],
+        pricingDetails: Array.isArray(plan.pricingDetails)
+          ? plan.pricingDetails.map(d => ({
+              label: sanitizeCopyText(d.label || '', 50),
+              value: sanitizeCopyText(d.value || '', 50),
+              strikethrough: d.strikethrough ? sanitizeCopyText(d.strikethrough, 50) : undefined,
+            })).slice(0, 10)
+          : [],
+        promoNote: plan.promoNote ? sanitizeCopyText(plan.promoNote, 100) : undefined,
+        disclaimer: plan.disclaimer ? sanitizeCopyText(plan.disclaimer, 300) : undefined,
+        paymentDetails: {
+          dueToday: typeof plan.paymentDetails?.dueToday === 'number' ? plan.paymentDetails.dueToday : 0,
+          recurring: typeof plan.paymentDetails?.recurring === 'number' ? plan.paymentDetails.recurring : 0,
+          fees: typeof plan.paymentDetails?.fees === 'number' ? plan.paymentDetails.fees : 0,
+        },
+      };
+    });
   }
 
   /**
@@ -881,7 +916,7 @@ export class WorkspaceConfigService {
     );
   }
 
-  private static resolveLandingCopy(overrides?: LandingCopyConfig): ResolvedLandingCopy {
+  private static resolveLandingCopy(workspaceId: string, overrides?: LandingCopyConfig): ResolvedLandingCopy {
     const result: ResolvedLandingCopy = {
       ...DEFAULT_LANDING_COPY,
       services: DEFAULT_LANDING_COPY.services.map(s => ({ ...s })),
@@ -915,8 +950,12 @@ export class WorkspaceConfigService {
     if (overrides.heroCtaLink) {
       result.heroCtaLink = sanitizeCopyText(overrides.heroCtaLink, 200);
     }
-    if (overrides.heroBackgroundImage && isValidImageUrl(overrides.heroBackgroundImage)) {
-      result.heroBackgroundImage = overrides.heroBackgroundImage;
+    if (overrides.heroBackgroundImage) {
+      if (isValidImageUrl(overrides.heroBackgroundImage)) {
+        result.heroBackgroundImage = overrides.heroBackgroundImage;
+      } else {
+        configWarning(workspaceId, 'landing.heroBackgroundImage', `Invalid image URL (len=${overrides.heroBackgroundImage.length})`);
+      }
     }
     if (overrides.heroBackgroundPosition) {
       result.heroBackgroundPosition = overrides.heroBackgroundPosition;
@@ -931,17 +970,26 @@ export class WorkspaceConfigService {
       result.servicesTitle = sanitizeCopyText(overrides.servicesTitle, 60);
     }
     if (Array.isArray(overrides.services) && overrides.services.length > 0) {
-      result.services = overrides.services.slice(0, 12).map(s => ({
-        title: sanitizeCopyText(s.title || '', 60),
-        description: sanitizeCopyText(s.description || '', 200),
-        ...(s.image && isValidImageUrl(s.image) ? { image: s.image } : {}),
-        ...(s.ctaLink ? { ctaLink: sanitizeCopyText(s.ctaLink, 200) } : {}),
-      }));
+      result.services = overrides.services.slice(0, 12).map((s, i) => {
+        if (s.image && !isValidImageUrl(s.image)) {
+          configWarning(workspaceId, `landing.services[${i}].image`, 'Invalid image URL dropped');
+        }
+        return {
+          title: sanitizeCopyText(s.title || '', 60),
+          description: sanitizeCopyText(s.description || '', 200),
+          ...(s.image && isValidImageUrl(s.image) ? { image: s.image } : {}),
+          ...(s.ctaLink ? { ctaLink: sanitizeCopyText(s.ctaLink, 200) } : {}),
+        };
+      });
     }
     if (Array.isArray(overrides.images) && overrides.images.length > 0) {
-      result.images = this.normalizeImages(overrides.images)
-        .slice(0, 9)
-        .filter(img => isValidImageUrl(img.url));
+      const normalized = this.normalizeImages(overrides.images).slice(0, 9);
+      const before = normalized.length;
+      result.images = normalized.filter(img => isValidImageUrl(img.url));
+      const dropped = before - result.images.length;
+      if (dropped > 0) {
+        configWarning(workspaceId, 'landing.images', `${dropped} gallery image(s) dropped due to invalid URL`);
+      }
     }
     if (overrides.contactTitle) {
       result.contactTitle = sanitizeCopyText(overrides.contactTitle, 60);
@@ -959,7 +1007,7 @@ export class WorkspaceConfigService {
       result.consentText = sanitizeCopyText(overrides.consentText, 500);
     }
     if (Array.isArray(overrides.formFields) && overrides.formFields.length > 0) {
-      result.formFields = this.resolveFormFields(overrides.formFields);
+      result.formFields = this.resolveFormFields(workspaceId, overrides.formFields);
     }
     if (overrides.footerText) {
       result.footerText = sanitizeCopyText(overrides.footerText, 80);
@@ -979,13 +1027,24 @@ export class WorkspaceConfigService {
     return result;
   }
 
-  private static resolveFormFields(fields: LandingFormField[]): ResolvedLandingFormField[] {
-    return fields.slice(0, 10).map(f => ({
-      id: sanitizeCopyText(f.id || '', 30).replace(/\s+/g, '_').toLowerCase(),
-      label: sanitizeCopyText(f.label || '', 50),
-      type: this.VALID_FIELD_TYPES.has(f.type) ? f.type : 'text' as const,
-      required: f.required ?? false,
-      placeholder: sanitizeCopyText(f.placeholder || '', 80),
-    })).filter(f => f.id && f.label);
+  private static resolveFormFields(workspaceId: string, fields: LandingFormField[]): ResolvedLandingFormField[] {
+    const resolved = fields.slice(0, 10).map(f => {
+      if (!this.VALID_FIELD_TYPES.has(f.type)) {
+        configWarning(workspaceId, `landing.formFields.${f.id}`, `Invalid type "${f.type}" defaulted to "text"`);
+      }
+      return {
+        id: sanitizeCopyText(f.id || '', 30).replace(/\s+/g, '_').toLowerCase(),
+        label: sanitizeCopyText(f.label || '', 50),
+        type: this.VALID_FIELD_TYPES.has(f.type) ? f.type : 'text' as const,
+        required: f.required ?? false,
+        placeholder: sanitizeCopyText(f.placeholder || '', 80),
+      };
+    });
+    const before = resolved.length;
+    const filtered = resolved.filter(f => f.id && f.label);
+    if (filtered.length < before) {
+      configWarning(workspaceId, 'landing.formFields', `${before - filtered.length} field(s) dropped (missing id or label)`);
+    }
+    return filtered;
   }
 }

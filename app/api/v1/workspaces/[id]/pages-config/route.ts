@@ -1,15 +1,11 @@
 import { NextRequest } from 'next/server';
-import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { getUserIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { getWorkspaceAccess } from '@/app/_lib/workspace-access';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
 import { logStructured } from '@/app/_lib/reliability/types';
-
-const patchSchema = z.object({
-  pagesConfig: z.record(z.string(), z.unknown()).nullable(),
-});
+import { validatePagesConfig } from '@/app/_lib/config/schema';
 
 export async function PATCH(
   request: NextRequest,
@@ -25,16 +21,28 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const parsed = patchSchema.safeParse(body);
-    if (!parsed.success) {
-      return ApiResponse.error('Invalid pages config payload', 400, ErrorCodes.INVALID_INPUT);
+    const raw = body?.pagesConfig ?? null;
+
+    const validation = validatePagesConfig(raw);
+    if (!validation.success) {
+      logStructured({
+        correlationId: id,
+        event: 'pages_config_validation_failed',
+        workspaceId: id,
+        success: false,
+        metadata: { errors: validation.errors },
+      });
+      return ApiResponse.validationError(
+        'Invalid pages config',
+        validation.errors!.map((e) => ({ code: 'INVALID_FIELD', message: e.message, param: e.path })),
+      );
     }
 
     await prisma.workspace.update({
       where: { id },
       data: {
-        pagesConfig: parsed.data.pagesConfig
-          ? (parsed.data.pagesConfig as Prisma.InputJsonValue)
+        pagesConfig: raw
+          ? (raw as Prisma.InputJsonValue)
           : Prisma.JsonNull,
       },
     });
