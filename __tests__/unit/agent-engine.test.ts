@@ -104,6 +104,9 @@ describe('Agent Engine — handleInboundMessage', () => {
       name: 'Engine Test Bot',
       aiIntegration: 'OPENAI',
       systemPrompt: 'You are a gym assistant.',
+      // Disable AI disclosure prepend so tests assert exactly on AI mock output.
+      // The disclosure feature is tested separately.
+      guardrails: { skipAiDisclosure: true },
     });
     agentId = agent.id;
   });

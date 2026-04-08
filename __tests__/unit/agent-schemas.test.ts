@@ -35,7 +35,7 @@ describe('CreateAgentSchema', () => {
     expect(result.conversationTimeoutMinutes).toBe(1440);
     expect(result.responseDelaySeconds).toBe(0);
     expect(result.autoResumeMinutes).toBe(60);
-    expect(result.rateLimitPerHour).toBe(10);
+    expect(result.rateLimitPerHour).toBe(60);
     expect(result.allowedEvents).toEqual([]);
     expect(result.enabledTools).toEqual([]);
     expect(result.active).toBe(true);
