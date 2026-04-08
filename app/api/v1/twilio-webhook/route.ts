@@ -16,9 +16,9 @@
  * - Twilio sends application/x-www-form-urlencoded POST body
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getActiveClient } from '@/app/_lib/client-gate';
-import { TwilioAdapter } from '@/app/_lib/integrations';
+import { TwilioAdapter, twimlResponse, parseFormBody, getWebhookUrl } from '@/app/_lib/integrations';
 import { emitTrigger } from '@/app/_lib/workflow';
 import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
@@ -30,42 +30,6 @@ import {
 import { prisma } from '@/app/_lib/db';
 import { ConversationStatus } from '@prisma/client';
 import { handleInboundMessage } from '@/app/_lib/agent';
-
-const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
-
-function twimlResponse(status = 200): NextResponse {
-  return new NextResponse(EMPTY_TWIML, {
-    status,
-    headers: { 'Content-Type': 'text/xml' },
-  });
-}
-
-/**
- * Parse URL-encoded body into a Record<string, string>
- */
-function parseFormBody(raw: string): Record<string, string> {
-  const params: Record<string, string> = {};
-  const pairs = raw.split('&');
-  for (const pair of pairs) {
-    const idx = pair.indexOf('=');
-    if (idx === -1) continue;
-    const key = decodeURIComponent(pair.slice(0, idx).replace(/\+/g, ' '));
-    const value = decodeURIComponent(pair.slice(idx + 1).replace(/\+/g, ' '));
-    params[key] = value;
-  }
-  return params;
-}
-
-/**
- * Reconstruct the webhook URL that Twilio signed against.
- * Must match the exact URL configured in Twilio Console.
- */
-function getWebhookUrl(request: NextRequest): string {
-  const proto = request.headers.get('x-forwarded-proto') || 'https';
-  const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
-  const url = new URL(request.url);
-  return `${proto}://${host}${url.pathname}${url.search}`;
-}
 
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
@@ -229,6 +193,7 @@ export async function POST(request: NextRequest) {
         contactAddress: payload.from,
         channelAddress: payload.to,
         channel: 'SMS',
+        channelIntegration: 'TWILIO',
         messageText: payload.body,
         callerContext: 'webhook',
       });

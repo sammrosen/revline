@@ -19,7 +19,13 @@
     "test:coverage": "vitest run --coverage",
     "type-check": "tsc --noEmit",
     "ci": "npm run lint && npm run type-check && npm run test && npm run build",
-    "pre-push": "npm run lint && npm run type-check && npm run test && npm run build"
+    "pre-push": "npm run lint && npm run type-check && npm run test && npm run build",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix"
+    ]
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -53,6 +59,8 @@
     "dotenv": "^17.2.3",
     "eslint": "^9",
     "eslint-config-next": "^16.1.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",

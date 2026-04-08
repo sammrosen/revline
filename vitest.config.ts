@@ -6,7 +6,17 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./__tests__/setup.ts'],
-    
+
+    // Exclude embedded Claude Code worktrees, build output, and node_modules.
+    // The default exclude doesn't cover .claude/worktrees/ which contains
+    // separate working trees from other Claude Code sessions.
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.next/**',
+      '**/.claude/**',
+    ],
+
     // Global setup creates isolated databases for each worker
     // The setup function returns a teardown function that drops them after tests
     globalSetup: ['./__tests__/globalSetup.ts'],

@@ -417,6 +417,35 @@ export function TwilioConfigEditor({
             </div>
           )}
 
+          {workspaceSlug && (
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1.5">Voice Webhook URL</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/twilio-voice?source=${workspaceSlug}`}
+                  className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm font-mono text-zinc-400 select-all cursor-text"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = `${window.location.origin}/api/v1/twilio-voice?source=${workspaceSlug}`;
+                    navigator.clipboard.writeText(url);
+                  }}
+                  className="shrink-0 px-2.5 py-2 text-xs text-zinc-400 hover:text-white border border-zinc-700 rounded hover:border-zinc-600 transition-colors"
+                  title="Copy voice webhook URL"
+                >
+                  Copy
+                </button>
+              </div>
+              <p className="text-xs text-zinc-600 mt-1">
+                Paste this URL in Twilio Console &rarr; Phone Numbers &rarr; Your Number &rarr; Voice &rarr; &quot;A call comes in&quot;. Used for missed-call handling via the Phone tab.
+              </p>
+            </div>
+          )}
+
           <div className="p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg">
             <p className="text-xs text-zinc-400">
               <span className="font-medium text-zinc-300">Signature Verification</span> — Twilio signs every webhook request with your Auth Token using HMAC-SHA1. Make sure your Auth Token is configured in <span className="text-red-400">Manage Secrets</span> above.

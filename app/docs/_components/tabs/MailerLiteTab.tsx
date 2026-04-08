@@ -193,7 +193,7 @@ export function MailerLiteTab() {
             <CodeBlock language="json">{`Groups: { "leads": { "id": "123456", "name": "Leads" } }
 
 Workflow:
-  Trigger: revline.email_captured
+  Trigger: revline.contact-submitted
   Actions:
     1. mailerlite.add_to_group → { "group": "leads" }`}</CodeBlock>
           </div>

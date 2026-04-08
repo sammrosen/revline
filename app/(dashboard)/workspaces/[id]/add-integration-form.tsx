@@ -8,6 +8,7 @@ import { StripeConfigEditor } from './stripe-config-editor';
 import { AbcIgniteAddConfig } from './abc-ignite-add-config';
 import { RevlineAddConfig } from './revline-add-config';
 import { ResendAddConfig } from './resend-add-config';
+import { PipedriveConfigEditor } from './pipedrive-config-editor';
 import { lockScroll, unlockScroll } from '@/app/_lib/utils/scroll-lock';
 import { 
   INTEGRATION_TYPES, 
@@ -16,6 +17,8 @@ import {
   getDefaultMeta,
   type IntegrationTypeId 
 } from '@/app/_lib/integrations/config';
+import { getIntegrationStyle } from '@/app/_lib/workflow/integration-config';
+import { Zap } from 'lucide-react';
 
 interface SecretInput {
   name: string;
@@ -194,29 +197,57 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <label className="text-sm font-semibold text-zinc-300">Integration Type</label>
-                {!isMailerLite && !isStripe && !isAbcIgnite && !isRevline && !isResend && (
-                  <IntegrationHelp 
-                    integration={integration} 
-                    context="create"
-                    onCopyTemplate={(template) => setMeta(template)}
-                  />
-                )}
-              </div>
-              <select
-                value={integration}
-                onChange={(e) => handleIntegrationChange(e.target.value as IntegrationTypeId)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
-              >
-                {INTEGRATION_TYPES.filter(t => t !== 'REVLINE').map((type) => (
-                  <option key={type} value={type}>
-                    {INTEGRATIONS[type]?.displayName || type}
-                  </option>
-                ))}
-              </select>
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <label className="text-sm font-semibold text-zinc-300">Integration Type</label>
+              {!isMailerLite && !isStripe && !isAbcIgnite && !isRevline && !isResend && (
+                <IntegrationHelp 
+                  integration={integration} 
+                  context="create"
+                  onCopyTemplate={(template) => setMeta(template)}
+                />
+              )}
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+              {INTEGRATION_TYPES.filter(t => t !== 'REVLINE').map((type) => {
+                const style = getIntegrationStyle(type.toLowerCase());
+                const isSelected = integration === type;
+                const displayName = INTEGRATIONS[type]?.displayName || type;
+                const FallbackIcon = style.icon || Zap;
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => handleIntegrationChange(type)}
+                    className={`
+                      flex flex-col items-center justify-center gap-1.5 p-3 rounded-lg border-2 transition-all
+                      ${isSelected
+                        ? `border-current ${style.bgClass} ${style.textClass} shadow-lg`
+                        : 'border-zinc-700/50 bg-zinc-950 text-zinc-400 hover:border-zinc-600 hover:bg-zinc-900'
+                      }
+                    `}
+                    style={isSelected ? { boxShadow: `0 0 16px ${style.color}25` } : undefined}
+                  >
+                    <div className="w-7 h-7 flex items-center justify-center">
+                      {style.logo ? (
+                        <img
+                          src={style.logo}
+                          alt={displayName}
+                          className="w-6 h-6 object-contain"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                          }}
+                        />
+                      ) : null}
+                      <FallbackIcon className={`w-5 h-5 ${style.logo ? 'hidden' : ''}`} />
+                    </div>
+                    <span className="text-[11px] font-medium leading-tight text-center truncate w-full">
+                      {displayName}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -301,7 +332,7 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
                 <label className="text-sm font-semibold text-zinc-300">
                   {config?.metaDescription ? `${config.displayName} Config` : 'Meta (JSON, optional)'}
                 </label>
-                {!isMailerLite && !isStripe && !isAbcIgnite && !isResend && (
+                {!isMailerLite && !isStripe && !isAbcIgnite && !isResend && integration !== 'PIPEDRIVE' && (
                   <IntegrationTemplateButton 
                     integration={integration}
                     onCopyTemplate={(template) => setMeta(template)}
@@ -332,6 +363,11 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
               />
             ) : isResend ? (
               <ResendAddConfig
+                value={meta}
+                onChange={setMeta}
+              />
+            ) : integration === 'PIPEDRIVE' ? (
+              <PipedriveConfigEditor
                 value={meta}
                 onChange={setMeta}
               />

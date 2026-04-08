@@ -143,6 +143,31 @@ export function estimateSegments(text: string): SegmentEstimate {
 }
 
 /**
+ * Truncate text to fit within a given number of SMS segments.
+ * Appends "..." when truncation occurs.
+ */
+export function truncateToSegments(text: string, maxSegments: number): string {
+  const current = estimateSegments(text);
+  if (current.segments <= maxSegments) return text;
+
+  const isGsm = isGsm7Compatible(text);
+  const charsPerSegment = isGsm ? 153 : 67;
+  const singleSegmentMax = isGsm ? 160 : 70;
+  const ellipsis = '...';
+
+  const maxChars = maxSegments === 1
+    ? singleSegmentMax - ellipsis.length
+    : (charsPerSegment * maxSegments) - ellipsis.length;
+
+  const truncated = text.slice(0, Math.max(0, maxChars));
+  // Cut at last word boundary for cleaner output
+  const lastSpace = truncated.lastIndexOf(' ');
+  const clean = lastSpace > maxChars * 0.6 ? truncated.slice(0, lastSpace) : truncated;
+
+  return clean + ellipsis;
+}
+
+/**
  * Whether a channel type should have SMS encoding sanitization applied.
  * Extensibility point: add channel strings to the set for new SMS-like channels.
  */

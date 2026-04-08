@@ -6,6 +6,7 @@
  */
 
 import type { ConversationStatus, MessageRole } from '@prisma/client';
+import type { ResolvedGuardrailConfig } from './guardrails/types';
 
 export { ConversationStatus, MessageRole };
 
@@ -49,7 +50,11 @@ export interface EscalationLog extends TurnLogBase {
 
 export interface GuardrailLog extends TurnLogBase {
   type: 'guardrail';
-  guardrail: 'rate_limited' | 'timeout' | 'message_limit' | 'token_limit';
+  guardrail:
+    | 'rate_limited' | 'timeout' | 'message_limit' | 'token_limit'
+    | 'output_blocked' | 'commitment_blocked' | 'pii_scrubbed'
+    | 'emergency_escalation' | 'prohibited_phrase' | 'prompt_leak'
+    | 'sms_truncated' | 'ai_disclosure' | 'off_topic' | 'injection';
   detail: string;
 }
 
@@ -79,14 +84,19 @@ export interface InboundMessageParams {
   contactAddress: string;
   channelAddress: string;
   channel: string;
+  channelIntegration?: string;
   messageText: string;
   leadId?: string;
   testMode?: boolean;
   systemPromptOverride?: string;
   /** When provided, continue this specific conversation instead of lookup by address */
   conversationId?: string;
-  /** Caller context — 'webhook' skips synchronous response delay to avoid Twilio timeouts */
-  callerContext?: 'webhook' | 'api' | 'test';
+  /** Caller context — 'webhook' skips synchronous response delay to avoid Twilio timeouts.
+   *  'proactive' starts an outbound conversation (no inbound message) — used by missed-call handler. */
+  callerContext?: 'webhook' | 'api' | 'test' | 'proactive';
+  /** When callerContext is 'proactive', this message is sent as the agent's first ASSISTANT message.
+   *  Falls back to agent.initialMessage if not provided. */
+  proactiveMessage?: string;
 }
 
 export interface AgentResponse {
@@ -151,9 +161,22 @@ export interface ConversationWithMessages {
   }>;
 }
 
+export interface AgentChannel {
+  channel: 'SMS' | 'EMAIL' | 'WEB_CHAT';
+  integration: 'TWILIO' | 'RESEND' | 'BUILT_IN';
+  address?: string;
+}
+
+export interface SendChannelContext {
+  channel: string;
+  channelIntegration: string | null;
+  channelAddress: string;
+}
+
 export interface AgentConfig {
   id: string;
   name: string;
+  channels: AgentChannel[];
   channelType: string | null;
   channelIntegration: string | null;
   channelAddress: string | null;
@@ -185,12 +208,16 @@ export interface AgentConfig {
   followUpAiGenerated: boolean;
   /** Sequence of follow-up steps with delay, optional template, and optional variants */
   followUpSequence: Array<{ delayMinutes: number; message?: string; variants?: string[] }>;
+  /** Resolved guardrail configuration (universal defaults merged with per-agent config) */
+  guardrails: ResolvedGuardrailConfig;
 }
 
 export interface InitiateConversationParams {
   workspaceId: string;
   agentId: string;
   leadId: string;
+  /** Which of the agent's configured channels to use (e.g. 'SMS', 'EMAIL') */
+  channelType?: string;
   /** Override for agent's initialMessage (supports lead variables) */
   messageText?: string;
   testMode?: boolean;

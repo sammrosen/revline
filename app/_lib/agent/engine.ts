@@ -18,13 +18,14 @@
  * - Event-driven: emits events for workflow triggers
  */
 
+import { z } from 'zod';
 import { prisma } from '@/app/_lib/db';
 import { ConversationStatus, Prisma } from '@prisma/client';
 import type { ChatMessage, ChatCompletionResult } from '@/app/_lib/integrations';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { emitTrigger } from '@/app/_lib/workflow';
 import { logStructured } from '@/app/_lib/reliability';
-import type { InboundMessageParams, InitiateConversationParams, AgentResponse, AgentConfig, TurnLogEntry } from './types';
+import type { InboundMessageParams, InitiateConversationParams, AgentResponse, AgentConfig, TurnLogEntry, SendChannelContext } from './types';
 import type { IntegrationResult } from '@/app/_lib/types';
 import { resolveAI, resolveChannel, getContactFieldForChannel } from './adapter-registry';
 import type { ChannelMessageMetadata } from './adapter-registry';
@@ -35,9 +36,17 @@ import type { SendType, SendReplyResult } from './quiet-hours';
 import { sanitizeForGsm7, estimateSegments, shouldSanitizeSms } from './sms-encoding';
 import { retryWithBackoff } from './retry';
 import { cancelPendingFollowUps } from './follow-up';
+import { notifyResolution } from '@/app/_lib/phone';
 import { checkConsent, revokeConsent } from '@/app/_lib/services/consent.service';
+import { dispatchPostSendHooks } from './post-send-hooks';
 import { withTransaction } from '@/app/_lib/utils/transaction';
 import { maskContact } from '@/app/_lib/utils/validation';
+import { resolveGuardrails } from './guardrails/constants';
+import type { GuardrailConfig } from './guardrails/types';
+import { checkEmergencyKeywords, filterOutput, maskPiiForPrompt } from './guardrails/output-filter';
+import { hardenPrompt, wrapUserMessage, buildSandwich } from './guardrails/prompt-hardening';
+import { screenInput } from './guardrails/input-screen';
+import { truncateToSegments } from './sms-encoding';
 
 // Register all tools with the tool registry at module load
 import './tools';
@@ -53,6 +62,9 @@ export async function handleInboundMessage(
   const correlationId = crypto.randomUUID();
   const eventsEmitted: string[] = [];
   const turnLog: TurnLogEntry[] = [];
+  const channelCtx: SendChannelContext | undefined = params.channelIntegration
+    ? { channel: params.channel, channelIntegration: params.channelIntegration, channelAddress: params.channelAddress }
+    : undefined;
 
   try {
     // 0a. Check if contact has opted out (skip in test mode)
@@ -156,6 +168,51 @@ export async function handleInboundMessage(
     // 2. Find or create conversation
     const { conversation, isNew } = await findOrCreateConversation(params, agent);
 
+    // 2a. Proactive outreach path (missed-call handler) — send first message without inbound
+    if (params.callerContext === 'proactive') {
+      if (!isNew) {
+        return {
+          success: false,
+          replyText: null,
+          conversationId: conversation.id,
+          isNewConversation: false,
+          status: conversation.status,
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          error: 'active_conversation_exists',
+          eventsEmitted: [],
+        };
+      }
+
+      const outboundText = params.proactiveMessage || agent.initialMessage || '';
+      if (outboundText) {
+        await prisma.conversationMessage.create({
+          data: { conversationId: conversation.id, role: 'ASSISTANT', content: outboundText },
+        });
+
+        if (!params.testMode) {
+          await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, outboundText, 'proactive', conversation.id, channelCtx);
+        }
+      }
+
+      await emitAgentEvent(params.workspaceId, 'conversation_started', {
+        agentId: agent.id,
+        conversationId: conversation.id,
+        contactAddress: params.contactAddress,
+        channel: params.channel,
+        leadId: params.leadId,
+      });
+
+      return {
+        success: true,
+        replyText: outboundText || null,
+        conversationId: conversation.id,
+        isNewConversation: true,
+        status: ConversationStatus.ACTIVE,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        eventsEmitted: ['conversation_started'],
+      };
+    }
+
     // 2b. Cancel pending follow-ups on any inbound message
     if (!isNew) {
       await cancelPendingFollowUps(conversation.id, 'lead_responded', params.workspaceId);
@@ -210,18 +267,29 @@ export async function handleInboundMessage(
 
     // 4. Check timeout
     if (isConversationTimedOut(conversation.lastMessageAt || conversation.startedAt, agent.conversationTimeoutMinutes)) {
+      const resolution = deriveResolution(ConversationStatus.TIMED_OUT, [], conversation.messageCount);
       await prisma.conversation.update({
         where: { id: conversation.id },
-        data: { status: ConversationStatus.TIMED_OUT, endedAt: new Date() },
+        data: {
+          status: ConversationStatus.TIMED_OUT,
+          endedAt: new Date(),
+          metadata: mergeResolutionMetadata(conversation.metadata, resolution),
+        },
       });
 
       await emitAgentEvent(params.workspaceId, 'conversation_completed', {
         agentId: agent.id,
         conversationId: conversation.id,
         reason: 'timeout',
+        resolution,
         leadId: params.leadId,
       });
       eventsEmitted.push('conversation_completed');
+
+      notifyResolution({
+        workspaceId: params.workspaceId, agentId: agent.id, conversationId: conversation.id,
+        contactAddress: params.contactAddress, resolution, channel: params.channel, channelIntegration: params.channelIntegration,
+      }).catch(() => {});
 
       turnLog.push({ type: 'guardrail', guardrail: 'timeout', detail: `Timed out after ${agent.conversationTimeoutMinutes}m`, ts: Date.now() });
       turnLog.push({ type: 'event', event: 'conversation_completed', ts: Date.now() });
@@ -241,24 +309,35 @@ export async function handleInboundMessage(
 
     // 5. Check message limit
     if (conversation.messageCount >= agent.maxMessagesPerConversation) {
+      const resolution = deriveResolution(ConversationStatus.COMPLETED, [], conversation.messageCount);
       await prisma.conversation.update({
         where: { id: conversation.id },
-        data: { status: ConversationStatus.COMPLETED, endedAt: new Date() },
+        data: {
+          status: ConversationStatus.COMPLETED,
+          endedAt: new Date(),
+          metadata: mergeResolutionMetadata(conversation.metadata, resolution),
+        },
       });
 
       await emitAgentEvent(params.workspaceId, 'conversation_completed', {
         agentId: agent.id,
         conversationId: conversation.id,
         reason: 'message_limit',
+        resolution,
         leadId: params.leadId,
       });
       eventsEmitted.push('conversation_completed');
+
+      notifyResolution({
+        workspaceId: params.workspaceId, agentId: agent.id, conversationId: conversation.id,
+        contactAddress: params.contactAddress, resolution, channel: params.channel, channelIntegration: params.channelIntegration,
+      }).catch(() => {});
 
       turnLog.push({ type: 'guardrail', guardrail: 'message_limit', detail: `Reached ${agent.maxMessagesPerConversation} message limit`, ts: Date.now() });
       turnLog.push({ type: 'event', event: 'conversation_completed', ts: Date.now() });
 
       if (agent.fallbackMessage && !params.testMode) {
-        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, agent.fallbackMessage, 'reactive', conversation.id);
+        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, agent.fallbackMessage, 'reactive', conversation.id, channelCtx);
       }
 
       return {
@@ -301,6 +380,24 @@ export async function handleInboundMessage(
           success: false,
           metadata: { agentId: agent.id, conversationId: conversation.id, recentReplies },
         });
+
+        await emitEvent({
+          workspaceId: params.workspaceId,
+          system: EventSystem.AGENT,
+          eventType: 'agent_rate_limited',
+          success: false,
+          errorMessage: `Rate limited: ${recentReplies}/${agent.rateLimitPerHour} replies per hour`,
+          metadata: {
+            agentId: agent.id,
+            conversationId: conversation.id,
+            channel: params.channel,
+            channelIntegration: params.channelIntegration,
+            correlationId,
+            recentReplies,
+            rateLimitPerHour: agent.rateLimitPerHour,
+          },
+        });
+
         turnLog.push({ type: 'guardrail', guardrail: 'rate_limited', detail: `${recentReplies}/${agent.rateLimitPerHour} replies/hr`, ts: Date.now() });
 
         return {
@@ -371,7 +468,7 @@ export async function handleInboundMessage(
           if (shouldApplyDelay(params) && agent.responseDelaySeconds > 0) {
             await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
           }
-          await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, initialText, 'reactive', conversation.id);
+          await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, initialText, 'reactive', conversation.id, channelCtx);
         }
       }
     }
@@ -398,7 +495,7 @@ export async function handleInboundMessage(
           if (shouldApplyDelay(params) && agent.responseDelaySeconds > 0) {
             await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
           }
-          await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, faqMatch, 'reactive', conversation.id);
+          await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, faqMatch, 'reactive', conversation.id, channelCtx);
         }
         return {
           success: true,
@@ -415,6 +512,122 @@ export async function handleInboundMessage(
       }
     }
 
+    // 7d. Emergency keyword check — skip AI entirely on match
+    const emergencyCheck = checkEmergencyKeywords(params.messageText, agent.guardrails);
+    if (emergencyCheck.triggered) {
+      const emergencyReply = agent.guardrails.emergencyRefusal;
+      turnLog.push({ type: 'guardrail', guardrail: 'emergency_escalation', detail: `Matched keyword: "${emergencyCheck.keyword}"`, ts: Date.now() });
+
+      await prisma.conversationMessage.create({
+        data: { conversationId: conversation.id, role: 'ASSISTANT', content: emergencyReply },
+      });
+
+      const emergencyResolution = deriveResolution(ConversationStatus.ESCALATED, [], conversation.messageCount + 2);
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          status: ConversationStatus.ESCALATED,
+          endedAt: new Date(),
+          messageCount: { increment: 2 },
+          lastMessageAt: new Date(),
+          metadata: mergeResolutionMetadata(conversation.metadata, emergencyResolution),
+        },
+      });
+
+      if (!params.testMode) {
+        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, emergencyReply, 'reactive', conversation.id, channelCtx);
+      }
+
+      await emitAgentEvent(params.workspaceId, 'escalation_requested', {
+        agentId: agent.id,
+        conversationId: conversation.id,
+        reason: 'emergency_keyword',
+        keyword: emergencyCheck.keyword,
+        resolution: emergencyResolution,
+        leadId: params.leadId,
+      });
+      eventsEmitted.push('escalation_requested');
+      turnLog.push({ type: 'event', event: 'escalation_requested', ts: Date.now() });
+
+      try {
+        const { notifyEscalation } = await import('./escalation');
+        const summary = await buildConversationSummary(conversation.id);
+        await notifyEscalation({
+          workspaceId: params.workspaceId,
+          agentId: agent.id,
+          conversationId: conversation.id,
+          contactAddress: params.contactAddress,
+          summary,
+        });
+      } catch (err) {
+        logStructured({
+          correlationId,
+          event: 'agent_escalation_notification_failed',
+          workspaceId: params.workspaceId,
+          provider: 'agent',
+          error: err instanceof Error ? err.message : 'Emergency escalation notification failed',
+          metadata: { agentId: agent.id, conversationId: conversation.id, reason: 'emergency_keyword' },
+        });
+      }
+
+      notifyResolution({
+        workspaceId: params.workspaceId, agentId: agent.id, conversationId: conversation.id,
+        contactAddress: params.contactAddress, resolution: emergencyResolution, channel: params.channel, channelIntegration: params.channelIntegration,
+      }).catch(() => {});
+
+      return {
+        success: true,
+        replyText: emergencyReply,
+        conversationId: conversation.id,
+        isNewConversation: isNew,
+        status: ConversationStatus.ESCALATED,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        eventsEmitted,
+        turnLog,
+      };
+    }
+
+    // 7e. Input screening — injection detection + topic gating
+    const screenResult = await screenInput(params.workspaceId, agent, params.messageText);
+    if (!screenResult.allowed) {
+      const guardrailType = screenResult.intent === 'injection' ? 'injection' as const : 'off_topic' as const;
+      turnLog.push({ type: 'guardrail', guardrail: guardrailType, detail: screenResult.reason || `Blocked: ${screenResult.intent}`, ts: Date.now() });
+
+      const refusalText = screenResult.intent === 'injection'
+        ? 'I\'m here to help with your questions! What can I assist you with?'
+        : agent.guardrails.offTopicRefusal;
+
+      await prisma.conversationMessage.create({
+        data: { conversationId: conversation.id, role: 'ASSISTANT', content: refusalText, turnLog: turnLog.length > 0 ? (turnLog as unknown as Prisma.InputJsonValue) : undefined },
+      });
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { messageCount: { increment: 2 }, lastMessageAt: new Date() },
+      });
+
+      if (!params.testMode) {
+        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, refusalText, 'reactive', conversation.id, channelCtx);
+      }
+
+      return {
+        success: true,
+        replyText: refusalText,
+        conversationId: conversation.id,
+        isNewConversation: isNew,
+        status: ConversationStatus.ACTIVE,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        eventsEmitted,
+        turnLog,
+      };
+    }
+
+    // 7f. Inbound PII masking — scrub before the message enters the AI prompt
+    const piiResult = maskPiiForPrompt(params.messageText);
+    const maskedMessageText = piiResult.masked;
+    if (piiResult.hadPii) {
+      turnLog.push({ type: 'guardrail', guardrail: 'pii_scrubbed', detail: 'Masked PII in inbound message before AI prompt', ts: Date.now() });
+    }
+
     // 8. Load conversation history
     const history = await prisma.conversationMessage.findMany({
       where: { conversationId: conversation.id },
@@ -422,7 +635,7 @@ export async function handleInboundMessage(
       select: { role: true, content: true },
     });
 
-    // 9. Load reference files and build augmented system prompt
+    // 9. Load reference files and build hardened system prompt
     const basePrompt = params.systemPromptOverride || agent.systemPrompt;
     const refFiles = await prisma.agentFile.findMany({
       where: { agentId: agent.id },
@@ -430,20 +643,22 @@ export async function handleInboundMessage(
       orderBy: { createdAt: 'asc' },
     });
 
-    let systemPrompt = basePrompt;
-    if (refFiles.length > 0) {
-      const refBlock = refFiles
-        .map((f) => `## ${f.filename}\n${f.textContent}`)
-        .join('\n\n');
-      systemPrompt = `${basePrompt}\n\n--- Reference Documents ---\n\n${refBlock}`;
-    }
+    const hardened = hardenPrompt(basePrompt, refFiles, agent.name);
+    const systemPrompt = hardened.systemContent;
+
+    // The last USER message in history is the current turn (stored unmasked at step 6).
+    // Replace its content with the PII-masked version for the AI prompt.
+    const lastUserIdx = history.findLastIndex((m) => m.role === 'USER');
 
     const aiMessages: ChatMessage[] = [
       { role: 'developer', content: systemPrompt },
-      ...history.map((msg) => ({
+      ...history.map((msg, i) => ({
         role: mapRoleToAI(msg.role),
-        content: msg.content,
+        content: msg.role === 'USER'
+          ? wrapUserMessage(i === lastUserIdx ? maskedMessageText : msg.content)
+          : msg.content,
       })),
+      { role: 'developer', content: buildSandwich() },
     ];
 
     // 10. Resolve tools and call AI adapter with tool loop
@@ -487,10 +702,19 @@ export async function handleInboundMessage(
         eventType: 'agent_ai_failure',
         success: false,
         errorMessage: aiResult.error,
+        metadata: {
+          agentId: agent.id,
+          conversationId: conversation.id,
+          channel: params.channel,
+          channelIntegration: params.channelIntegration,
+          provider: agent.aiIntegration,
+          correlationId,
+          latencyMs: Math.round(performance.now() - aiStartMs),
+        },
       });
 
       if (agent.fallbackMessage && !params.testMode) {
-        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, agent.fallbackMessage, 'reactive', conversation.id);
+        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, agent.fallbackMessage, 'reactive', conversation.id, channelCtx);
       }
 
       return {
@@ -619,6 +843,23 @@ export async function handleInboundMessage(
           error: loopResult.error || 'AI call failed during tool loop',
           metadata: { agentId: agent.id, conversationId: conversation.id, iteration },
         });
+
+        await emitEvent({
+          workspaceId: params.workspaceId,
+          system: EventSystem.AGENT,
+          eventType: 'agent_ai_failure_in_tool_loop',
+          success: false,
+          errorMessage: loopResult.error || 'AI call failed during tool loop',
+          metadata: {
+            agentId: agent.id,
+            conversationId: conversation.id,
+            channel: params.channel,
+            channelIntegration: params.channelIntegration,
+            provider: agent.aiIntegration,
+            correlationId,
+            iteration,
+          },
+        });
         break;
       }
 
@@ -643,7 +884,19 @@ export async function handleInboundMessage(
 
     const latencyMs = Math.round(performance.now() - aiStartMs);
     completion = { ...completion, usage: accumulatedUsage };
-    const replyText = completion.content || '';
+    let replyText = completion.content || '';
+
+    // 10a. Output guardrails — filter before any further processing
+    const outputResult = filterOutput(replyText, basePrompt, agent.guardrails);
+    if (outputResult.modifications.length > 0) {
+      replyText = outputResult.text;
+      for (const mod of outputResult.modifications) {
+        turnLog.push({ type: 'guardrail', guardrail: mod.type, detail: mod.detail, ts: Date.now() });
+      }
+      if (outputResult.blocked) {
+        turnLog.push({ type: 'guardrail', guardrail: 'output_blocked', detail: 'Response replaced by guardrail', ts: Date.now() });
+      }
+    }
 
     // 10b. Escalation detection
     const escPattern = agent.escalationPattern || '[ESCALATE]';
@@ -661,6 +914,7 @@ export async function handleInboundMessage(
         },
       });
 
+      const aiEscResolution = deriveResolution(ConversationStatus.ESCALATED, toolsUsed, conversation.messageCount + 2);
       await prisma.conversation.update({
         where: { id: conversation.id },
         data: {
@@ -669,6 +923,7 @@ export async function handleInboundMessage(
           messageCount: { increment: 2 },
           totalTokens: { increment: completion.usage.totalTokens },
           lastMessageAt: new Date(),
+          metadata: mergeResolutionMetadata(conversation.metadata, aiEscResolution),
         },
       });
 
@@ -676,13 +931,14 @@ export async function handleInboundMessage(
         if (shouldApplyDelay(params) && agent.responseDelaySeconds > 0) {
           await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
         }
-        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, cleanedReply, 'reactive', conversation.id);
+        await sendReply(params.workspaceId, agent, params.channelAddress, params.contactAddress, cleanedReply, 'reactive', conversation.id, channelCtx);
       }
 
       await emitAgentEvent(params.workspaceId, 'escalation_requested', {
         agentId: agent.id,
         conversationId: conversation.id,
         reason: 'ai_escalation',
+        resolution: aiEscResolution,
         leadId: params.leadId,
       });
       eventsEmitted.push('escalation_requested');
@@ -711,6 +967,11 @@ export async function handleInboundMessage(
         });
       }
 
+      notifyResolution({
+        workspaceId: params.workspaceId, agentId: agent.id, conversationId: conversation.id,
+        contactAddress: params.contactAddress, resolution: aiEscResolution, channel: params.channel, channelIntegration: params.channelIntegration,
+      }).catch(() => {});
+
       return {
         success: true,
         replyText: cleanedReply,
@@ -731,6 +992,7 @@ export async function handleInboundMessage(
     const newTotalTokens = conversation.totalTokens + completion.usage.totalTokens;
     const hitTokenLimit = newTotalTokens >= agent.maxTokensPerConversation;
     const finalStatus: ConversationStatus = hitTokenLimit ? ConversationStatus.COMPLETED : ConversationStatus.ACTIVE;
+    const tokenResolution: string | null = hitTokenLimit ? deriveResolution(ConversationStatus.COMPLETED, toolsUsed, newMessageCount) : null;
 
     await withTransaction(async (tx) => {
       await tx.conversationMessage.create({
@@ -744,28 +1006,47 @@ export async function handleInboundMessage(
         },
       });
 
+      const tokenLimitData = hitTokenLimit && tokenResolution ? {
+        status: ConversationStatus.COMPLETED,
+        endedAt: new Date(),
+        metadata: mergeResolutionMetadata(conversation.metadata, tokenResolution),
+      } : {};
+
       await tx.conversation.update({
         where: { id: conversation.id },
         data: {
           messageCount: newMessageCount,
           totalTokens: newTotalTokens,
           lastMessageAt: new Date(),
-          ...(hitTokenLimit ? { status: ConversationStatus.COMPLETED, endedAt: new Date() } : {}),
+          ...tokenLimitData,
         },
       });
     });
 
-    if (hitTokenLimit) {
+    if (hitTokenLimit && tokenResolution) {
       await emitAgentEvent(params.workspaceId, 'conversation_completed', {
         agentId: agent.id,
         conversationId: conversation.id,
         reason: 'token_limit',
+        resolution: tokenResolution,
         leadId: params.leadId,
       });
       eventsEmitted.push('conversation_completed');
 
+      notifyResolution({
+        workspaceId: params.workspaceId, agentId: agent.id, conversationId: conversation.id,
+        contactAddress: params.contactAddress, resolution: tokenResolution, channel: params.channel, channelIntegration: params.channelIntegration,
+      }).catch(() => {});
+
       turnLog.push({ type: 'guardrail', guardrail: 'token_limit', detail: `Reached ${agent.maxTokensPerConversation} token limit`, ts: Date.now() });
       turnLog.push({ type: 'event', event: 'conversation_completed', ts: Date.now() });
+    }
+
+    // 13b. AI disclosure — prepend on first message of new conversation
+    if (isNew && !agent.guardrails.skipAiDisclosure && replyText) {
+      const disclosure = agent.guardrails.aiDisclosureMessage.replace('{agentName}', agent.name);
+      replyText = `${disclosure}\n\n${replyText}`;
+      turnLog.push({ type: 'guardrail', guardrail: 'ai_disclosure', detail: 'Prepended AI disclosure', ts: Date.now() });
     }
 
     // 14. Apply response delay then send reply via channel adapter
@@ -785,6 +1066,7 @@ export async function handleInboundMessage(
         replyText,
         'reactive',
         conversation.id,
+        channelCtx,
       );
     }
 
@@ -794,6 +1076,15 @@ export async function handleInboundMessage(
       system: EventSystem.AGENT,
       eventType: 'agent_response_sent',
       success: true,
+      metadata: {
+        agentId: agent.id,
+        conversationId: conversation.id,
+        channel: params.channel,
+        channelIntegration: params.channelIntegration,
+        provider: agent.aiIntegration,
+        correlationId,
+        tokensUsed: completion.usage.totalTokens,
+      },
     });
 
     logStructured({
@@ -863,15 +1154,28 @@ export async function initiateConversation(
       return errorResponse('Agent not found or inactive', correlationId);
     }
 
+    // 1a. Resolve the requested channel from agent.channels
+    const selectedChannel = params.channelType
+      ? agent.channels.find((c) => c.channel === params.channelType)
+      : agent.channels[0]; // fallback: first configured channel
+
+    const chType = selectedChannel?.channel ?? agent.channelType ?? 'SMS';
+    const chIntegration = selectedChannel?.integration ?? agent.channelIntegration;
+    const chAddress = selectedChannel?.address ?? agent.channelAddress;
+
+    const channelCtx: SendChannelContext | undefined = chIntegration
+      ? { channel: chType, channelIntegration: chIntegration, channelAddress: chAddress || '' }
+      : undefined;
+
     // 1b. Quiet hours check for proactive outreach (before any DB writes)
-    if (!params.testMode && shouldEnforceQuietHours(agent.channelType)) {
+    if (!params.testMode && shouldEnforceQuietHours(chType)) {
       const gate = checkSendWindow(agent.timezone);
       if (!gate.allowed) {
         logStructured({
           correlationId,
           event: 'agent_send_blocked_quiet_hours',
           workspaceId: params.workspaceId,
-          provider: agent.channelIntegration || 'agent',
+          provider: chIntegration || 'agent',
           success: false,
           metadata: {
             agentId: agent.id,
@@ -898,12 +1202,12 @@ export async function initiateConversation(
     }
 
     // 2. Validate channel is configured
-    if (!agent.channelIntegration || !agent.channelAddress) {
+    if (!chIntegration || !chAddress) {
       if (params.testMode) {
         // Test mode: skip channel delivery, just store in DB
       } else {
         return errorResponse(
-          'Agent has no channel configured. Set channelIntegration and channelAddress before proactive outreach.',
+          'Agent has no channel configured. Add a channel in the agent editor before proactive outreach.',
           correlationId
         );
       }
@@ -920,11 +1224,11 @@ export async function initiateConversation(
 
     let contactAddress: string | null = null;
 
-    if (agent.channelIntegration) {
-      const contactField = getContactFieldForChannel(agent.channelIntegration);
+    if (chIntegration) {
+      const contactField = getContactFieldForChannel(chIntegration);
       if (!contactField) {
         return errorResponse(
-          `No contactField defined for channel: ${agent.channelIntegration}`,
+          `No contactField defined for channel: ${chIntegration}`,
           correlationId
         );
       }
@@ -937,11 +1241,11 @@ export async function initiateConversation(
     }
 
     if (!contactAddress && !params.testMode) {
-      const fieldName = agent.channelIntegration
-        ? getContactFieldForChannel(agent.channelIntegration) || 'unknown'
+      const fieldName = chIntegration
+        ? getContactFieldForChannel(chIntegration) || 'unknown'
         : 'unknown';
       return errorResponse(
-        `Lead is missing "${fieldName}" property required for ${agent.channelIntegration || 'channel'} outreach`,
+        `Lead is missing "${fieldName}" property required for ${chIntegration || 'channel'} outreach`,
         correlationId
       );
     }
@@ -972,18 +1276,18 @@ export async function initiateConversation(
 
     // 4b. Check consent for proactive outreach
     if (contactAddress && !params.testMode) {
-      const consent = await checkConsent(params.workspaceId, contactAddress, agent.channelType || 'SMS');
+      const consent = await checkConsent(params.workspaceId, contactAddress, chType);
       if (!consent) {
         logStructured({
           correlationId,
           event: 'agent_send_blocked_no_consent',
           workspaceId: params.workspaceId,
-          provider: agent.channelIntegration || 'agent',
+          provider: chIntegration || 'agent',
           success: false,
           metadata: {
             agentId: agent.id,
             contactAddress,
-            channel: agent.channelType || 'SMS',
+            channel: chType,
           },
         });
         return {
@@ -1017,15 +1321,15 @@ export async function initiateConversation(
     const outboundText = interpolateLeadVariables(rawText, lead, workspaceName);
 
     // 6. Create conversation
-    const channelType = agent.channelType || 'SMS';
     const conversation = await prisma.conversation.create({
       data: {
         workspaceId: params.workspaceId,
         agentId: agent.id,
         leadId: params.leadId,
-        channel: channelType,
+        channel: chType,
+        channelIntegration: chIntegration || null,
         contactAddress: contactAddress || `test-${params.leadId}`,
-        channelAddress: agent.channelAddress || '',
+        channelAddress: chAddress || '',
         status: ConversationStatus.ACTIVE,
         isTest: params.testMode ?? false,
       },
@@ -1047,18 +1351,19 @@ export async function initiateConversation(
     });
 
     // 8. Send via channel (skip in test mode or when no channel)
-    if (!params.testMode && agent.channelIntegration && agent.channelAddress && contactAddress) {
+    if (!params.testMode && chIntegration && chAddress && contactAddress) {
       if (agent.responseDelaySeconds > 0) {
         await new Promise((resolve) => setTimeout(resolve, agent.responseDelaySeconds * 1000));
       }
       await sendReply(
         params.workspaceId,
         agent,
-        agent.channelAddress,
+        chAddress,
         contactAddress,
         outboundText,
         'proactive',
         conversation.id,
+        channelCtx,
       );
     }
 
@@ -1067,7 +1372,7 @@ export async function initiateConversation(
       agentId: agent.id,
       conversationId: conversation.id,
       contactAddress: contactAddress || '',
-      channel: channelType,
+      channel: chType,
       leadId: params.leadId,
     });
     eventsEmitted.push('conversation_started');
@@ -1116,6 +1421,31 @@ export async function initiateConversation(
 // INTERNAL HELPERS
 // =============================================================================
 
+const AgentChannelsSchema = z.array(z.object({
+  channel: z.string(),
+  integration: z.string(),
+  address: z.string().optional(),
+})).catch([]);
+
+const StringArraySchema = z.array(z.string()).catch([]);
+
+const FollowUpSequenceSchema = z.array(z.object({
+  delayMinutes: z.number(),
+  message: z.string().optional(),
+  variants: z.array(z.string()).optional(),
+})).catch([]);
+
+const GuardrailsJsonSchema = z.object({
+  emergencyKeywords: z.array(z.string()).optional(),
+  prohibitedPhrases: z.array(z.string()).optional(),
+  allowedIntents: z.array(z.string()).optional(),
+  offTopicRefusal: z.string().optional(),
+  maxSmsSegments: z.number().optional(),
+  aiDisclosureMessage: z.string().optional(),
+  emergencyRefusal: z.string().optional(),
+  skipAiDisclosure: z.boolean().optional(),
+}).partial().nullable().catch(null);
+
 export async function loadAgent(
   workspaceId: string,
   agentId: string
@@ -1127,9 +1457,20 @@ export async function loadAgent(
 
   if (!agent) return null;
 
+  const channels = AgentChannelsSchema.parse(agent.channels);
+  const allowedEvents = StringArraySchema.parse(agent.allowedEvents);
+  const enabledTools = StringArraySchema.parse(agent.enabledTools);
+  const followUpSequence = FollowUpSequenceSchema.parse(agent.followUpSequence);
+  const guardrailsRaw = GuardrailsJsonSchema.parse(agent.guardrails);
+
   return {
     id: agent.id,
     name: agent.name,
+    channels: channels.map((c) => ({
+      channel: c.channel as 'SMS' | 'EMAIL' | 'WEB_CHAT',
+      integration: c.integration as 'TWILIO' | 'RESEND' | 'BUILT_IN',
+      address: c.address,
+    })),
     channelType: agent.channelType,
     channelIntegration: agent.channelIntegration,
     channelAddress: agent.channelAddress,
@@ -1148,23 +1489,22 @@ export async function loadAgent(
     fallbackMessage: agent.fallbackMessage,
     escalationPattern: agent.escalationPattern,
     faqOverrides: parseFaqOverrides(agent.faqOverrides),
-    allowedEvents: Array.isArray(agent.allowedEvents) ? agent.allowedEvents as string[] : [],
-    enabledTools: Array.isArray(agent.enabledTools) ? agent.enabledTools as string[] : [],
+    allowedEvents,
+    enabledTools,
     active: agent.active,
     timezone: agent.workspace.timezone,
     allowUnicode: agent.allowUnicode,
     followUpEnabled: agent.followUpEnabled,
     followUpAiGenerated: agent.followUpAiGenerated,
-    followUpSequence: Array.isArray(agent.followUpSequence)
-      ? (agent.followUpSequence as Array<{ delayMinutes: number; message?: string; variants?: string[] }>)
-      : [],
+    followUpSequence,
+    guardrails: resolveGuardrails(guardrailsRaw),
   };
 }
 
 async function findOrCreateConversation(
   params: InboundMessageParams,
   agent: AgentConfig
-): Promise<{ conversation: { id: string; status: ConversationStatus; messageCount: number; totalTokens: number; startedAt: Date; lastMessageAt: Date | null; pausedAt: Date | null }; isNew: boolean }> {
+): Promise<{ conversation: { id: string; status: ConversationStatus; messageCount: number; totalTokens: number; startedAt: Date; lastMessageAt: Date | null; pausedAt: Date | null; metadata: Prisma.JsonValue | null }; isNew: boolean }> {
   const isTest = params.testMode ?? false;
   const selectFields = {
     id: true,
@@ -1174,6 +1514,7 @@ async function findOrCreateConversation(
     startedAt: true,
     lastMessageAt: true,
     pausedAt: true,
+    metadata: true,
   } as const;
 
   if (params.conversationId) {
@@ -1208,6 +1549,7 @@ async function findOrCreateConversation(
       agentId: agent.id,
       leadId: params.leadId || null,
       channel: params.channel,
+      channelIntegration: params.channelIntegration || null,
       contactAddress: params.contactAddress,
       channelAddress: params.channelAddress,
       status: ConversationStatus.ACTIVE,
@@ -1217,6 +1559,29 @@ async function findOrCreateConversation(
   });
 
   return { conversation: created, isNew: true };
+}
+
+function deriveResolution(
+  status: ConversationStatus,
+  toolsUsed: string[],
+  messageCount: number,
+): string {
+  if (status === ConversationStatus.ESCALATED) return 'hard_escalation';
+  if (status === ConversationStatus.PAUSED) return 'paused';
+  if (toolsUsed.includes('book_appointment')) return 'booked';
+  if (status === ConversationStatus.TIMED_OUT && messageCount <= 1) return 'no_response';
+  if (status === ConversationStatus.COMPLETED && messageCount > 2) return 'soft_escalation';
+  return 'completed';
+}
+
+function mergeResolutionMetadata(
+  existing: Prisma.JsonValue | null,
+  resolution: string,
+): Prisma.InputJsonValue {
+  const base = (existing && typeof existing === 'object' && !Array.isArray(existing))
+    ? existing as Record<string, unknown>
+    : {};
+  return { ...base, resolution } satisfies Prisma.JsonObject;
 }
 
 function isConversationTimedOut(
@@ -1274,21 +1639,25 @@ export async function sendReply(
   body: string,
   sendType: SendType = 'reactive',
   conversationId?: string,
+  channelCtx?: SendChannelContext,
 ): Promise<SendReplyResult> {
-  if (!agent.channelIntegration) {
+  const chIntegration = channelCtx?.channelIntegration ?? agent.channelIntegration;
+  const chType = channelCtx?.channel ?? agent.channelType;
+
+  if (!chIntegration || chIntegration === 'BUILT_IN') {
     logStructured({
       correlationId: crypto.randomUUID(),
       event: 'agent_send_skipped',
       workspaceId,
       provider: 'agent',
       success: true,
-      metadata: { agentId: agent.id, reason: 'no_channel_configured' },
+      metadata: { agentId: agent.id, reason: chIntegration === 'BUILT_IN' ? 'webchat_synchronous' : 'no_channel_configured' },
     });
     return { sent: false };
   }
 
   // Quiet hours send gate
-  if (shouldEnforceQuietHours(agent.channelType)) {
+  if (shouldEnforceQuietHours(chType)) {
     const gate = checkSendWindow(agent.timezone);
     if (!gate.allowed) {
       if (sendType === 'proactive') {
@@ -1296,7 +1665,7 @@ export async function sendReply(
           correlationId: crypto.randomUUID(),
           event: 'agent_send_blocked_quiet_hours',
           workspaceId,
-          provider: agent.channelIntegration,
+          provider: chIntegration,
           success: false,
           metadata: {
             agentId: agent.id,
@@ -1309,12 +1678,11 @@ export async function sendReply(
         });
         return { sent: false, blockedByQuietHours: true, nextWindowAt: gate.nextWindowAt ?? undefined };
       }
-      // Reactive: log warning but proceed (responding to user-initiated contact)
       logStructured({
         correlationId: crypto.randomUUID(),
         event: 'agent_send_outside_window',
         workspaceId,
-        provider: agent.channelIntegration,
+        provider: chIntegration,
         success: true,
         metadata: {
           agentId: agent.id,
@@ -1327,14 +1695,14 @@ export async function sendReply(
     }
   }
 
-  const entry = resolveChannel(agent.channelIntegration);
+  const entry = resolveChannel(chIntegration);
   if (!entry) {
     logStructured({
       correlationId: crypto.randomUUID(),
       event: 'agent_unsupported_channel',
       workspaceId,
-      provider: agent.channelIntegration,
-      error: `Unsupported channel: ${agent.channelIntegration}`,
+      provider: chIntegration,
+      error: `Unsupported channel: ${chIntegration}`,
       metadata: { agentId: agent.id },
     });
     return { sent: false };
@@ -1346,24 +1714,44 @@ export async function sendReply(
       correlationId: crypto.randomUUID(),
       event: 'agent_channel_not_configured',
       workspaceId,
-      provider: agent.channelIntegration,
+      provider: chIntegration,
       error: `${entry.label} not configured for this workspace`,
       metadata: { agentId: agent.id },
     });
     return { sent: false };
   }
 
-  // SMS encoding sanitization (skipped for non-SMS channels)
   let sanitizedBody = body;
-  if (shouldSanitizeSms(agent.channelType) && !agent.allowUnicode) {
+  if (shouldSanitizeSms(chType) && !agent.allowUnicode) {
     sanitizedBody = sanitizeForGsm7(body);
   }
+
+  // SMS segment cap enforcement
+  if (shouldSanitizeSms(chType)) {
+    const preCapSegments = estimateSegments(sanitizedBody);
+    if (preCapSegments.segments > agent.guardrails.maxSmsSegments) {
+      sanitizedBody = truncateToSegments(sanitizedBody, agent.guardrails.maxSmsSegments);
+      logStructured({
+        correlationId: crypto.randomUUID(),
+        event: 'agent_sms_truncated',
+        workspaceId,
+        provider: chIntegration,
+        success: true,
+        metadata: {
+          agentId: agent.id,
+          originalSegments: preCapSegments.segments,
+          maxSegments: agent.guardrails.maxSmsSegments,
+        },
+      });
+    }
+  }
+
   const segments = estimateSegments(sanitizedBody);
   logStructured({
     correlationId: crypto.randomUUID(),
     event: 'agent_sms_segments',
     workspaceId,
-    provider: agent.channelIntegration,
+    provider: chIntegration,
     success: true,
     metadata: {
       agentId: agent.id,
@@ -1374,9 +1762,8 @@ export async function sendReply(
     },
   });
 
-  // Build email threading metadata when using email channel
   let metadata: ChannelMessageMetadata | undefined;
-  if (agent.channelType?.toUpperCase() === 'EMAIL' && conversationId) {
+  if (chType?.toUpperCase() === 'EMAIL' && conversationId) {
     const convo = await prisma.conversation.findUnique({
       where: { id: conversationId },
       select: { metadata: true, messageCount: true },
@@ -1400,7 +1787,7 @@ export async function sendReply(
       correlationId: crypto.randomUUID(),
       event: 'agent_send_failed',
       workspaceId,
-      provider: agent.channelIntegration,
+      provider: chIntegration,
       success: false,
       error: err instanceof Error ? err.message : 'Channel adapter threw',
       metadata: { agentId: agent.id },
@@ -1412,7 +1799,7 @@ export async function sendReply(
       correlationId: crypto.randomUUID(),
       event: 'agent_send_failed',
       workspaceId,
-      provider: agent.channelIntegration,
+      provider: chIntegration,
       success: false,
       error: result.error || 'Send failed',
       metadata: { agentId: agent.id },
@@ -1420,8 +1807,7 @@ export async function sendReply(
     return { sent: false };
   }
 
-  // Store outbound email message ID for threading
-  if (agent.channelType?.toUpperCase() === 'EMAIL' && conversationId && result.data) {
+  if (chType?.toUpperCase() === 'EMAIL' && conversationId && result.data) {
     const sendResult = result.data as { messageId?: string };
     if (sendResult.messageId) {
       const convo = await prisma.conversation.findUnique({
@@ -1442,6 +1828,8 @@ export async function sendReply(
     }
   }
 
+  dispatchPostSendHooks({ workspaceId, agent, contactAddress: toAddress, body: sanitizedBody, channelType: chType ?? undefined }).catch(() => {});
+
   return { sent: true };
 }
 
@@ -1450,12 +1838,14 @@ async function emitAgentEvent(
   eventType: string,
   payload: Record<string, unknown>
 ): Promise<void> {
+  const { leadId, ...meta } = payload;
   await emitEvent({
     workspaceId,
-    leadId: payload.leadId as string | undefined,
+    leadId: leadId as string | undefined,
     system: EventSystem.AGENT,
     eventType: `agent_${eventType}`,
     success: true,
+    metadata: meta,
   });
 
   await emitTrigger(

@@ -10,6 +10,7 @@
  * - Failed actions are logged and stop workflow execution
  */
 
+import { z } from 'zod';
 import { prisma } from '@/app/_lib/db';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { Prisma } from '@prisma/client';
@@ -28,6 +29,7 @@ import {
   logStructured,
 } from '@/app/_lib/reliability';
 import { AlertService } from '@/app/_lib/alerts';
+import { enqueueFailedAction } from '@/app/_lib/services/integration-sync.service';
 
 // =============================================================================
 // MAIN ENTRY POINT
@@ -89,10 +91,34 @@ export async function emitTrigger(
   const executions: WorkflowExecutionResult[] = [];
   let workflowsExecuted = 0;
 
+  const WorkflowActionSchema = z.array(z.object({
+    adapter: z.string(),
+    operation: z.string(),
+    params: z.record(z.string(), z.unknown()),
+    conditions: z.record(z.string(), z.unknown()).optional(),
+    continueOnError: z.boolean().optional(),
+  }));
+
   for (const workflow of workflows) {
-    // Check trigger filter
-    const filter = workflow.triggerFilter as Record<string, unknown> | null;
+    const rawFilter = workflow.triggerFilter;
+    const filter = (rawFilter !== null && typeof rawFilter === 'object' && !Array.isArray(rawFilter))
+      ? rawFilter as Record<string, unknown>
+      : null;
     if (!matchesFilter(filter, payload)) {
+      continue;
+    }
+
+    const actionsResult = WorkflowActionSchema.safeParse(workflow.actions);
+    if (!actionsResult.success) {
+      executions.push({
+        workflowId: workflow.id,
+        workflowName: workflow.name,
+        status: 'failed',
+        actionsExecuted: 0,
+        actionsTotal: 0,
+        results: [],
+        error: `Malformed workflow actions: ${actionsResult.error.message}`,
+      });
       continue;
     }
 
@@ -101,7 +127,7 @@ export async function emitTrigger(
       {
         id: workflow.id,
         name: workflow.name,
-        actions: workflow.actions as unknown as WorkflowAction[],
+        actions: actionsResult.data,
       },
       { ...baseContext, leadId: undefined }
     );
@@ -170,6 +196,7 @@ async function executeWorkflow(
   const ctx: WorkflowContext = { ...baseContext };
 
   let failed = false;
+  let hasWarnings = false;
   let errorMessage: string | undefined;
 
   for (let actionIndex = 0; actionIndex < workflow.actions.length; actionIndex++) {
@@ -219,6 +246,41 @@ async function executeWorkflow(
             ctx.leadId = result.data.leadId as string;
           }
         }
+      } else if (action.continueOnError) {
+        hasWarnings = true;
+        const warningMessage = `${action.adapter}.${action.operation}: ${result.error}`;
+
+        await emitEvent({
+          workspaceId: ctx.workspaceId,
+          leadId: ctx.leadId,
+          system: EventSystem.WORKFLOW,
+          eventType: 'workflow_action_warning',
+          success: false,
+          errorMessage: `[continueOnError] ${warningMessage}`,
+        });
+
+        logStructured({
+          correlationId,
+          event: 'workflow_action_continued_on_error',
+          workspaceId: baseContext.workspaceId,
+          success: false,
+          error: warningMessage,
+          metadata: {
+            action: `${action.adapter}.${action.operation}`,
+            actionIndex,
+          },
+        });
+
+        if (ctx.email) {
+          await enqueueFailedAction({
+            workspaceId: ctx.workspaceId,
+            email: ctx.email,
+            leadId: ctx.leadId,
+            adapter: action.adapter,
+            operation: action.operation,
+            params: action.params as Record<string, unknown>,
+          });
+        }
       } else {
         // Stop on error
         failed = true;
@@ -236,31 +298,73 @@ async function executeWorkflow(
         break;
       }
     } catch (error) {
-      failed = true;
-      errorMessage = `${action.adapter}.${action.operation}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      const catchMessage = `${action.adapter}.${action.operation}: ${error instanceof Error ? error.message : 'Unknown error'}`;
       results.push({
         action,
-        result: { success: false, error: errorMessage },
+        result: { success: false, error: catchMessage },
       });
 
-      await emitEvent({
-        workspaceId: ctx.workspaceId,
-        leadId: ctx.leadId,
-        system: EventSystem.WORKFLOW,
-        eventType: 'workflow_action_error',
-        success: false,
-        errorMessage,
-      });
+      if (action.continueOnError) {
+        hasWarnings = true;
 
-      break;
+        await emitEvent({
+          workspaceId: ctx.workspaceId,
+          leadId: ctx.leadId,
+          system: EventSystem.WORKFLOW,
+          eventType: 'workflow_action_warning',
+          success: false,
+          errorMessage: `[continueOnError] ${catchMessage}`,
+        });
+
+        logStructured({
+          correlationId,
+          event: 'workflow_action_continued_on_error',
+          workspaceId: baseContext.workspaceId,
+          success: false,
+          error: catchMessage,
+          metadata: {
+            action: `${action.adapter}.${action.operation}`,
+            actionIndex,
+          },
+        });
+
+        if (ctx.email) {
+          await enqueueFailedAction({
+            workspaceId: ctx.workspaceId,
+            email: ctx.email,
+            leadId: ctx.leadId,
+            adapter: action.adapter,
+            operation: action.operation,
+            params: action.params as Record<string, unknown>,
+          });
+        }
+      } else {
+        failed = true;
+        errorMessage = catchMessage;
+
+        await emitEvent({
+          workspaceId: ctx.workspaceId,
+          leadId: ctx.leadId,
+          system: EventSystem.WORKFLOW,
+          eventType: 'workflow_action_error',
+          success: false,
+          errorMessage,
+        });
+
+        break;
+      }
     }
   }
+
+  // Determine final status
+  const finalStatus = failed ? 'FAILED' : hasWarnings ? 'COMPLETED_WITH_WARNINGS' : 'COMPLETED';
+  const resultStatus = failed ? 'failed' : hasWarnings ? 'completed_with_warnings' : 'completed';
 
   // Update execution record
   await prisma.workflowExecution.update({
     where: { id: execution.id },
     data: {
-      status: failed ? 'FAILED' : 'COMPLETED',
+      status: finalStatus,
       actionResults: results.map((r) => ({
         action: r.action,
         result: r.result,
@@ -275,7 +379,7 @@ async function executeWorkflow(
     workspaceId: ctx.workspaceId,
     leadId: ctx.leadId,
     system: EventSystem.WORKFLOW,
-    eventType: failed ? 'workflow_failed' : 'workflow_completed',
+    eventType: failed ? 'workflow_failed' : hasWarnings ? 'workflow_completed_with_warnings' : 'workflow_completed',
     success: !failed,
     errorMessage: failed
       ? `Workflow '${workflow.name}' failed: ${errorMessage}`
@@ -307,13 +411,14 @@ async function executeWorkflow(
       workflowName: workflow.name,
       executionId: execution.id,
       actionsExecuted: results.length,
+      ...(hasWarnings ? { hasWarnings: true } : {}),
     },
   });
 
   return {
     workflowId: workflow.id,
     workflowName: workflow.name,
-    status: failed ? 'failed' : 'completed',
+    status: resultStatus,
     actionsExecuted: results.length,
     actionsTotal: workflow.actions.length,
     results,

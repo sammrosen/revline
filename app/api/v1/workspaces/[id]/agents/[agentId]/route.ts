@@ -85,16 +85,20 @@ export async function PATCH(
 
   const updateData = parsed.data;
 
-  if (updateData.channelIntegration) {
-    const channelInt = await prisma.workspaceIntegration.findFirst({
-      where: { workspaceId, integration: updateData.channelIntegration as IntegrationType },
-    });
-    if (!channelInt) {
-      return ApiResponse.error(
-        `Channel integration ${updateData.channelIntegration} not configured`,
-        400,
-        ErrorCodes.INTEGRATION_NOT_CONFIGURED
-      );
+  if (updateData.channels) {
+    for (const ch of updateData.channels) {
+      if (ch.integration !== 'BUILT_IN') {
+        const channelInt = await prisma.workspaceIntegration.findFirst({
+          where: { workspaceId, integration: ch.integration as IntegrationType },
+        });
+        if (!channelInt) {
+          return ApiResponse.error(
+            `Channel integration ${ch.integration} not configured`,
+            400,
+            ErrorCodes.INTEGRATION_NOT_CONFIGURED
+          );
+        }
+      }
     }
   }
 
@@ -112,6 +116,10 @@ export async function PATCH(
   }
 
   const prismaData: Record<string, unknown> = { ...updateData };
+  // Strip deprecated single-channel fields — only channels JSON is written
+  delete prismaData.channelType;
+  delete prismaData.channelIntegration;
+  delete prismaData.channelAddress;
   if ('faqOverrides' in prismaData && prismaData.faqOverrides === null) {
     prismaData.faqOverrides = Prisma.JsonNull;
   }

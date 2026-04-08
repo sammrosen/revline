@@ -192,13 +192,34 @@ export const MAILERLITE_ADAPTER: AdapterDefinition = {
  * 
  * See: app/api/v1/workflow-registry/route.ts
  */
+const ContactSubmittedPayloadSchema = z.object({
+  email: z.string().email(),
+  name: z.string().optional(),
+  phone: z.string().optional(),
+  source: z.string().optional(),
+});
+
 export const REVLINE_ADAPTER: AdapterDefinition = {
   id: 'revline',
   name: 'RevLine',
   requiresIntegration: false, // Always available
-  // Triggers are DYNAMIC - populated from workspace's enabled forms
-  // The API injects workspace-specific form triggers at runtime
-  triggers: {},
+  // Triggers are DYNAMIC — the workflow registry API injects workspace-specific
+  // form triggers at runtime. Static schemas below enable payload compatibility
+  // checks even though the UI dropdown is populated dynamically.
+  triggers: {
+    'contact-submitted': {
+      name: 'contact-submitted',
+      label: 'Contact Form Submitted',
+      description: 'Visitor submitted a contact form on the landing page',
+      payloadSchema: ContactSubmittedPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email' as const, required: true },
+        { name: 'name', label: 'Name', type: 'text' as const, required: false },
+        { name: 'phone', label: 'Phone', type: 'text' as const, required: false },
+        { name: 'source', label: 'Source', type: 'text' as const, required: false },
+      ],
+    },
+  },
   actions: {
     create_lead: {
       name: 'create_lead',
@@ -610,6 +631,25 @@ export const TWILIO_ADAPTER: AdapterDefinition = {
         { name: 'body', label: 'Message Body', type: 'text', required: true, placeholder: 'Hello!' },
       ],
     },
+    missed_call: {
+      name: 'missed_call',
+      label: 'Missed Call',
+      description: 'Fires when a forwarded missed call is received at the workspace Twilio number',
+      payloadSchema: z.object({
+        from: z.string().describe('Caller phone number (E.164)'),
+        to: z.string().describe('Twilio number that received the call (E.164)'),
+        callSid: z.string().describe('Twilio call SID'),
+        callerCity: z.string().optional(),
+        callerState: z.string().optional(),
+        callerCountry: z.string().optional(),
+        phoneConfigId: z.string().optional(),
+        mode: z.string().optional().describe('NOTIFICATION or AGENT'),
+      }),
+      testFields: [
+        { name: 'from', label: 'Caller Phone', type: 'text', required: true, placeholder: '+15551234567' },
+        { name: 'to', label: 'Twilio Number', type: 'text', required: true, placeholder: '+15559876543' },
+      ],
+    },
   },
   actions: {
     send_sms: {
@@ -765,6 +805,7 @@ export const AGENT_ADAPTER: AdapterDefinition = {
       payloadSchema: CommonPayloadSchema,
       paramsSchema: z.object({
         agentId: z.string().describe('ID of the agent to route to'),
+        channelType: z.string().optional().describe('Which of the agent\'s channels to use (SMS, EMAIL, WEB_CHAT). Omit to infer from trigger.'),
         messageText: z.string().optional().describe('Override message for proactive outreach (supports lead variables)'),
       }),
       testFields: [
@@ -772,6 +813,157 @@ export const AGENT_ADAPTER: AdapterDefinition = {
         { name: 'agentId', label: 'Agent ID', type: 'text' as const, required: true, placeholder: 'Agent ID to route to' },
         { name: 'messageText', label: 'Message', type: 'text' as const, required: false, placeholder: 'Override initial message (optional)' },
       ],
+    },
+  },
+};
+
+/**
+ * Shared payload schema for Pipedrive deal webhook triggers.
+ * Pipedrive webhook v1/v2 shapes vary — use .passthrough() and coerce numeric IDs.
+ */
+const DealPayloadSchema = z.object({
+  email: z.string().email(),
+  name: z.string().optional(),
+  phone: z.string().optional(),
+  pipedriveDealId: z.coerce.number(),
+  pipedrivePersonId: z.coerce.number().optional(),
+  pipelineId: z.coerce.number().optional(),
+  stageId: z.coerce.number().optional(),
+  status: z.string().optional(),
+  title: z.string().optional(),
+  value: z.coerce.number().optional(),
+  currency: z.string().optional(),
+}).passthrough();
+
+/**
+ * Pipedrive Adapter
+ * CRM integration — person sync, field updates, deal management
+ */
+export const PIPEDRIVE_ADAPTER: AdapterDefinition = {
+  id: 'pipedrive',
+  name: 'Pipedrive',
+  requiresIntegration: true,
+  requirements: {
+    secrets: ['API Token'],
+  },
+  triggers: {
+    person_created: {
+      name: 'person_created',
+      label: 'Person Created',
+      description: 'Fires when a person is created in Pipedrive (via webhook)',
+      payloadSchema: CommonPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'name', label: 'Name', type: 'text', required: false },
+        { name: 'phone', label: 'Phone', type: 'text', required: false },
+      ],
+    },
+    person_updated: {
+      name: 'person_updated',
+      label: 'Person Updated',
+      description: 'Fires when a Pipedrive person field changes (via webhook)',
+      payloadSchema: CommonPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'field', label: 'Changed Field', type: 'text', required: false },
+      ],
+    },
+    deal_added: {
+      name: 'deal_added',
+      label: 'Deal Added',
+      description: 'Fires when a deal is created in Pipedrive (via webhook)',
+      payloadSchema: DealPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'pipedriveDealId', label: 'Pipedrive Deal ID', type: 'number', required: true },
+      ],
+    },
+    deal_updated: {
+      name: 'deal_updated',
+      label: 'Deal Updated',
+      description: 'Fires when a deal is updated in Pipedrive (status did not transition to won/lost)',
+      payloadSchema: DealPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'pipedriveDealId', label: 'Pipedrive Deal ID', type: 'number', required: true },
+      ],
+    },
+    deal_won: {
+      name: 'deal_won',
+      label: 'Deal Won',
+      description: 'Fires when a Pipedrive deal transitions to status=won',
+      payloadSchema: DealPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'pipedriveDealId', label: 'Pipedrive Deal ID', type: 'number', required: true },
+      ],
+    },
+    deal_lost: {
+      name: 'deal_lost',
+      label: 'Deal Lost',
+      description: 'Fires when a Pipedrive deal transitions to status=lost',
+      payloadSchema: DealPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'pipedriveDealId', label: 'Pipedrive Deal ID', type: 'number', required: true },
+      ],
+    },
+  },
+  actions: {
+    create_or_update_person: {
+      name: 'create_or_update_person',
+      label: 'Create or Update Person',
+      description: 'Upsert a person in Pipedrive by email. Returns pipedrivePersonId for downstream actions.',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        fields: z.record(z.string(), z.string()).optional(),
+      }),
+    },
+    update_person_fields: {
+      name: 'update_person_fields',
+      label: 'Update Person Fields',
+      description: 'Update specific fields on an existing Pipedrive person (requires pipedrivePersonId in context)',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        fields: z.record(z.string(), z.string()),
+      }),
+    },
+    create_deal: {
+      name: 'create_deal',
+      label: 'Create Deal',
+      description: 'Create a deal in Pipedrive linked to the person (requires pipedrivePersonId in context). Returns pipedriveDealId.',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        title: z.string().optional(),
+        value: z.coerce.number().optional(),
+        currency: z.string().optional(),
+        pipelineId: z.coerce.number().optional(),
+        stageId: z.coerce.number().optional(),
+        status: z.string().optional(),
+      }),
+    },
+    update_deal: {
+      name: 'update_deal',
+      label: 'Update Deal',
+      description: 'Update fields on an existing Pipedrive deal (requires pipedriveDealId in context).',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        title: z.string().optional(),
+        value: z.coerce.number().optional(),
+        currency: z.string().optional(),
+        pipelineId: z.coerce.number().optional(),
+        stageId: z.coerce.number().optional(),
+        status: z.string().optional(),
+      }),
+    },
+    move_deal_stage: {
+      name: 'move_deal_stage',
+      label: 'Move Deal Stage',
+      description: 'Move a Pipedrive deal to a specific stage (requires pipedriveDealId in context).',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        stageId: z.coerce.number(),
+      }),
     },
   },
 };
@@ -795,6 +987,7 @@ export const ADAPTER_REGISTRY: Record<string, AdapterDefinition> = {
   openai: OPENAI_ADAPTER,
   anthropic: ANTHROPIC_ADAPTER,
   agent: AGENT_ADAPTER,
+  pipedrive: PIPEDRIVE_ADAPTER,
 };
 
 // =============================================================================

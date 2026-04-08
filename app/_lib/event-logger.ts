@@ -10,7 +10,8 @@ interface EmitEventParams {
   eventType: string;
   success: boolean;
   errorMessage?: string;
-  tx?: Prisma.TransactionClient; // Optional transaction client
+  metadata?: Record<string, unknown>;
+  tx?: Prisma.TransactionClient;
 }
 
 /**
@@ -18,7 +19,7 @@ interface EmitEventParams {
  * This is the primary debugging surface - log state transitions and outcomes only
  * 
  * DO log:
- * - email_captured, mailerlite_subscribe_success/failed
+ * - contact-submitted, mailerlite_subscribe_success/failed
  * - stripe_payment_succeeded/failed
  * - execution_blocked, health_status_changed
  * 
@@ -34,6 +35,7 @@ export async function emitEvent({
   eventType,
   success,
   errorMessage,
+  metadata,
   tx,
 }: EmitEventParams): Promise<void> {
   const db = tx || prisma;
@@ -45,11 +47,11 @@ export async function emitEvent({
         system,
         eventType,
         success,
-        errorMessage: errorMessage?.slice(0, 500), // Truncate long error messages
+        errorMessage: errorMessage?.slice(0, 2000),
+        metadata: metadata as Prisma.InputJsonValue ?? undefined,
       },
     });
   } catch (error) {
-    // Log but don't throw - event logging should never break the main flow
     console.error('Failed to emit event:', {
       eventType,
       system,

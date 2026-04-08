@@ -110,6 +110,9 @@ model Workspace {
   optOutRecords      OptOutRecord[]
   followUps          FollowUp[]
   consentRecords     ConsentRecord[]
+  webchatConfigs     WebchatConfig[]
+  phoneConfigs       PhoneConfig[]
+  syncQueue          IntegrationSyncQueue[]
 
   @@index([organizationId])
   @@map("workspaces")
@@ -193,6 +196,7 @@ model Lead {
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   events        Event[]
   conversations Conversation[]
+  syncQueue     IntegrationSyncQueue[]
 
   @@unique([workspaceId, email])
   @@index([workspaceId, stage])
@@ -213,6 +217,7 @@ model Event {
   eventType    String      @map("event_type")
   success      Boolean
   errorMessage String?     @map("error_message")
+  metadata     Json?       @map("metadata")
   createdAt    DateTime    @default(now()) @map("created_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -234,6 +239,7 @@ enum EventSystem {
   TWILIO
   OPENAI
   ANTHROPIC
+  PIPEDRIVE
   AGENT
   CRON
   WORKFLOW
@@ -367,6 +373,7 @@ model WorkflowExecution {
 enum WorkflowExecutionStatus {
   RUNNING
   COMPLETED
+  COMPLETED_WITH_WARNINGS
   FAILED
 }
 
@@ -502,10 +509,13 @@ model Agent {
   name        String
   description String?
 
-  // Channel config -- optional; only required for production SMS delivery
-  channelType        String? @map("channel_type")        // "SMS" (extensible: "WHATSAPP", "WEB_CHAT")
-  channelIntegration String? @map("channel_integration")  // IntegrationType value: "TWILIO"
-  channelAddress     String? @map("channel_address")      // Agent's address on the channel (e.g., Twilio phone number)
+  // Multi-channel config — JSON array of { channel, integration, address? }
+  channels Json @default("[]")
+
+  // Deprecated — kept for migration backcompat, no longer written by new code
+  channelType        String? @map("channel_type")
+  channelIntegration String? @map("channel_integration")
+  channelAddress     String? @map("channel_address")
 
   // AI config -- which AI integration to use
   aiIntegration String @map("ai_integration") // IntegrationType value: "OPENAI" or "ANTHROPIC"
@@ -523,7 +533,7 @@ model Agent {
   conversationTimeoutMinutes Int     @default(1440) @map("conversation_timeout_minutes")
   responseDelaySeconds       Int     @default(0)    @map("response_delay_seconds")
   autoResumeMinutes          Int     @default(60)   @map("auto_resume_minutes")
-  rateLimitPerHour           Int     @default(10)   @map("rate_limit_per_hour")
+  rateLimitPerHour           Int     @default(60)   @map("rate_limit_per_hour")
   fallbackMessage            String? @map("fallback_message")
   escalationPattern          String? @map("escalation_pattern")
   faqOverrides               Json?   @map("faq_overrides")
@@ -540,14 +550,19 @@ model Agent {
   // Enabled tools (JSON array of tool name strings from the tool registry)
   enabledTools Json @default("[]") @map("enabled_tools")
 
+  // Content guardrails — merged with universal defaults at runtime
+  guardrails Json @default("{}") @map("guardrails")
+
   active    Boolean  @default(true)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  conversations Conversation[]
-  files         AgentFile[]
-  followUps     FollowUp[]
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversations  Conversation[]
+  files          AgentFile[]
+  followUps      FollowUp[]
+  webchatConfigs WebchatConfig[]
+  phoneConfigs   PhoneConfig[]
 
   @@index([workspaceId, active])
   @@map("agents")
@@ -568,6 +583,58 @@ model AgentFile {
   @@map("agent_files")
 }
 
+model WebchatConfig {
+  id           String  @id @default(uuid())
+  workspaceId  String  @map("workspace_id")
+  agentId      String  @map("agent_id")
+  name         String
+  brandColor   String  @default("#2563eb") @map("brand_color")
+  chatName     String  @default("Chat") @map("chat_name")
+  collectEmail Boolean @default(true) @map("collect_email")
+  collectPhone Boolean @default(false) @map("collect_phone")
+  greeting     String? @db.Text
+  active       Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("webchat_configs")
+}
+
+model PhoneConfig {
+  id          String @id @default(uuid())
+  workspaceId String @map("workspace_id")
+  name        String
+
+  twilioNumberKey  String @map("twilio_number_key")
+  forwardingNumber String @map("forwarding_number")
+
+  mode    String  @default("NOTIFICATION")
+  agentId String? @map("agent_id")
+
+  autoTextTemplate     String @default("Hey! Sorry I missed your call. How can I help?") @map("auto_text_template") @db.Text
+  voiceGreeting        String @default("Thanks for calling. We'll text you right away.") @map("voice_greeting") @db.Text
+  notificationTemplate String @default("Missed call from {{callerPhone}}. Text them back!") @map("notification_template") @db.Text
+
+  blocklist Json @default("[]")
+
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([agentId])
+  @@unique([workspaceId, twilioNumberKey])
+  @@map("phone_configs")
+}
+
 model Conversation {
   id          String @id @default(uuid())
   workspaceId String @map("workspace_id")
@@ -575,9 +642,10 @@ model Conversation {
   leadId      String? @map("lead_id")
 
   // Channel context (how to reply)
-  channel        String // "SMS"
-  contactAddress String @map("contact_address") // Lead's phone/identifier
-  channelAddress String @map("channel_address") // Bot's phone/identifier (Twilio number)
+  channel            String  // "SMS" | "EMAIL" | "WEB_CHAT"
+  channelIntegration String? @map("channel_integration") // "TWILIO" | "RESEND" | "BUILT_IN"
+  contactAddress     String  @map("contact_address") // Lead's phone/identifier
+  channelAddress     String  @map("channel_address") // Bot's phone/identifier (Twilio number)
 
   status       ConversationStatus @default(ACTIVE)
   messageCount Int    @default(0) @map("message_count")
@@ -727,4 +795,45 @@ enum ConsentMethod {
   SMS_KEYWORD
   IN_PERSON
   API
+}
+
+// =============================================================================
+// INTEGRATION SYNC QUEUE (DB-backed retry queue for failed continueOnError actions)
+// =============================================================================
+
+enum IntegrationSyncStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model IntegrationSyncQueue {
+  id          String @id @default(uuid())
+  workspaceId String @map("workspace_id")
+  email       String
+  leadId      String? @map("lead_id")
+
+  adapter     String
+  operation   String
+  params      Json?
+
+  status      IntegrationSyncStatus @default(PENDING)
+  retries     Int                   @default(0)
+  maxRetries  Int                   @default(5) @map("max_retries")
+  nextRetryAt DateTime              @default(now()) @map("next_retry_at")
+  lastError   String?               @map("last_error")
+
+  resultData  Json? @map("result_data")
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  completedAt DateTime? @map("completed_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead      Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
+  @@index([workspaceId])
+  @@index([leadId])
+  @@map("integration_sync_queue")
 }

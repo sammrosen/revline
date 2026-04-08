@@ -5,6 +5,7 @@
  * Handles lead management, event logging, and custom lead properties.
  */
 
+import { z } from 'zod';
 import {
   upsertLead,
   updateLeadStage,
@@ -20,6 +21,20 @@ import {
 } from '@/app/_lib/services/lead-properties';
 import { WorkflowContext, ActionResult, ActionExecutor } from '../types';
 import { Prisma } from '@prisma/client';
+import { logStructured } from '@/app/_lib/reliability';
+
+const LeadPropertySchemaValidator = z.array(z.object({
+  key: z.string(),
+  label: z.string(),
+  type: z.enum(['string', 'number', 'boolean', 'email', 'url']),
+  required: z.boolean(),
+}));
+
+const LeadStageSchemaValidator = z.array(z.object({
+  key: z.string(),
+  label: z.string(),
+  color: z.string(),
+}));
 
 // =============================================================================
 // HELPERS
@@ -33,7 +48,8 @@ async function getPropertySchema(workspaceId: string): Promise<LeadPropertyDefin
     where: { id: workspaceId },
     select: { leadPropertySchema: true },
   });
-  return (workspace?.leadPropertySchema as LeadPropertyDefinition[] | null) ?? [];
+  const result = LeadPropertySchemaValidator.safeParse(workspace?.leadPropertySchema);
+  return result.success ? result.data : [];
 }
 
 /**
@@ -107,15 +123,31 @@ const createLead: ActionExecutor = {
       // Resolve custom properties from params and/or payload
       const { properties, error: propError } = await resolveProperties(ctx, params);
       if (propError) {
-        // Log warning but don't fail lead creation -- properties are best-effort
-        console.warn('[Workflow] Property validation warning on create_lead:', propError);
+        logStructured({
+          correlationId: ctx.workspaceId,
+          event: 'workflow_property_validation_warning',
+          workspaceId: ctx.workspaceId,
+          success: true,
+          error: propError,
+        });
       }
+
+      let mergedProperties = properties ?? {};
+
+      // Merge all upstream action data into lead properties generically.
+      // e.g. Pipedrive returns { pipedrivePersonId: 842 }, HubSpot could
+      // return { hubspotContactId: 123 } — all propagate without executor changes.
+      if (Object.keys(ctx.actionData).length > 0) {
+        mergedProperties = { ...mergedProperties, ...ctx.actionData };
+      }
+
+      const hasProperties = Object.keys(mergedProperties).length > 0;
 
       const leadId = await upsertLead({
         workspaceId: ctx.workspaceId,
         email: ctx.email,
         source,
-        properties: properties ?? undefined,
+        properties: hasProperties ? mergedProperties : undefined,
       });
 
       await emitEvent({
@@ -131,7 +163,7 @@ const createLead: ActionExecutor = {
         data: {
           leadId,
           source,
-          ...(properties ? { properties } : {}),
+          ...(hasProperties ? { properties: mergedProperties } : {}),
         },
       };
     } catch (error) {
@@ -162,7 +194,8 @@ const updateLeadStageAction: ActionExecutor = {
       where: { id: ctx.workspaceId },
       select: { leadStages: true },
     });
-    const stages = (workspace?.leadStages as LeadStageDefinition[] | null) ?? DEFAULT_LEAD_STAGES;
+    const stagesResult = LeadStageSchemaValidator.safeParse(workspace?.leadStages);
+    const stages = stagesResult.success ? stagesResult.data : DEFAULT_LEAD_STAGES;
     const validKeys = stages.map(s => s.key);
     if (!validKeys.includes(stage)) {
       return { success: false, error: `Invalid stage: ${stage}. Valid stages: ${validKeys.join(', ')}` };

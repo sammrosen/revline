@@ -42,3 +42,10 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
+
+# Claude Code session state (runtime, not committed)
+.claude/state/
+
+# Claude Code worktrees (separate working trees, not part of main repo)
+.claude/worktrees/
+

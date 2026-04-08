@@ -133,6 +133,15 @@ export const INTEGRATION_CONFIG: Record<string, IntegrationStyle> = {
     icon: Bot,
     logo: '/logos/agent.png',
   },
+  pipedrive: {
+    name: 'Pipedrive',
+    color: '#017737',
+    bgClass: 'bg-green-600/20',
+    borderClass: 'border-green-600/40',
+    textClass: 'text-green-400',
+    icon: Zap,
+    logo: '/logos/pipedrive.png',
+  },
   capture: {
     name: 'Capture',
     color: '#71717A',
@@ -172,7 +181,7 @@ export const OPERATION_LABELS: Record<string, string> = {
   payment_succeeded: 'Payment Succeeded',
   subscription_created: 'Subscription Created',
   subscription_canceled: 'Subscription Canceled',
-  email_captured: 'Email Captured',
+  'contact-submitted': 'Contact Form Submitted',
   dm_received: 'DM Received',
   // Agent triggers
   conversation_started: 'Conversation Started',
@@ -188,6 +197,18 @@ export const OPERATION_LABELS: Record<string, string> = {
   emit_event: 'Emit Event',
   trigger_flow: 'Trigger Flow',
   route_to_agent: 'Route to Agent',
+  // Pipedrive
+  person_created: 'Person Created',
+  person_updated: 'Person Updated',
+  create_or_update_person: 'Create/Update Person',
+  update_person_fields: 'Update Person Fields',
+  deal_added: 'Deal Added',
+  deal_updated: 'Deal Updated',
+  deal_won: 'Deal Won',
+  deal_lost: 'Deal Lost',
+  create_deal: 'Create Deal',
+  update_deal: 'Update Deal',
+  move_deal_stage: 'Move Deal Stage',
 };
 
 /**

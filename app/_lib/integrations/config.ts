@@ -26,6 +26,7 @@ export const INTEGRATION_TYPES = [
   'TWILIO',
   'OPENAI',
   'ANTHROPIC',
+  'PIPEDRIVE',
 ] as const;
 
 export type IntegrationTypeId = typeof INTEGRATION_TYPES[number];
@@ -410,6 +411,43 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
     warnings: [
       'API usage is billed by Anthropic based on token consumption',
       'max_tokens is required — the API will reject calls without it',
+    ],
+  },
+
+  PIPEDRIVE: {
+    id: 'PIPEDRIVE',
+    name: 'pipedrive',
+    displayName: 'Pipedrive',
+    color: 'text-green-500',
+    hasStructuredEditor: true,
+    secrets: [
+      {
+        name: 'API Token',
+        placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+        description: 'API token from Pipedrive Settings > Personal Preferences > API',
+        required: true,
+      },
+    ],
+    metaTemplate: {
+      fieldMap: {},
+      defaultPipelineId: null,
+      stageMap: {},
+    },
+    metaDescription: 'Configure field mappings between RevLine and Pipedrive, pipeline stages, and sync behavior',
+    metaFields: [
+      { key: 'fieldMap.*', description: 'Map RevLine lead properties to Pipedrive person field keys' },
+      { key: 'defaultPipelineId', description: 'Default pipeline ID for new deals' },
+      { key: 'stageMap.*', description: 'Map RevLine lead stages to Pipedrive pipeline stage IDs' },
+    ],
+    tips: [
+      'Find your API Token: Pipedrive Settings > Personal Preferences > API',
+      'Field mappings: left = RevLine lead property key, right = Pipedrive person field key',
+      'Custom Pipedrive fields use hash keys (e.g., "abc123def456") — use "Fetch Fields" to populate',
+      'Pipeline stages are numeric IDs — use "Fetch Pipelines" to populate stage mappings',
+    ],
+    warnings: [
+      'API tokens have full access to your Pipedrive account — treat like a password',
+      'Rate limit: ~80 requests per 2 seconds (Professional plan)',
     ],
   },
 };

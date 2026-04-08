@@ -4,6 +4,7 @@ import { WorkspaceTabs } from './workspace-tabs';
 import { SetDashboardHeader } from '../../_components/SetDashboardHeader';
 import { IntegrationType } from '@prisma/client';
 import { MailerLiteMeta, isMailerLiteMeta, ResendMeta, isResendMeta, StripeMeta, LeadPropertyDefinition } from '@/app/_lib/types';
+import { getIntegrationReferences } from '@/app/_lib/integrations/reference';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,12 +91,16 @@ export default async function WorkspaceDetailPage({
   // Get agents for workflow editor
   const agents = await prisma.agent.findMany({
     where: { workspaceId: workspace.id, active: true },
-    select: { id: true, name: true },
+    select: { id: true, name: true, channels: true },
     orderBy: { name: 'asc' },
   });
   const agentOptions: Record<string, string> = {};
+  const agentChannelMap: Record<string, Array<{ channel: string; integration: string; address?: string }>> = {};
   for (const a of agents) {
     agentOptions[a.id] = a.name;
+    agentChannelMap[a.id] = Array.isArray(a.channels)
+      ? (a.channels as Array<{ channel: string; integration: string; address?: string }>)
+      : [];
   }
 
   // Get Stripe products if configured
@@ -107,6 +112,10 @@ export default async function WorkspaceDetailPage({
   const stripeProducts = stripeMeta?.productMap 
     ?? stripeMeta?.products  // fallback for legacy data
     ?? {};
+
+  const integrationReferences = getIntegrationReferences(
+    workspace.integrations.map((i) => i.integration)
+  );
 
   return (
     <div className="min-h-screen p-4 sm:p-6">
@@ -151,6 +160,7 @@ export default async function WorkspaceDetailPage({
           resendTemplates={resendTemplates}
           stripeProducts={stripeProducts}
           agents={agentOptions}
+          agentChannels={agentChannelMap}
           timezone={workspace.timezone}
           domainConfig={{
             customDomain: workspace.customDomain ?? null,
@@ -161,6 +171,7 @@ export default async function WorkspaceDetailPage({
           leadStages={workspace.leadStages as Array<{ key: string; label: string; color: string }> | undefined}
           leadPropertySchema={workspace.leadPropertySchema as LeadPropertyDefinition[] | null}
           pagesConfig={workspace.pagesConfig as Record<string, unknown> | null}
+          integrationReferences={integrationReferences}
         />
     </div>
   );

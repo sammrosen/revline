@@ -346,7 +346,7 @@ export async function createTestWorkflow(
       name: overrides.name ?? 'Test Workflow',
       enabled: overrides.enabled ?? false, // Default to disabled - must be explicitly enabled
       triggerAdapter: overrides.triggerAdapter ?? 'revline',
-      triggerOperation: overrides.triggerOperation ?? 'email_captured',
+      triggerOperation: overrides.triggerOperation ?? 'contact-submitted',
       actions: (overrides.actions ?? []) as Parameters<typeof testPrisma.workflow.create>[0]['data']['actions'],
     },
   });
@@ -467,6 +467,7 @@ export async function createTestAgent(
     faqOverrides: Array<{ patterns: string[]; response: string }>;
     allowedEvents: string[];
     enabledTools: string[];
+    guardrails: Record<string, unknown>;
     active: boolean;
   }> = {}
 ) {
@@ -494,6 +495,7 @@ export async function createTestAgent(
       faqOverrides: overrides.faqOverrides as Parameters<typeof testPrisma.agent.create>[0]['data']['faqOverrides'],
       allowedEvents: (overrides.allowedEvents ?? []) as Parameters<typeof testPrisma.agent.create>[0]['data']['allowedEvents'],
       enabledTools: (overrides.enabledTools ?? []) as Parameters<typeof testPrisma.agent.create>[0]['data']['enabledTools'],
+      guardrails: (overrides.guardrails ?? {}) as Parameters<typeof testPrisma.agent.create>[0]['data']['guardrails'],
       active: overrides.active ?? true,
     },
   });
