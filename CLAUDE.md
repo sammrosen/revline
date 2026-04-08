@@ -94,3 +94,59 @@ Railway with Docker (`Dockerfile`). `railway.json` configures the deploy. Sentry
 - Path alias: `@/` maps to project root.
 - Webhook signature verification must use `crypto.timingSafeEqual`.
 - Rate limits: login 5/5min, subscribe 10/min, webhooks 100/min, global 100/min per IP.
+
+## Working With Sam
+
+Sam runs a strict **plan → implement → audit** ritual on this repo. Claude Code primitives in `.claude/` codify it. Follow the ritual; don't reinvent it.
+
+### The ritual
+
+1. **`/plan {feature}`** — drafts a plan in `docs/plans/{kebab-name}.md` from the template at `docs/plans/_template.md`. Stop after writing. Do not start coding.
+2. **`/implement {plan-path}`** — re-reads the plan, locks it from edits via `.claude/state/active-implement.json`, and works through todos one at a time (in_progress → completed). The `standards-auditor` subagent runs against each chunk.
+3. **`/audit`** — runs the `standards-auditor` subagent against the branch diff. Use it before merging, and any time Sam asks "is this standards compliant?"
+
+**Do not edit a plan file while `/implement` is active on it.** A `PreToolUse` hook will block you. If the plan needs to change, stop and ask Sam.
+
+### Source of truth
+
+`docs/STANDARDS.md` is canonical. When you need a rule, **quote it** — do not paraphrase. If you think a standard should change, say so and ask Sam to update the doc; don't drift around it.
+
+Reference adapter: `app/_lib/integrations/pipedrive.adapter.ts`. When building or reviewing an integration, treat Pipedrive as the template — older adapters (Stripe, Resend, Twilio) predate the current pattern and may mix concerns.
+
+### Skill consultation map
+
+When you touch these areas, the relevant skill should already be in your context. If not, read it explicitly:
+
+| Touching… | Consult skill |
+|---|---|
+| `app/_lib/integrations/`, `workflow/registry.ts`, `workflow/engine.ts` | `revline-integration-adapter` |
+| `event-logger`, new routes, new adapters | `revline-event-logging` |
+| Any Prisma query, service function, route handler | `revline-workspace-isolation` |
+| Schema sync / provisioning / webhook handlers | `revline-idempotency` |
+| Writing tests, modifying service/adapter code | `revline-testing` |
+
+### Prefer questions over assumptions
+
+When intent is ambiguous, **ask before guessing**. Canonical clarifications Sam appreciates being asked:
+
+- Public URL or localhost? (affects webhook testing strategy)
+- Which workspace? (everything is workspace-scoped)
+- Sync or async? (changes failure mode)
+- Should this run on `db:push` or via a migration? (affects prod safety)
+- Is this hot path or background? (affects rate limit / timeout handling)
+
+Don't ask trivial questions, but don't silently assume on ones that change the design.
+
+### Do-not list
+
+- **Don't edit plan files during `/implement`.** Stop and ask.
+- **Don't hardcode integration-specific logic in `engine.ts` or other core modules.** Per-integration logic lives in the adapter or its executor. Past pain: `logPipedriveActivity()` hardcoded into the engine.
+- **Don't add special cases to core for new providers.** Iterate the adapter registry; if you can't, that's a sign the abstraction is wrong — flag it.
+- **Don't truncate error messages in event logs.** Past pain: errors were truncated twice (DB + UI) and Sam was blind to failures. Events are the primary debugging surface; preserve enough metadata to debug.
+- **Don't bypass workspace scoping.** Every Prisma `findMany/findFirst/update/delete` must have `workspaceId` in the `where` clause.
+- **Don't run `prisma migrate reset`, `db:push` against non-local DBs, `git push --force`, `git reset --hard`, or `rm -rf` without explicit confirmation.** A `PreToolUse` hook will block these.
+- **Don't paraphrase `docs/STANDARDS.md` into other files.** Reference it; never duplicate it.
+
+### Plan folder hygiene
+
+`docs/plans/` is for active work. When a plan is complete or superseded, move it to `docs/plans/archive/`. Run `/triage-plans` periodically to surface stale ones. Don't leave half-implemented plans next to active ones — Sam has been burned by this.
