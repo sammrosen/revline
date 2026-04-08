@@ -818,6 +818,24 @@ export const AGENT_ADAPTER: AdapterDefinition = {
 };
 
 /**
+ * Shared payload schema for Pipedrive deal webhook triggers.
+ * Pipedrive webhook v1/v2 shapes vary — use .passthrough() and coerce numeric IDs.
+ */
+const DealPayloadSchema = z.object({
+  email: z.string().email(),
+  name: z.string().optional(),
+  phone: z.string().optional(),
+  pipedriveDealId: z.coerce.number(),
+  pipedrivePersonId: z.coerce.number().optional(),
+  pipelineId: z.coerce.number().optional(),
+  stageId: z.coerce.number().optional(),
+  status: z.string().optional(),
+  title: z.string().optional(),
+  value: z.coerce.number().optional(),
+  currency: z.string().optional(),
+}).passthrough();
+
+/**
  * Pipedrive Adapter
  * CRM integration — person sync, field updates, deal management
  */
@@ -850,6 +868,46 @@ export const PIPEDRIVE_ADAPTER: AdapterDefinition = {
         { name: 'field', label: 'Changed Field', type: 'text', required: false },
       ],
     },
+    deal_added: {
+      name: 'deal_added',
+      label: 'Deal Added',
+      description: 'Fires when a deal is created in Pipedrive (via webhook)',
+      payloadSchema: DealPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'pipedriveDealId', label: 'Pipedrive Deal ID', type: 'number', required: true },
+      ],
+    },
+    deal_updated: {
+      name: 'deal_updated',
+      label: 'Deal Updated',
+      description: 'Fires when a deal is updated in Pipedrive (status did not transition to won/lost)',
+      payloadSchema: DealPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'pipedriveDealId', label: 'Pipedrive Deal ID', type: 'number', required: true },
+      ],
+    },
+    deal_won: {
+      name: 'deal_won',
+      label: 'Deal Won',
+      description: 'Fires when a Pipedrive deal transitions to status=won',
+      payloadSchema: DealPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'pipedriveDealId', label: 'Pipedrive Deal ID', type: 'number', required: true },
+      ],
+    },
+    deal_lost: {
+      name: 'deal_lost',
+      label: 'Deal Lost',
+      description: 'Fires when a Pipedrive deal transitions to status=lost',
+      payloadSchema: DealPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'pipedriveDealId', label: 'Pipedrive Deal ID', type: 'number', required: true },
+      ],
+    },
   },
   actions: {
     create_or_update_person: {
@@ -868,6 +926,43 @@ export const PIPEDRIVE_ADAPTER: AdapterDefinition = {
       payloadSchema: CommonPayloadSchema,
       paramsSchema: z.object({
         fields: z.record(z.string(), z.string()),
+      }),
+    },
+    create_deal: {
+      name: 'create_deal',
+      label: 'Create Deal',
+      description: 'Create a deal in Pipedrive linked to the person (requires pipedrivePersonId in context). Returns pipedriveDealId.',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        title: z.string().optional(),
+        value: z.coerce.number().optional(),
+        currency: z.string().optional(),
+        pipelineId: z.coerce.number().optional(),
+        stageId: z.coerce.number().optional(),
+        status: z.string().optional(),
+      }),
+    },
+    update_deal: {
+      name: 'update_deal',
+      label: 'Update Deal',
+      description: 'Update fields on an existing Pipedrive deal (requires pipedriveDealId in context).',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        title: z.string().optional(),
+        value: z.coerce.number().optional(),
+        currency: z.string().optional(),
+        pipelineId: z.coerce.number().optional(),
+        stageId: z.coerce.number().optional(),
+        status: z.string().optional(),
+      }),
+    },
+    move_deal_stage: {
+      name: 'move_deal_stage',
+      label: 'Move Deal Stage',
+      description: 'Move a Pipedrive deal to a specific stage (requires pipedriveDealId in context).',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        stageId: z.coerce.number(),
       }),
     },
   },

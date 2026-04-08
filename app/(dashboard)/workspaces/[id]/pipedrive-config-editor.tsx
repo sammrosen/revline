@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { DEFAULT_LEAD_STAGES } from '@/app/_lib/types';
 
 interface PipedriveMetaConfig {
   fieldMap: Record<string, string>;
@@ -570,6 +571,38 @@ export function PipedriveConfigEditor({
   const [fieldsError, setFieldsError] = useState<string | null>(null);
   const [hasSynced, setHasSynced] = useState(false);
 
+  const [pipelines, setPipelines] = useState<Array<{ id: number; name: string; stages: Array<{ id: number; name: string }> }>>([]);
+  const [workspaceLeadStages, setWorkspaceLeadStages] = useState<Array<{ key: string; label: string; color?: string }>>(DEFAULT_LEAD_STAGES);
+  const [pipelinesLoading, setPipelinesLoading] = useState(false);
+  const [pipelinesError, setPipelinesError] = useState<string | null>(null);
+  const [hasSyncedPipelines, setHasSyncedPipelines] = useState(false);
+
+  async function handleSyncPipelines() {
+    if (!integrationId) {
+      setPipelinesError('Save the integration first');
+      return;
+    }
+    setPipelinesLoading(true);
+    setPipelinesError(null);
+    try {
+      const res = await fetch(`/api/v1/integrations/${integrationId}/pipedrive-pipelines`);
+      const data = await res.json();
+      if (!data.success || !data.data?.pipelines) {
+        setPipelinesError(data.error || 'Failed to fetch pipelines');
+        return;
+      }
+      setPipelines(data.data.pipelines);
+      if (Array.isArray(data.data.leadStages) && data.data.leadStages.length > 0) {
+        setWorkspaceLeadStages(data.data.leadStages);
+      }
+      setHasSyncedPipelines(true);
+    } catch {
+      setPipelinesError('Failed to reach the server');
+    } finally {
+      setPipelinesLoading(false);
+    }
+  }
+
   function normalize(s: string) {
     return s.toLowerCase().replace(/[\s\-]+/g, '_').replace(/[^a-z0-9_]/g, '');
   }
@@ -892,86 +925,163 @@ export function PipedriveConfigEditor({
         onRemoveFieldMapping={handleRemoveFieldMapping}
       />
 
-      {/* Stage Mappings (optional) */}
+      {/* Pipelines & Stages */}
       <div>
-        <h4 className="text-sm font-medium text-zinc-300 mb-1">Stage Mappings <span className="text-zinc-500 font-normal">(optional)</span></h4>
-        <p className="text-xs text-zinc-500 mb-3">
-          Map RevLine lead stages to Pipedrive pipeline stage IDs. Used for deal management.
-        </p>
-
-        <div className="space-y-2 mb-3">
-          {stageEntries.length === 0 ? (
-            <p className="text-sm text-zinc-500 italic">No stage mappings configured.</p>
-          ) : (
-            stageEntries.map(([stageKey, stageId]) => (
-              <div key={stageKey} className="flex items-center gap-2 p-2.5 bg-zinc-950 rounded border border-zinc-800">
-                <span className="flex-1 text-sm font-mono text-zinc-300">{stageKey}</span>
-                <span className="text-zinc-600 text-xs">&rarr;</span>
-                <span className="text-sm font-mono text-zinc-300">Stage {stageId}</span>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveStageMapping(stageKey)}
-                  className="text-red-400/80 hover:text-red-400 text-sm px-1.5"
-                >
-                  &times;
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="flex items-end gap-2 p-2.5 bg-zinc-900/50 rounded border border-dashed border-zinc-700">
-          <div className="flex-1">
-            <label className="text-xs text-zinc-500 block mb-1">Lead Stage</label>
-            <input
-              type="text"
-              value={newStageKey}
-              onChange={(e) => setNewStageKey(e.target.value)}
-              placeholder="CAPTURED"
-              className="w-full px-2 py-1.5 bg-zinc-950 border border-zinc-800 rounded text-sm font-mono text-white"
-            />
-          </div>
-          <span className="text-zinc-600 text-xs pb-2">&rarr;</span>
-          <div className="w-24">
-            <label className="text-xs text-zinc-500 block mb-1">Stage ID</label>
-            <input
-              type="number"
-              value={newStageId}
-              onChange={(e) => setNewStageId(e.target.value)}
-              placeholder="1"
-              className="w-full px-2 py-1.5 bg-zinc-950 border border-zinc-800 rounded text-sm font-mono text-white"
-            />
-          </div>
+        <div className="flex items-center justify-between mb-1">
+          <h4 className="text-sm font-medium text-zinc-300">Pipelines &amp; Stages</h4>
           <button
             type="button"
-            onClick={handleAddStageMapping}
-            disabled={!newStageKey.trim() || !newStageId.trim()}
-            className="px-3 py-1.5 text-sm bg-zinc-800 text-white rounded hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleSyncPipelines}
+            disabled={pipelinesLoading || !integrationId}
+            className="text-xs px-2.5 py-1 rounded border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors disabled:opacity-50"
           >
-            Add
+            {pipelinesLoading ? 'Syncing...' : hasSyncedPipelines ? 'Refresh' : 'Sync Pipelines'}
           </button>
         </div>
-      </div>
-
-      {/* Pipeline ID */}
-      <div>
-        <h4 className="text-sm font-medium text-zinc-300 mb-1">Default Pipeline ID <span className="text-zinc-500 font-normal">(optional)</span></h4>
-        <p className="text-xs text-zinc-500 mb-2">
-          Pipedrive pipeline ID for new deals. Find in Pipedrive URL when viewing a pipeline.
+        <p className="text-xs text-zinc-500 mb-3">
+          Select a default pipeline for new deals and map RevLine lead stages to Pipedrive pipeline stages.{' '}
+          <span className="text-zinc-600">
+            Remember to subscribe your webhook URL to <code className="text-zinc-400">added.deal</code> and <code className="text-zinc-400">updated.deal</code> in Pipedrive.
+          </span>
         </p>
-        <input
-          type="number"
-          value={meta.defaultPipelineId ?? ''}
-          onChange={(e) => {
-            const val = e.target.value.trim();
-            setMeta(prev => ({
-              ...prev,
-              defaultPipelineId: val ? parseInt(val, 10) : null,
-            }));
-          }}
-          placeholder="1"
-          className="w-32 px-2 py-1.5 bg-zinc-950 border border-zinc-800 rounded text-sm font-mono text-white"
-        />
+        {pipelinesError && <p className="text-xs text-red-400 mb-2">{pipelinesError}</p>}
+
+        {!hasSyncedPipelines && (
+          <div className="rounded-lg border border-dashed border-zinc-800 bg-zinc-900/30 p-4 text-center">
+            <p className="text-xs text-zinc-500">
+              {integrationId
+                ? 'Click Sync Pipelines to load pipelines and stages from Pipedrive.'
+                : 'Save the integration first, then sync pipelines.'}
+            </p>
+          </div>
+        )}
+
+        {hasSyncedPipelines && (
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 space-y-4">
+            <div>
+              <label className="text-xs text-zinc-500 block mb-1">Default Pipeline</label>
+              <select
+                value={meta.defaultPipelineId ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setMeta(prev => ({
+                    ...prev,
+                    defaultPipelineId: val ? parseInt(val, 10) : null,
+                    stageMap: {}, // reset stage map when pipeline changes
+                  }));
+                }}
+                className="w-full px-2 py-1.5 bg-zinc-950 border border-zinc-800 rounded text-sm text-white outline-none"
+              >
+                <option value="">Select a pipeline…</option>
+                {pipelines.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {meta.defaultPipelineId !== null && (() => {
+              const selected = pipelines.find(p => p.id === meta.defaultPipelineId);
+              if (!selected) return null;
+              return (
+                <div>
+                  <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Stage Map</p>
+                  <p className="text-[10px] text-zinc-600 mb-2">Map RevLine lead stages to Pipedrive pipeline stages.</p>
+                  <div className="space-y-2">
+                    {workspaceLeadStages.map(({ key: stageKey, label }) => (
+                      <div key={stageKey} className="flex items-center gap-2">
+                        <span className="text-xs font-mono text-zinc-400 w-28" title={stageKey}>{label}</span>
+                        <span className="text-zinc-600 text-xs">&rarr;</span>
+                        <select
+                          value={meta.stageMap[stageKey] ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setMeta(prev => {
+                              const updated = { ...prev.stageMap };
+                              if (val) {
+                                updated[stageKey] = parseInt(val, 10);
+                              } else {
+                                delete updated[stageKey];
+                              }
+                              return { ...prev, stageMap: updated };
+                            });
+                          }}
+                          className="flex-1 px-2 py-1 bg-zinc-950 border border-zinc-800 rounded text-xs text-white outline-none"
+                        >
+                          <option value="">(unmapped)</option>
+                          {selected.stages.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {stageEntries.length > 0 && meta.defaultPipelineId === null && (
+              <p className="text-xs text-amber-400/80">
+                {stageEntries.length} stage mapping(s) are configured but no default pipeline is selected.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Manual fallback — add custom stage mappings */}
+        {hasSyncedPipelines && (
+          <div className="mt-3">
+            <p className="text-xs text-zinc-600 mb-2">Custom stage mapping (advanced)</p>
+            <div className="flex items-end gap-2 p-2.5 bg-zinc-900/50 rounded border border-dashed border-zinc-700">
+              <div className="flex-1">
+                <label className="text-xs text-zinc-500 block mb-1">Lead Stage Key</label>
+                <input
+                  type="text"
+                  value={newStageKey}
+                  onChange={(e) => setNewStageKey(e.target.value)}
+                  placeholder="CUSTOM"
+                  className="w-full px-2 py-1.5 bg-zinc-950 border border-zinc-800 rounded text-sm font-mono text-white"
+                />
+              </div>
+              <span className="text-zinc-600 text-xs pb-2">&rarr;</span>
+              <div className="w-24">
+                <label className="text-xs text-zinc-500 block mb-1">Stage ID</label>
+                <input
+                  type="number"
+                  value={newStageId}
+                  onChange={(e) => setNewStageId(e.target.value)}
+                  placeholder="1"
+                  className="w-full px-2 py-1.5 bg-zinc-950 border border-zinc-800 rounded text-sm font-mono text-white"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleAddStageMapping}
+                disabled={!newStageKey.trim() || !newStageId.trim()}
+                className="px-3 py-1.5 text-sm bg-zinc-800 text-white rounded hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Add
+              </button>
+            </div>
+            {stageEntries.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {stageEntries.map(([stageKey, stageId]) => (
+                  <div key={stageKey} className="flex items-center gap-2 text-xs text-zinc-400">
+                    <span className="font-mono">{stageKey}</span>
+                    <span className="text-zinc-600">&rarr;</span>
+                    <span className="font-mono">Stage {stageId}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveStageMapping(stageKey)}
+                      className="text-red-400/80 hover:text-red-400"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {displayError && <p className="text-red-400 text-sm">{displayError}</p>}

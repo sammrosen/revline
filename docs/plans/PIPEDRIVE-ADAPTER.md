@@ -29,9 +29,9 @@
 | 2.3 Agent activity logging (post-send hook) | **DONE** | 2 |
 | 2.4 Reconciliation cron (IntegrationSyncQueue) | **DONE** | 2 |
 | 2.5 Validation audit (Zod hardening, timing-safe auth, structured logging) | **DONE** | 2 |
-| 3.1 Deal + pipeline management | NOT STARTED | 3 |
-| 3.2 Deal stage mapping | NOT STARTED | 3 |
-| 3.3 Organization linking | NOT STARTED | 3 |
+| 3.1 Deal + pipeline management | **DONE** | 3 |
+| 3.2 Deal stage mapping | **DONE** | 3 |
+| 3.3 Organization linking | NOT STARTED (deferred — first Pipedrive customer is a countertop co. doing B2C homeowner work, no GC/org grouping needed; `org_id` can be back-filled later without migration pain) | 3 |
 
 **Key decisions:**
 - **Workflow-driven, not route-coupled.** The subscribe route stays integration-agnostic. Pipedrive person creation is a workflow action (`pipedrive.create_or_update_person`), not hardcoded in the route. The engine's context propagation threads the `pipedrivePersonId` to subsequent actions. This means the "config" for whether Pipedrive runs first is just the order of actions in the workflow definition.

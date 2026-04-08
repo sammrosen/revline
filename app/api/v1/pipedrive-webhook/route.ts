@@ -52,6 +52,50 @@ const PipedriveWebhookPayloadSchema = z.object({
   }),
 });
 
+/**
+ * Zod schema for the `current` block of a Pipedrive deal webhook.
+ * v1 and v2 shapes differ — use .passthrough() and coerce IDs.
+ */
+const PipedriveWebhookDealPayloadSchema = z.object({
+  id: z.coerce.number(),
+  title: z.string().nullish(),
+  person_id: z.union([
+    z.coerce.number(),
+    z.object({ value: z.coerce.number() }).passthrough(),
+  ]).nullish(),
+  person_name: z.string().nullish(),
+  pipeline_id: z.coerce.number().nullish(),
+  stage_id: z.coerce.number().nullish(),
+  status: z.string().nullish(),
+  value: z.coerce.number().nullish(),
+  currency: z.string().nullish(),
+}).passthrough();
+
+/**
+ * Echo detection helper — returns a recent lead whose properties.{kind}Id
+ * matches the given Pipedrive ID within the ECHO_WINDOW_MS window.
+ * Scoped to workspaceId (STANDARDS.md workspace isolation).
+ */
+async function findRecentLeadByPipedriveId(
+  workspaceId: string,
+  kind: 'pipedrivePersonId' | 'pipedriveDealId',
+  id: number,
+): Promise<{ id: string } | null> {
+  const echoThreshold = new Date(Date.now() - ECHO_WINDOW_MS);
+  const lead = await prisma.lead.findFirst({
+    where: {
+      workspaceId,
+      lastEventAt: { gte: echoThreshold },
+      properties: {
+        path: [kind],
+        equals: id,
+      },
+    },
+    select: { id: true },
+  });
+  return lead;
+}
+
 function verifySecret(provided: string, stored: string): boolean {
   const a = crypto.createHash('sha256').update(provided).digest();
   const b = crypto.createHash('sha256').update(stored).digest();
@@ -176,12 +220,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return ApiResponse.webhookAck({ warning: 'Replay rejected — event too old' });
     }
 
-    // Only process person events
-    const { event, current } = payload;
+    // Process person events and deal events. Everything else no-ops.
+    const { event, current, previous } = payload;
     const isPersonEvent =
       event === 'added.person' || event === 'updated.person';
+    const isDealEvent =
+      event === 'added.deal' || event === 'updated.deal';
 
-    if (!isPersonEvent) {
+    if (!isPersonEvent && !isDealEvent) {
       await WebhookProcessor.markProcessed(registration.id);
       logStructured({
         correlationId: registration.correlationId,
@@ -193,6 +239,211 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return ApiResponse.webhookAck({ processed: true });
     }
 
+    // =======================================================================
+    // Deal branch
+    // =======================================================================
+    if (isDealEvent) {
+      const dealParsed = PipedriveWebhookDealPayloadSchema.safeParse(current);
+      if (!dealParsed.success) {
+        await WebhookProcessor.markFailed(registration.id, 'Invalid deal payload');
+        logStructured({
+          correlationId: registration.correlationId,
+          event: 'pipedrive_webhook_invalid_deal_payload',
+          workspaceId: workspace.id,
+          provider: 'pipedrive',
+          error: dealParsed.error.message,
+        });
+        return ApiResponse.webhookAck({ warning: 'Invalid deal payload' });
+      }
+      const deal = dealParsed.data;
+
+      // Echo detection — skip events from our own recent writes
+      const echoLead = await findRecentLeadByPipedriveId(
+        workspace.id,
+        'pipedriveDealId',
+        deal.id,
+      );
+      if (echoLead) {
+        await WebhookProcessor.markProcessed(registration.id);
+        await emitEvent({
+          workspaceId: workspace.id,
+          leadId: echoLead.id,
+          system: EventSystem.PIPEDRIVE,
+          eventType: 'pipedrive_webhook_deal_echo_skipped',
+          success: true,
+          metadata: { pipedriveDealId: deal.id, eventType: event },
+        });
+        logStructured({
+          correlationId: registration.correlationId,
+          event: 'pipedrive_webhook_deal_echo_skipped',
+          workspaceId: workspace.id,
+          provider: 'pipedrive',
+          metadata: { pipedriveDealId: deal.id },
+        });
+        return ApiResponse.webhookAck({ processed: true, warning: 'Echo detected' });
+      }
+
+      // Determine trigger operation (mutually exclusive — exactly one fires)
+      let dealOperation: 'deal_added' | 'deal_updated' | 'deal_won' | 'deal_lost';
+      if (event === 'added.deal') {
+        dealOperation = 'deal_added';
+      } else {
+        const prevStatus = previous && typeof previous === 'object'
+          ? (previous as Record<string, unknown>).status
+          : undefined;
+        if (deal.status === 'won' && prevStatus !== 'won') {
+          dealOperation = 'deal_won';
+        } else if (deal.status === 'lost' && prevStatus !== 'lost') {
+          dealOperation = 'deal_lost';
+        } else {
+          dealOperation = 'deal_updated';
+        }
+      }
+
+      // Resolve person id + email. Prefer inline fields; fall back to fetching person.
+      let pipedrivePersonId: number | undefined;
+      if (typeof deal.person_id === 'number') {
+        pipedrivePersonId = deal.person_id;
+      } else if (deal.person_id && typeof deal.person_id === 'object') {
+        pipedrivePersonId = deal.person_id.value;
+      }
+
+      let email: string | undefined;
+      let name: string | undefined = deal.person_name ?? undefined;
+      let phone: string | undefined;
+
+      // Look for an existing lead linked to this person (scoped to workspace)
+      if (pipedrivePersonId) {
+        const linkedLead = await prisma.lead.findFirst({
+          where: {
+            workspaceId: workspace.id,
+            properties: {
+              path: ['pipedrivePersonId'],
+              equals: pipedrivePersonId,
+            },
+          },
+          select: { email: true, properties: true },
+        });
+        if (linkedLead) {
+          email = linkedLead.email ?? undefined;
+          const props = (linkedLead.properties as Record<string, unknown>) ?? {};
+          if (!name && typeof props.name === 'string') name = props.name;
+          if (typeof props.phone === 'string') phone = props.phone;
+        }
+      }
+
+      // Fallback: fetch the person from Pipedrive to get their email
+      if (!email && pipedrivePersonId) {
+        const personResult = await adapter.getPerson(pipedrivePersonId);
+        if (personResult.success && personResult.data) {
+          const p = personResult.data;
+          const emails = Array.isArray(p.email) ? p.email : [];
+          const phones = Array.isArray(p.phone) ? p.phone : [];
+          email = emails[0]?.value;
+          phone = phone ?? phones[0]?.value;
+          name = name ?? (typeof p.name === 'string' ? p.name : undefined);
+        }
+      }
+
+      if (!email) {
+        await WebhookProcessor.markFailed(registration.id, 'Deal has no resolvable email');
+        logStructured({
+          correlationId: registration.correlationId,
+          event: 'pipedrive_webhook_deal_no_email',
+          workspaceId: workspace.id,
+          provider: 'pipedrive',
+          metadata: { pipedriveDealId: deal.id, pipedrivePersonId },
+        });
+        return ApiResponse.webhookAck({ warning: 'Deal has no resolvable email — skipped' });
+      }
+
+      logStructured({
+        correlationId: registration.correlationId,
+        event: 'pipedrive_webhook_processing',
+        workspaceId: workspace.id,
+        provider: 'pipedrive',
+        metadata: {
+          eventType: event,
+          dealOperation,
+          pipedriveDealId: deal.id,
+          pipedrivePersonId,
+          email,
+        },
+      });
+
+      const triggerResult = await emitTrigger(
+        workspace.id,
+        { adapter: 'pipedrive', operation: dealOperation },
+        {
+          email,
+          name,
+          phone,
+          pipedriveDealId: deal.id,
+          pipedrivePersonId,
+          pipelineId: deal.pipeline_id ?? undefined,
+          stageId: deal.stage_id ?? undefined,
+          status: deal.status ?? undefined,
+          title: deal.title ?? undefined,
+          value: deal.value ?? undefined,
+          currency: deal.currency ?? undefined,
+          correlationId: registration.correlationId,
+        },
+      );
+
+      let dealWarning: string | undefined;
+      const dealHasFailure = triggerResult.executions.some((e) => e.status === 'failed');
+      if (dealHasFailure) {
+        dealWarning = triggerResult.executions
+          .filter((e) => e.status === 'failed')
+          .map((e) => e.error)
+          .join('; ');
+      }
+
+      await emitEvent({
+        workspaceId: workspace.id,
+        system: EventSystem.PIPEDRIVE,
+        eventType: `pipedrive_webhook_${dealOperation}`,
+        success: true,
+        metadata: {
+          pipedriveDealId: deal.id,
+          pipedrivePersonId,
+          status: deal.status,
+          pipelineId: deal.pipeline_id,
+          stageId: deal.stage_id,
+        },
+      });
+
+      await WebhookProcessor.markProcessed(registration.id);
+
+      logStructured({
+        correlationId: registration.correlationId,
+        event: 'pipedrive_webhook_processed',
+        workspaceId: workspace.id,
+        provider: 'pipedrive',
+        success: true,
+        metadata: {
+          eventType: event,
+          dealOperation,
+          pipedriveDealId: deal.id,
+          triggerFired: triggerResult.workflowsExecuted > 0,
+        },
+      });
+
+      const dealResponse = ApiResponse.webhookAck({
+        processed: true,
+        correlationId: registration.correlationId,
+        warning: dealWarning,
+      });
+      const dealHeaders = getRateLimitHeaders(rateLimit);
+      for (const [key, value] of Object.entries(dealHeaders)) {
+        dealResponse.headers.set(key, value);
+      }
+      return dealResponse;
+    }
+
+    // =======================================================================
+    // Person branch (existing)
+    // =======================================================================
     const personId = z.coerce.number().safeParse(current.id);
     if (!personId.success) {
       await WebhookProcessor.markFailed(registration.id, 'Missing person ID in current');
@@ -200,28 +451,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Echo detection — skip events from our own recent writes
-    const echoThreshold = new Date(Date.now() - ECHO_WINDOW_MS);
-    const existingLead = await prisma.lead.findFirst({
-      where: {
-        workspaceId: workspace.id,
-        lastEventAt: { gte: echoThreshold },
-      },
-      select: { id: true, properties: true },
-    });
+    const echoPersonLead = await findRecentLeadByPipedriveId(
+      workspace.id,
+      'pipedrivePersonId',
+      personId.data,
+    );
 
-    if (existingLead) {
-      const props = existingLead.properties as Record<string, unknown> | null;
-      if (props && Number(props.pipedrivePersonId) === personId.data) {
-        await WebhookProcessor.markProcessed(registration.id);
-        logStructured({
-          correlationId: registration.correlationId,
-          event: 'pipedrive_webhook_echo_skipped',
-          workspaceId: workspace.id,
-          provider: 'pipedrive',
-          metadata: { pipedrivePersonId: personId.data },
-        });
-        return ApiResponse.webhookAck({ processed: true, warning: 'Echo detected' });
-      }
+    if (echoPersonLead) {
+      await WebhookProcessor.markProcessed(registration.id);
+      logStructured({
+        correlationId: registration.correlationId,
+        event: 'pipedrive_webhook_echo_skipped',
+        workspaceId: workspace.id,
+        provider: 'pipedrive',
+        metadata: { pipedrivePersonId: personId.data },
+      });
+      return ApiResponse.webhookAck({ processed: true, warning: 'Echo detected' });
     }
 
     // Extract contact data from Pipedrive person

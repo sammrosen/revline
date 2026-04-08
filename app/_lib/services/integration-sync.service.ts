@@ -43,6 +43,13 @@ const PIPEDRIVE_PERSON_ID_DEF: LeadPropertyDefinition = {
   required: false,
 };
 
+const PIPEDRIVE_DEAL_ID_DEF: LeadPropertyDefinition = {
+  key: 'pipedriveDealId',
+  label: 'Pipedrive Deal ID',
+  type: 'number',
+  required: false,
+};
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -189,6 +196,20 @@ export async function applyRetryResult(opts: ApplyResultOptions): Promise<void> 
       }
     }
 
+    if (opts.resultData.pipedriveDealId != null) {
+      try {
+        await ensurePipedriveDealPropertyInSchema(opts.workspaceId);
+      } catch (schemaErr) {
+        logStructured({
+          correlationId: crypto.randomUUID(),
+          event: 'integration_sync_schema_update_error',
+          workspaceId: opts.workspaceId,
+          error: schemaErr instanceof Error ? schemaErr.message : 'Unknown',
+          metadata: { queueId: opts.queueId, property: 'pipedriveDealId' },
+        });
+      }
+    }
+
     await emitEvent({
       workspaceId: opts.workspaceId,
       system: EventSystem.WORKFLOW,
@@ -312,6 +333,7 @@ export async function syncInboundFields(opts: SyncInboundFieldsOptions): Promise
 
 async function ensurePipedrivePropertyInSchema(workspaceId: string): Promise<void> {
   try {
+    let provisioned = false;
     await withTransaction(async (tx) => {
       const workspace = await tx.workspace.findUnique({
         where: { id: workspaceId },
@@ -326,13 +348,64 @@ async function ensurePipedrivePropertyInSchema(workspaceId: string): Promise<voi
         where: { id: workspaceId },
         data: { leadPropertySchema: updated as unknown as Prisma.InputJsonValue },
       });
+      provisioned = true;
     });
+
+    if (provisioned) {
+      await emitEvent({
+        workspaceId,
+        system: EventSystem.WORKFLOW,
+        eventType: 'workspace_schema_auto_provisioned',
+        success: true,
+        metadata: { property: 'pipedrivePersonId' },
+      });
+    }
   } catch (err) {
     logStructured({
       correlationId: crypto.randomUUID(),
       event: 'integration_sync_schema_provision_error',
       workspaceId,
       error: err instanceof Error ? err.message : 'Unknown',
+    });
+  }
+}
+
+async function ensurePipedriveDealPropertyInSchema(workspaceId: string): Promise<void> {
+  try {
+    let provisioned = false;
+    await withTransaction(async (tx) => {
+      const workspace = await tx.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { leadPropertySchema: true },
+      });
+      const schema = LeadPropertySchemaArray.parse(workspace?.leadPropertySchema) as LeadPropertyDefinition[];
+
+      if (schema.some((p) => p.key === 'pipedriveDealId')) return;
+
+      const updated = [...schema, PIPEDRIVE_DEAL_ID_DEF];
+      await tx.workspace.update({
+        where: { id: workspaceId },
+        data: { leadPropertySchema: updated as unknown as Prisma.InputJsonValue },
+      });
+      provisioned = true;
+    });
+
+    if (provisioned) {
+      await emitEvent({
+        workspaceId,
+        system: EventSystem.WORKFLOW,
+        eventType: 'workspace_schema_auto_provisioned',
+        success: true,
+        metadata: { property: 'pipedriveDealId' },
+      });
+    }
+  } catch (err) {
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'integration_sync_schema_provision_error',
+      workspaceId,
+      error: err instanceof Error ? err.message : 'Unknown',
+      metadata: { property: 'pipedriveDealId' },
     });
   }
 }

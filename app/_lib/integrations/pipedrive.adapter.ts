@@ -86,6 +86,75 @@ interface PipedriveRawField {
   [key: string]: unknown;
 }
 
+export interface PipedriveDeal {
+  id: number;
+  title: string | null;
+  value: number | null;
+  currency: string | null;
+  status: string | null;
+  stage_id: number | null;
+  pipeline_id: number | null;
+  person_id: number | { value: number } | null;
+  [key: string]: unknown;
+}
+
+export interface PipedriveDealResult {
+  pipedriveDealId: number;
+  isNew: boolean;
+  title?: string;
+  stageId?: number;
+  pipelineId?: number;
+  status?: string;
+}
+
+export interface PipedriveStage {
+  id: number;
+  name: string;
+  orderNr?: number;
+  pipelineId?: number;
+}
+
+export interface PipedrivePipeline {
+  id: number;
+  name: string;
+  stages?: PipedriveStage[];
+}
+
+interface PipedriveRawStage {
+  id: number;
+  name: string;
+  order_nr?: number;
+  pipeline_id?: number;
+  [key: string]: unknown;
+}
+
+interface PipedriveRawPipeline {
+  id: number;
+  name: string;
+  [key: string]: unknown;
+}
+
+export interface CreateDealOptions {
+  title: string;
+  personId: number;
+  pipelineId?: number;
+  stageId?: number;
+  value?: number;
+  currency?: string;
+  status?: string;
+  extraFields?: Record<string, unknown>;
+}
+
+export interface UpdateDealOptions {
+  title?: string;
+  pipelineId?: number;
+  stageId?: number;
+  value?: number;
+  currency?: string;
+  status?: string;
+  extraFields?: Record<string, unknown>;
+}
+
 // ============================================================================
 // Adapter
 // ============================================================================
@@ -414,6 +483,182 @@ export class PipedriveAdapter extends BaseIntegrationAdapter<PipedriveMeta> {
         true,
       );
     }
+  }
+
+  // ==========================================================================
+  // Deal Operations
+  // ==========================================================================
+
+  /**
+   * Create a new deal in Pipedrive.
+   * Returns pipedriveDealId — the primary reference for downstream actions.
+   */
+  async createDeal(
+    opts: CreateDealOptions,
+  ): Promise<IntegrationResult<PipedriveDealResult>> {
+    try {
+      const body: Record<string, unknown> = {
+        title: opts.title,
+        person_id: opts.personId,
+      };
+      if (opts.pipelineId !== undefined) body.pipeline_id = opts.pipelineId;
+      if (opts.stageId !== undefined) body.stage_id = opts.stageId;
+      if (opts.value !== undefined) body.value = opts.value;
+      if (opts.currency !== undefined) body.currency = opts.currency;
+      if (opts.status !== undefined) body.status = opts.status;
+      if (opts.extraFields) Object.assign(body, opts.extraFields);
+
+      const res = await this.request<PipedriveDeal>('POST', '/v1/deals', body);
+
+      if (!res.ok) {
+        await this.markUnhealthy();
+        return this.error(res.error, res.retryable, res.retryAfterMs);
+      }
+
+      await this.touch();
+      return this.success({
+        pipedriveDealId: res.data.id,
+        isNew: true,
+        title: res.data.title ?? undefined,
+        stageId: res.data.stage_id ?? undefined,
+        pipelineId: res.data.pipeline_id ?? undefined,
+        status: res.data.status ?? undefined,
+      });
+    } catch (err) {
+      await this.markUnhealthy();
+      return this.error(
+        err instanceof Error ? err.message : 'Failed to create Pipedrive deal',
+        true,
+      );
+    }
+  }
+
+  /**
+   * Update an existing deal by Pipedrive deal ID.
+   */
+  async updateDeal(
+    dealId: number,
+    opts: UpdateDealOptions,
+  ): Promise<IntegrationResult<PipedriveDealResult>> {
+    try {
+      const body: Record<string, unknown> = {};
+      if (opts.title !== undefined) body.title = opts.title;
+      if (opts.pipelineId !== undefined) body.pipeline_id = opts.pipelineId;
+      if (opts.stageId !== undefined) body.stage_id = opts.stageId;
+      if (opts.value !== undefined) body.value = opts.value;
+      if (opts.currency !== undefined) body.currency = opts.currency;
+      if (opts.status !== undefined) body.status = opts.status;
+      if (opts.extraFields) Object.assign(body, opts.extraFields);
+
+      if (Object.keys(body).length === 0) {
+        return this.success({ pipedriveDealId: dealId, isNew: false });
+      }
+
+      const res = await this.request<PipedriveDeal>(
+        'PUT',
+        `/v1/deals/${dealId}`,
+        body,
+      );
+
+      if (!res.ok) {
+        await this.markUnhealthy();
+        return this.error(res.error, res.retryable, res.retryAfterMs);
+      }
+
+      await this.touch();
+      return this.success({
+        pipedriveDealId: res.data.id,
+        isNew: false,
+        title: res.data.title ?? undefined,
+        stageId: res.data.stage_id ?? undefined,
+        pipelineId: res.data.pipeline_id ?? undefined,
+        status: res.data.status ?? undefined,
+      });
+    } catch (err) {
+      await this.markUnhealthy();
+      return this.error(
+        err instanceof Error ? err.message : 'Failed to update Pipedrive deal',
+        true,
+      );
+    }
+  }
+
+  /**
+   * Get a deal by Pipedrive ID. Returns null on 404.
+   */
+  async getDeal(
+    dealId: number,
+  ): Promise<IntegrationResult<PipedriveDeal | null>> {
+    const res = await this.request<PipedriveDeal>('GET', `/v1/deals/${dealId}`);
+
+    if (!res.ok) {
+      if (res.status === 404) return this.success(null);
+      return this.error(res.error, res.retryable, res.retryAfterMs);
+    }
+
+    return this.success(res.data);
+  }
+
+  /**
+   * Move a deal to a specific stage. Thin wrapper over updateDeal.
+   */
+  async moveDealStage(
+    dealId: number,
+    stageId: number,
+  ): Promise<IntegrationResult<PipedriveDealResult>> {
+    return this.updateDeal(dealId, { stageId });
+  }
+
+  /**
+   * List all pipelines in the Pipedrive account.
+   */
+  async listPipelines(): Promise<IntegrationResult<PipedrivePipeline[]>> {
+    const res = await this.request<PipedriveRawPipeline[]>('GET', '/v1/pipelines');
+
+    if (!res.ok) {
+      await this.markUnhealthy();
+      return this.error(res.error, res.retryable, res.retryAfterMs);
+    }
+
+    const pipelines: PipedrivePipeline[] = (res.data || []).map((p) => ({
+      id: p.id,
+      name: p.name,
+    }));
+
+    await this.touch();
+    return this.success(pipelines);
+  }
+
+  /**
+   * List stages. Optionally filter to a single pipeline.
+   */
+  async listStages(
+    pipelineId?: number,
+  ): Promise<IntegrationResult<PipedriveStage[]>> {
+    const query: Record<string, string> = {};
+    if (pipelineId !== undefined) query.pipeline_id = String(pipelineId);
+
+    const res = await this.request<PipedriveRawStage[]>(
+      'GET',
+      '/v1/stages',
+      undefined,
+      Object.keys(query).length > 0 ? query : undefined,
+    );
+
+    if (!res.ok) {
+      await this.markUnhealthy();
+      return this.error(res.error, res.retryable, res.retryAfterMs);
+    }
+
+    const stages: PipedriveStage[] = (res.data || []).map((s) => ({
+      id: s.id,
+      name: s.name,
+      orderNr: s.order_nr,
+      pipelineId: s.pipeline_id,
+    }));
+
+    await this.touch();
+    return this.success(stages);
   }
 
   // ==========================================================================

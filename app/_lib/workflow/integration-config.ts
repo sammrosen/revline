@@ -202,6 +202,13 @@ export const OPERATION_LABELS: Record<string, string> = {
   person_updated: 'Person Updated',
   create_or_update_person: 'Create/Update Person',
   update_person_fields: 'Update Person Fields',
+  deal_added: 'Deal Added',
+  deal_updated: 'Deal Updated',
+  deal_won: 'Deal Won',
+  deal_lost: 'Deal Lost',
+  create_deal: 'Create Deal',
+  update_deal: 'Update Deal',
+  move_deal_stage: 'Move Deal Stage',
 };
 
 /**
