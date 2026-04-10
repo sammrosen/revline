@@ -32,7 +32,8 @@ export function buildConversationNotifyEmail(
   const outcomeLabel = OUTCOME_LABELS[outcome] || 'Completed';
   const outcomeColor = OUTCOME_COLORS[outcome] || '#18181b';
 
-  const subject = `Agent ${escapeHtml(details.agentName)}: ${outcomeLabel}`;
+  // Subject is plain text — no HTML escaping (would display &amp; literally in email clients)
+  const subject = `Agent ${details.agentName}: ${outcomeLabel}`;
 
   // Last 10 messages for condensed transcript
   const transcriptLines = transcript.split('\n');

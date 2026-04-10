@@ -94,7 +94,7 @@ const notifyOwner: ActionExecutor = {
         }
       }
 
-      // 6. Emit event
+      // 6. Emit event (catch so emit failure doesn't lose the success result)
       await emitEvent({
         workspaceId: ctx.workspaceId,
         leadId: ctx.leadId,
@@ -109,7 +109,7 @@ const notifyOwner: ActionExecutor = {
           outcome: summaryData.outcome,
           agentName: summaryData.details.agentName,
         },
-      });
+      }).catch(() => {}); // Fire-and-forget — don't lose success result if emit fails
 
       if (sentCount === 0) {
         return { success: false, error: `Failed to send to all recipients: ${errors.join('; ')}` };
@@ -154,51 +154,53 @@ interface NotificationRecipient {
 /**
  * Find notification recipients for a workspace.
  *
- * Strategy: workspace -> organizationId -> OrganizationMember (isOwner / all)
- * Falls back to WorkspaceMember with OWNER or ADMIN role.
+ * Primary path: WorkspaceMember (has role enum: OWNER/ADMIN/MEMBER/VIEWER).
+ * Fallback: OrganizationMember (isOwner boolean) if no workspace members exist.
  */
 async function findNotificationRecipients(
   workspaceId: string,
   target: string
 ): Promise<NotificationRecipient[]> {
-  // Get workspace to find org
+  // Primary: WorkspaceMember with proper role filtering
+  const roleFilter: Array<'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER'> =
+    target === 'all'
+      ? ['OWNER', 'ADMIN', 'MEMBER']
+      : target === 'admin'
+        ? ['OWNER', 'ADMIN']
+        : ['OWNER'];
+
+  const workspaceMembers = await prisma.workspaceMember.findMany({
+    where: {
+      workspaceId,
+      role: { in: roleFilter },
+    },
+    include: { user: { select: { email: true, name: true } } },
+  });
+
+  if (workspaceMembers.length > 0) {
+    return workspaceMembers.map((m) => ({ email: m.user.email, name: m.user.name }));
+  }
+
+  // Fallback: org-level membership (only has isOwner, no admin/member distinction)
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },
     select: { organizationId: true },
   });
 
   if (workspace?.organizationId) {
-    // Use org membership
-    const whereClause = target === 'all'
-      ? { organizationId: workspace.organizationId }
-      : target === 'admin'
-        ? { organizationId: workspace.organizationId }
-        : { organizationId: workspace.organizationId, isOwner: true };
-
-    const members = await prisma.organizationMember.findMany({
-      where: whereClause,
+    const orgMembers = await prisma.organizationMember.findMany({
+      where: {
+        organizationId: workspace.organizationId,
+        // For 'owner' target, filter to isOwner; otherwise return all org members
+        ...(target === 'owner' ? { isOwner: true } : {}),
+      },
       include: { user: { select: { email: true, name: true } } },
     });
 
-    return members.map((m) => ({ email: m.user.email, name: m.user.name }));
+    return orgMembers.map((m) => ({ email: m.user.email, name: m.user.name }));
   }
 
-  // Fallback: use workspace members table
-  const roleFilter = target === 'all'
-    ? ['OWNER', 'ADMIN', 'MEMBER']
-    : target === 'admin'
-      ? ['OWNER', 'ADMIN']
-      : ['OWNER'];
-
-  const members = await prisma.workspaceMember.findMany({
-    where: {
-      workspaceId,
-      role: { in: roleFilter as Array<'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER'> },
-    },
-    include: { user: { select: { email: true, name: true } } },
-  });
-
-  return members.map((m) => ({ email: m.user.email, name: m.user.name }));
+  return [];
 }
 
 // =============================================================================

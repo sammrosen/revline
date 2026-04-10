@@ -12,6 +12,7 @@
 
 import { prisma } from '@/app/_lib/db';
 import { resolveAI } from './adapter-registry';
+import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 
 // =============================================================================
 // TYPES
@@ -86,8 +87,10 @@ export async function buildConversationNotification(
     : '0m';
 
   // 5. Extract lead info
-  const leadProps = (conversation.lead?.properties && typeof conversation.lead.properties === 'object')
-    ? conversation.lead.properties as Record<string, unknown>
+  // Prisma JsonValue → Record; guarded by object + non-array check
+  const rawProps = conversation.lead?.properties;
+  const leadProps = (rawProps && typeof rawProps === 'object' && !Array.isArray(rawProps))
+    ? rawProps as Record<string, unknown>
     : {};
 
   const lead = conversation.lead
@@ -178,7 +181,7 @@ async function generateAISummary(
       return buildBasicSummary(outcome, transcript);
     }
 
-    const result = await ai.chatCompletion({
+    const aiCall = ai.chatCompletion({
       messages: [
         {
           role: 'developer',
@@ -195,12 +198,29 @@ async function generateAISummary(
       temperature: 0.3,
     });
 
+    // 15s timeout to prevent hanging notification pipeline
+    const result = await Promise.race([
+      aiCall,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('AI summary timeout (15s)')), 15_000)
+      ),
+    ]);
+
     if (result.success && result.data?.content) {
       return result.data.content;
     }
 
     return buildBasicSummary(outcome, transcript);
-  } catch {
+  } catch (error) {
+    // Emit event so AI summary failures are visible in the event ledger
+    emitEvent({
+      workspaceId,
+      system: EventSystem.AGENT,
+      eventType: 'agent_summary_ai_failed',
+      success: false,
+      errorMessage: error instanceof Error ? error.message : 'Unknown',
+      metadata: { aiIntegration },
+    }).catch(() => {}); // Fire-and-forget — never break notification flow
     return buildBasicSummary(outcome, transcript);
   }
 }
