@@ -197,7 +197,7 @@ const ContactSubmittedPayloadSchema = z.object({
   name: z.string().optional(),
   phone: z.string().optional(),
   source: z.string().optional(),
-});
+}).passthrough();
 
 export const REVLINE_ADAPTER: AdapterDefinition = {
   id: 'revline',

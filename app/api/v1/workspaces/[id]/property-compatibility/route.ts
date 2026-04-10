@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserIdFromHeaders } from '@/app/_lib/auth';
 import { prisma } from '@/app/_lib/db';
 import { getWorkspaceAccess } from '@/app/_lib/workspace-access';
-import { checkTriggerCompatibility } from '@/app/_lib/services/payload-compatibility';
+import {
+  checkTriggerCompatibility,
+  checkTriggerCompatibilityWithDynamicFields,
+  extractCustomFormFields,
+} from '@/app/_lib/services/payload-compatibility';
 import type { LeadPropertyDefinition } from '@/app/_lib/types';
 
 /**
@@ -44,7 +48,7 @@ export async function GET(
 
   const workspace = await prisma.workspace.findUnique({
     where: { id },
-    select: { leadPropertySchema: true },
+    select: { leadPropertySchema: true, pagesConfig: true },
   });
 
   if (!workspace) {
@@ -53,7 +57,13 @@ export async function GET(
 
   const leadPropertySchema = (workspace.leadPropertySchema as LeadPropertyDefinition[] | null) ?? [];
 
-  const result = checkTriggerCompatibility(adapter, operation, leadPropertySchema);
+  // RevLine triggers may have dynamic custom form fields from workspace config
+  const result = adapter === 'revline'
+    ? checkTriggerCompatibilityWithDynamicFields(
+        adapter, operation, leadPropertySchema,
+        extractCustomFormFields(workspace.pagesConfig)
+      )
+    : checkTriggerCompatibility(adapter, operation, leadPropertySchema);
 
   if (!result) {
     return NextResponse.json(
