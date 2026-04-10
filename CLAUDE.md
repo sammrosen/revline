@@ -107,6 +107,16 @@ Sam runs a strict **plan → implement → audit** ritual on this repo. Claude C
 
 **Do not edit a plan file while `/implement` is active on it.** A `PreToolUse` hook will block you. If the plan needs to change, stop and ask Sam.
 
+### Worktree isolation
+
+When Sam runs multiple agents in parallel, each implementation session MUST use `EnterWorktree` to get an isolated working directory. This prevents branch checkout collisions, working tree overwrites, and commits landing on wrong branches.
+
+- `/plan` — runs in the main repo (safe, only writes plan files)
+- `/implement` — MUST enter a worktree before making any code changes
+- `/audit` — enter a worktree if other agents are active
+
+Worktrees live at `.claude/worktrees/` (gitignored). They persist after completion for review. Sam cleans them up manually or via `git worktree prune`.
+
 ### Source of truth
 
 `docs/STANDARDS.md` is canonical. When you need a rule, **quote it** — do not paraphrase. If you think a standard should change, say so and ask Sam to update the doc; don't drift around it.

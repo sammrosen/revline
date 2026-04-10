@@ -38,6 +38,10 @@ Sam's workflow is **plan → implement → audit**. Your job in this command is 
    Review it. When ready, run /implement docs/plans/{SLUG}.md
    ```
 
+## Isolation
+
+This command is safe to run alongside other agents — it only creates a plan file and reads references. No worktree needed. Implementation happens in an isolated worktree via `/implement`.
+
 ## Do NOT
 
 - Do not start implementation. Even if Sam's prompt sounds urgent.

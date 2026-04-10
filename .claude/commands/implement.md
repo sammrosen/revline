@@ -23,7 +23,9 @@ This is Sam's implementation ritual. Read the rules carefully — they are non-n
    ```
    This file is what the plan-lock hook reads to block edits to the active plan. Create the file with the Write tool.
 
-4. **Confirm the standards checklist in the plan is meaningfully filled out.** If it's blank or all boxes are blanket-ticked without evidence, stop and tell Sam the plan needs review before implementation.
+4. **Enter a worktree.** Call `EnterWorktree` to isolate this implementation session. This creates a new branch and working directory so other agents can't interfere with your checkout, working tree, or git state. All subsequent file edits, builds, and git operations happen in the worktree — not the main repo. If Sam already created a branch, use that. Otherwise create `impl/{SLUG}` off main.
+
+5. **Confirm the standards checklist in the plan is meaningfully filled out.** If it's blank or all boxes are blanket-ticked without evidence, stop and tell Sam the plan needs review before implementation.
 
 ## Execution
 
@@ -50,6 +52,7 @@ After every chunk of related todos (or at natural commit boundaries), invoke the
 After all todos are completed and the final audit is clean:
 
 1. Print a short summary: which todos completed, which files were touched, what the audit said.
-2. **Write a QA doc** at `docs/qa/<feature-kebab-name>.md` covering: what changed, smoke tests, e2e test scenarios, edge cases, security checks, and any regression tests to run. This doc is for Sam to manually verify the feature works before merging.
-3. Suggest Sam run `/audit` one more time before merging if substantial work landed.
-4. Tell Sam to delete `.claude/state/active-implement.json` when the implementation session is over (or note that the Stop hook will surface a reminder).
+2. **Report the worktree location and branch name** so Sam knows where to find the changes and can review, push, or create a PR from there.
+3. **Write a QA doc** at `docs/qa/<feature-kebab-name>.md` covering: what changed, smoke tests, e2e test scenarios, edge cases, security checks, and any regression tests to run. This doc is for Sam to manually verify the feature works before merging.
+4. Suggest Sam run `/audit` one more time before merging if substantial work landed.
+5. Tell Sam to delete `.claude/state/active-implement.json` when the implementation session is over (or note that the Stop hook will surface a reminder). Worktrees persist for review — Sam can clean up with `git worktree prune` after merging.

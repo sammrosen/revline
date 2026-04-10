@@ -5,6 +5,10 @@ argument-hint: [--base main | --staged | <file-path>]
 
 Run a standards audit against: $ARGUMENTS (default: diff vs `origin/main`)
 
+## Isolation
+
+Audit is read-only — the subagent never writes files. If other agents are active on this repo, enter a worktree first (`EnterWorktree`) to avoid reading a working tree that's mid-modification by another session. The worktree will auto-clean up since audit makes no changes.
+
 ## What to do
 
 1. **Determine the diff scope:**

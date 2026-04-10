@@ -34,9 +34,15 @@ try {
   // If we can't write state, still inject — better noisy than missed
 }
 
+// Check if another implementation session is active
+const implActive = existsSync(".claude/state/active-implement.json");
+const worktreeWarning = implActive
+  ? " ⚠ Another implementation session is active — enter a worktree (EnterWorktree) before making changes to avoid cross-contamination."
+  : "";
+
 // Inject the hint via stdout — Claude sees this as additional context
 process.stdout.write(
-  `Reminder: Sam's workflow is plan → implement → audit. For non-trivial work, consider running /plan first to draft the change in docs/plans/, then /implement once approved. Use /new-integration {name} for full adapter onboarding.`
+  `Reminder: Sam's workflow is plan → implement → audit. For non-trivial work, consider running /plan first to draft the change in docs/plans/, then /implement once approved. Use /new-integration {name} for full adapter onboarding.${worktreeWarning}`
 );
 
 process.exit(0);
