@@ -1,0 +1,4 @@
+-- Add GOOGLE_CALENDAR to IntegrationType and EventSystem enums.
+
+ALTER TYPE "IntegrationType" ADD VALUE IF NOT EXISTS 'GOOGLE_CALENDAR';
+ALTER TYPE "EventSystem" ADD VALUE IF NOT EXISTS 'GOOGLE_CALENDAR';
