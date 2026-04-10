@@ -133,6 +133,15 @@ export const INTEGRATION_CONFIG: Record<string, IntegrationStyle> = {
     icon: Bot,
     logo: '/logos/agent.png',
   },
+  actionflow: {
+    name: 'ActionFlow',
+    color: '#0ea5e9',
+    bgClass: 'bg-sky-500/20',
+    borderClass: 'border-sky-500/40',
+    textClass: 'text-sky-400',
+    icon: Zap,
+    logo: '/logos/actionflow.png',
+  },
   pipedrive: {
     name: 'Pipedrive',
     color: '#017737',
@@ -197,6 +206,10 @@ export const OPERATION_LABELS: Record<string, string> = {
   emit_event: 'Emit Event',
   trigger_flow: 'Trigger Flow',
   route_to_agent: 'Route to Agent',
+  // ActionFlow
+  create_customer_with_lead: 'Create Customer with Lead',
+  create_customer: 'Create Customer',
+  get_job: 'Get Job',
   // Pipedrive
   person_created: 'Person Created',
   person_updated: 'Person Updated',

@@ -170,6 +170,7 @@ enum IntegrationType {
   ANTHROPIC
   OPENAI
   PIPEDRIVE
+  ACTIONFLOW
 }
 
 enum HealthStatus {
@@ -240,6 +241,7 @@ enum EventSystem {
   OPENAI
   ANTHROPIC
   PIPEDRIVE
+  ACTIONFLOW
   AGENT
   CRON
   WORKFLOW

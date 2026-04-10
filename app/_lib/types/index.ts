@@ -832,6 +832,13 @@ export interface PipedriveMeta {
   fieldKeyCache?: Record<string, string>;
 }
 
+export interface ActionFlowMeta {
+  /** ActionFlow EnterpriseID — required header on every API call */
+  enterpriseId: string;
+  /** RevLine property key -> ActionFlow field key */
+  fieldMap?: Record<string, string>;
+}
+
 /**
  * Union of all integration meta types
  */
@@ -847,6 +854,7 @@ export type IntegrationMeta =
   | OpenAIMeta
   | AnthropicMeta
   | PipedriveMeta
+  | ActionFlowMeta
   | Record<string, unknown>;
 
 /**
@@ -897,6 +905,11 @@ export function isAnthropicMeta(meta: IntegrationMeta | null): meta is Anthropic
 export function isPipedriveMeta(meta: IntegrationMeta | null): meta is PipedriveMeta {
   if (!meta) return false;
   return 'fieldMap' in meta || 'defaultPipelineId' in meta || 'stageMap' in meta || 'webhookSecret' in meta;
+}
+
+export function isActionFlowMeta(meta: IntegrationMeta | null): meta is ActionFlowMeta {
+  if (!meta) return false;
+  return 'enterpriseId' in meta;
 }
 
 // =============================================================================

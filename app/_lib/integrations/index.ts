@@ -58,6 +58,9 @@ export type { AnthropicModel } from './anthropic.adapter';
 export { PipedriveAdapter } from './pipedrive.adapter';
 export type { PipedrivePersonResult, PipedrivePerson, PipedriveField } from './pipedrive.adapter';
 
+export { ActionFlowAdapter } from './actionflow.adapter';
+export type { ActionFlowCustomerResult, ActionFlowJob, ActionFlowCalc, CreateCustomerOptions } from './actionflow.adapter';
+
 // Integration config - single source of truth
 export {
   INTEGRATION_TYPES,

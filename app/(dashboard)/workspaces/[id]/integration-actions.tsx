@@ -12,7 +12,7 @@ import { OpenAIConfigEditor } from './openai-config-editor';
 import { AnthropicConfigEditor } from './anthropic-config-editor';
 import { PipedriveConfigEditor } from './pipedrive-config-editor';
 
-type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND' | 'TWILIO' | 'OPENAI' | 'ANTHROPIC' | 'PIPEDRIVE';
+type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND' | 'TWILIO' | 'OPENAI' | 'ANTHROPIC' | 'PIPEDRIVE' | 'ACTIONFLOW';
 
 // Available secret names by integration type
 const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
@@ -27,6 +27,7 @@ const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
   OPENAI: ['API Key'],
   ANTHROPIC: ['API Key'],
   PIPEDRIVE: ['API Token'],
+  ACTIONFLOW: ['Client ID', 'Client Secret', 'Username', 'Password'],
 };
 
 interface SecretSummary {
