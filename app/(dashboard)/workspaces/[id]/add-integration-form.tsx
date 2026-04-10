@@ -9,6 +9,7 @@ import { AbcIgniteAddConfig } from './abc-ignite-add-config';
 import { RevlineAddConfig } from './revline-add-config';
 import { ResendAddConfig } from './resend-add-config';
 import { PipedriveConfigEditor } from './pipedrive-config-editor';
+import { GoogleCalendarConfigEditor } from './google-calendar-config-editor';
 import { lockScroll, unlockScroll } from '@/app/_lib/utils/scroll-lock';
 import { 
   INTEGRATION_TYPES, 
@@ -200,9 +201,9 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <label className="text-sm font-semibold text-zinc-300">Integration Type</label>
-              {!isMailerLite && !isStripe && !isAbcIgnite && !isRevline && !isResend && (
-                <IntegrationHelp 
-                  integration={integration} 
+              {!isMailerLite && !isStripe && !isAbcIgnite && !isRevline && !isResend && integration !== 'GOOGLE_CALENDAR' && (
+                <IntegrationHelp
+                  integration={integration}
                   context="create"
                   onCopyTemplate={(template) => setMeta(template)}
                 />
@@ -332,7 +333,7 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
                 <label className="text-sm font-semibold text-zinc-300">
                   {config?.metaDescription ? `${config.displayName} Config` : 'Meta (JSON, optional)'}
                 </label>
-                {!isMailerLite && !isStripe && !isAbcIgnite && !isResend && integration !== 'PIPEDRIVE' && (
+                {!isMailerLite && !isStripe && !isAbcIgnite && !isResend && integration !== 'PIPEDRIVE' && integration !== 'GOOGLE_CALENDAR' && (
                   <IntegrationTemplateButton 
                     integration={integration}
                     onCopyTemplate={(template) => setMeta(template)}
@@ -368,6 +369,11 @@ export function AddIntegrationForm({ workspaceId }: AddIntegrationFormProps) {
               />
             ) : integration === 'PIPEDRIVE' ? (
               <PipedriveConfigEditor
+                value={meta}
+                onChange={setMeta}
+              />
+            ) : integration === 'GOOGLE_CALENDAR' ? (
+              <GoogleCalendarConfigEditor
                 value={meta}
                 onChange={setMeta}
               />

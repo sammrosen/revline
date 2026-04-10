@@ -122,7 +122,9 @@ export class CalendlyBookingProvider implements BookingProvider {
     slot: TimeSlot,
     _customer: BookingCustomer
   ): Promise<BookingResult> {
-    const eventTypeUri = slot.providerData?.eventTypeUri as string | undefined;
+    const eventTypeUri = typeof slot.providerData?.eventTypeUri === 'string'
+      ? slot.providerData.eventTypeUri
+      : undefined;
     if (!eventTypeUri) {
       return {
         success: false,
@@ -141,12 +143,14 @@ export class CalendlyBookingProvider implements BookingProvider {
       };
     }
 
+    const bookingId = `calendly-${Date.now()}`;
+
     return {
       success: true,
-      bookingId: `calendly-${Date.now()}`,
+      bookingId,
       message: 'Scheduling link created. Complete your booking at the provided URL.',
       booking: {
-        id: `calendly-${Date.now()}`,
+        id: bookingId,
         startTime: slot.startTime,
         endTime: slot.endTime,
         title: slot.title,

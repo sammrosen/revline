@@ -11,8 +11,9 @@ import { TwilioConfigEditor } from './twilio-config-editor';
 import { OpenAIConfigEditor } from './openai-config-editor';
 import { AnthropicConfigEditor } from './anthropic-config-editor';
 import { PipedriveConfigEditor } from './pipedrive-config-editor';
+import { GoogleCalendarConfigEditor } from './google-calendar-config-editor';
 
-type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND' | 'TWILIO' | 'OPENAI' | 'ANTHROPIC' | 'PIPEDRIVE' | 'ACTIONFLOW';
+type IntegrationType = 'MAILERLITE' | 'STRIPE' | 'CALENDLY' | 'MANYCHAT' | 'ABC_IGNITE' | 'REVLINE' | 'RESEND' | 'TWILIO' | 'OPENAI' | 'ANTHROPIC' | 'PIPEDRIVE' | 'ACTIONFLOW' | 'GOOGLE_CALENDAR';
 
 // Available secret names by integration type
 const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
@@ -28,6 +29,7 @@ const AVAILABLE_SECRET_NAMES: Record<IntegrationType, string[]> = {
   ANTHROPIC: ['API Key'],
   PIPEDRIVE: ['API Token'],
   ACTIONFLOW: ['Client ID', 'Client Secret', 'Username', 'Password'],
+  GOOGLE_CALENDAR: ['Client ID', 'Client Secret', 'Refresh Token'],
 };
 
 interface SecretSummary {
@@ -83,7 +85,8 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
   const isOpenAI = integrationType === 'OPENAI';
   const isAnthropic = integrationType === 'ANTHROPIC';
   const isPipedrive = integrationType === 'PIPEDRIVE';
-  
+  const isGoogleCalendar = integrationType === 'GOOGLE_CALENDAR';
+
   // Check if this integration has dependent workflows
   const hasDependents = dependentWorkflows.length > 0;
 
@@ -415,6 +418,12 @@ export function IntegrationActions({ integration, workspaceId, workspaceSlug, de
               integrationId={integration.id}
               workspaceId={workspaceId}
               workspaceSlug={workspaceSlug}
+            />
+          ) : isGoogleCalendar ? (
+            <GoogleCalendarConfigEditor
+              value={metaText}
+              onChange={setMetaText}
+              error={error}
             />
           ) : (
             <>

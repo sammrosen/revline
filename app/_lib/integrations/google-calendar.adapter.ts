@@ -151,7 +151,7 @@ export class GoogleCalendarAdapter extends BaseIntegrationAdapter<GoogleCalendar
    * Get a valid access token, refreshing if needed.
    * Caches token in memory until expiry (with 60s buffer).
    */
-  async getAccessToken(): Promise<IntegrationResult<string>> {
+  private async getAccessToken(): Promise<IntegrationResult<string>> {
     // Return cached token if still valid (with 60s buffer)
     if (this.cachedAccessToken && Date.now() < this.tokenExpiresAt - 60_000) {
       return this.success(this.cachedAccessToken);
@@ -190,7 +190,9 @@ export class GoogleCalendarAdapter extends BaseIntegrationAdapter<GoogleCalendar
 
       const tokenData = await res.json() as GoogleTokenResponse;
       this.cachedAccessToken = tokenData.access_token;
-      this.tokenExpiresAt = Date.now() + tokenData.expires_in * 1000;
+      // Cap cache TTL to 5 minutes per standards (Google returns ~3600s)
+      const cacheTtlMs = Math.min(tokenData.expires_in - 60, 300) * 1000;
+      this.tokenExpiresAt = Date.now() + cacheTtlMs;
 
       return this.success(tokenData.access_token);
     } catch (err) {
@@ -268,6 +270,7 @@ export class GoogleCalendarAdapter extends BaseIntegrationAdapter<GoogleCalendar
 
       // Handle 204 No Content
       if (res.status === 204) {
+        // 204 No Content: cast to T since callers (deleteEvent) expect void
         return { ok: true, data: undefined as unknown as T };
       }
 

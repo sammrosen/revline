@@ -163,8 +163,9 @@ export class GoogleCalendarBookingProvider implements BookingProvider {
       const dateStr = current.toISOString().split('T')[0];
 
       // Business hours: 09:00 - 17:00 in configured timezone
-      // We use UTC-based approximation; for production, a proper timezone library
-      // would be needed. This gives correct results for scheduling.
+      // Known v1 limitation: uses server-local time parsing. For workspaces in
+      // timezones different from the server, slot times may be offset. A proper
+      // timezone library (date-fns-tz, luxon) is needed for full correctness.
       const dayStart = new Date(`${dateStr}T09:00:00`);
       const dayEnd = new Date(`${dateStr}T17:00:00`);
 
