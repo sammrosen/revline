@@ -7,3 +7,4 @@
  */
 
 import './scheduling';
+import './workflow-bridge';
