@@ -50,5 +50,6 @@ After every chunk of related todos (or at natural commit boundaries), invoke the
 After all todos are completed and the final audit is clean:
 
 1. Print a short summary: which todos completed, which files were touched, what the audit said.
-2. Suggest Sam run `/audit` one more time before merging if substantial work landed.
-3. Tell Sam to delete `.claude/state/active-implement.json` when the implementation session is over (or note that the Stop hook will surface a reminder).
+2. **Write a QA doc** at `docs/qa/<feature-kebab-name>.md` covering: what changed, smoke tests, e2e test scenarios, edge cases, security checks, and any regression tests to run. This doc is for Sam to manually verify the feature works before merging.
+3. Suggest Sam run `/audit` one more time before merging if substantial work landed.
+4. Tell Sam to delete `.claude/state/active-implement.json` when the implementation session is over (or note that the Stop hook will surface a reminder).
