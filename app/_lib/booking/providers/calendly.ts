@@ -24,6 +24,7 @@ import {
   CalendlyAvailableTime,
   CalendlyEventType,
 } from '@/app/_lib/integrations/calendly.adapter';
+import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 
 /**
  * Calendly Booking Provider
@@ -136,6 +137,16 @@ export class CalendlyBookingProvider implements BookingProvider {
     const linkResult = await this.adapter.createSchedulingLink(eventTypeUri);
 
     if (!linkResult.success || !linkResult.data) {
+      // Fire-and-forget: log booking failure
+      emitEvent({
+        workspaceId: this.adapter.getWorkspaceId(),
+        system: EventSystem.CALENDLY,
+        eventType: 'calendly_booking_failed',
+        success: false,
+        errorMessage: linkResult.error || 'Failed to create Calendly scheduling link',
+        metadata: { eventTypeUri, slotStart: slot.startTime },
+      }).catch(() => {});
+
       return {
         success: false,
         message: linkResult.error || 'Failed to create Calendly scheduling link',
@@ -144,6 +155,15 @@ export class CalendlyBookingProvider implements BookingProvider {
     }
 
     const bookingId = `calendly-${Date.now()}`;
+
+    // Fire-and-forget: log booking success
+    emitEvent({
+      workspaceId: this.adapter.getWorkspaceId(),
+      system: EventSystem.CALENDLY,
+      eventType: 'calendly_booking_created',
+      success: true,
+      metadata: { bookingId, slotStart: slot.startTime, bookingUrl: linkResult.data.bookingUrl },
+    }).catch(() => {});
 
     return {
       success: true,

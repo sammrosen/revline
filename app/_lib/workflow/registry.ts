@@ -1059,6 +1059,8 @@ export const GOOGLE_CALENDAR_ADAPTER: AdapterDefinition = {
     secrets: ['Client ID', 'Client Secret', 'Refresh Token'],
     metaKeys: ['calendarId', 'timezone', 'defaultDuration'],
   },
+  // Aspirational triggers — require a webhook route at /api/v1/google-calendar-webhook
+  // to fire from real Google Calendar push notifications. Currently unused.
   triggers: {
     booking_created: {
       name: 'booking_created',

@@ -191,7 +191,7 @@ export class GoogleCalendarAdapter extends BaseIntegrationAdapter<GoogleCalendar
       const tokenData = await res.json() as GoogleTokenResponse;
       this.cachedAccessToken = tokenData.access_token;
       // Cap cache TTL to 5 minutes per standards (Google returns ~3600s)
-      const cacheTtlMs = Math.min(tokenData.expires_in - 60, 300) * 1000;
+      const cacheTtlMs = Math.min(Math.max(tokenData.expires_in - 60, 0), 300) * 1000;
       this.tokenExpiresAt = Date.now() + cacheTtlMs;
 
       return this.success(tokenData.access_token);

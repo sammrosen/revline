@@ -20,6 +20,7 @@ import {
   BookingResult,
 } from '../types';
 import { GoogleCalendarAdapter } from '@/app/_lib/integrations/google-calendar.adapter';
+import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 
 /**
  * Google Calendar Booking Provider
@@ -113,12 +114,35 @@ export class GoogleCalendarBookingProvider implements BookingProvider {
     });
 
     if (!result.success || !result.data) {
+      // Fire-and-forget: log booking failure
+      emitEvent({
+        workspaceId: this.adapter.getWorkspaceId(),
+        system: EventSystem.GOOGLE_CALENDAR,
+        eventType: 'google_calendar_booking_failed',
+        success: false,
+        errorMessage: result.error || 'Failed to create Google Calendar event',
+        metadata: { slotStart: slot.startTime, customerEmail: customer.email },
+      }).catch(() => {});
+
       return {
         success: false,
         message: result.error || 'Failed to create Google Calendar event',
         error: result.error,
       };
     }
+
+    // Fire-and-forget: log booking success
+    emitEvent({
+      workspaceId: this.adapter.getWorkspaceId(),
+      system: EventSystem.GOOGLE_CALENDAR,
+      eventType: 'google_calendar_booking_created',
+      success: true,
+      metadata: {
+        bookingId: result.data.id,
+        slotStart: result.data.start.dateTime || slot.startTime,
+        customerEmail: customer.email,
+      },
+    }).catch(() => {});
 
     return {
       success: true,
