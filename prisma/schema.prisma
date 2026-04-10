@@ -171,6 +171,7 @@ enum IntegrationType {
   OPENAI
   PIPEDRIVE
   ACTIONFLOW
+  GOOGLE_CALENDAR
 }
 
 enum HealthStatus {

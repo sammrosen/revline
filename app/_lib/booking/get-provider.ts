@@ -8,7 +8,7 @@
 import { prisma } from '@/app/_lib/db';
 import { IntegrationType, Prisma, Workspace, WorkspaceStatus } from '@prisma/client';
 import { BookingProvider, BookingProviderCapabilities } from './types';
-import { AbcIgniteBookingProvider } from './providers';
+import { AbcIgniteBookingProvider, CalendlyBookingProvider, GoogleCalendarBookingProvider } from './providers';
 import { RevlineMeta } from '@/app/_lib/types';
 
 /**
@@ -17,7 +17,8 @@ import { RevlineMeta } from '@/app/_lib/types';
  */
 const BOOKING_PROVIDER_PRIORITY: IntegrationType[] = [
   IntegrationType.ABC_IGNITE,
-  // Future: IntegrationType.CALENDLY,
+  IntegrationType.CALENDLY,
+  IntegrationType.GOOGLE_CALENDAR,
 ];
 
 /**
@@ -79,11 +80,13 @@ async function createProvider(
   switch (type) {
     case IntegrationType.ABC_IGNITE:
       return AbcIgniteBookingProvider.forClient(workspaceId);
-    
-    // Future providers:
-    // case IntegrationType.CALENDLY:
-    //   return CalendlyBookingProvider.forClient(workspaceId);
-    
+
+    case IntegrationType.CALENDLY:
+      return CalendlyBookingProvider.forClient(workspaceId);
+
+    case IntegrationType.GOOGLE_CALENDAR:
+      return GoogleCalendarBookingProvider.forClient(workspaceId);
+
     default:
       return null;
   }

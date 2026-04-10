@@ -1,10 +1,9 @@
 /**
  * Booking Providers
- * 
+ *
  * Export all booking provider implementations.
  */
 
 export { AbcIgniteBookingProvider } from './abc-ignite';
-
-// Future providers:
-// export { CalendlyBookingProvider } from './calendly';
+export { CalendlyBookingProvider } from './calendly';
+export { GoogleCalendarBookingProvider } from './google-calendar';

@@ -1047,6 +1047,49 @@ export const ACTIONFLOW_ADAPTER: AdapterDefinition = {
   },
 };
 
+/**
+ * Google Calendar Adapter
+ * Handles booking via Google Calendar API
+ */
+export const GOOGLE_CALENDAR_ADAPTER: AdapterDefinition = {
+  id: 'google_calendar',
+  name: 'Google Calendar',
+  requiresIntegration: true,
+  requirements: {
+    secrets: ['Client ID', 'Client Secret', 'Refresh Token'],
+    metaKeys: ['calendarId', 'timezone', 'defaultDuration'],
+  },
+  triggers: {
+    booking_created: {
+      name: 'booking_created',
+      label: 'Booking Created',
+      description: 'Fires when an appointment is booked via Google Calendar',
+      payloadSchema: BookingPayloadSchema,
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'name', label: 'Name', type: 'text', required: false },
+        { name: 'scheduledAt', label: 'Scheduled At', type: 'datetime', required: false },
+      ],
+    },
+    booking_canceled: {
+      name: 'booking_canceled',
+      label: 'Booking Canceled',
+      description: 'Fires when a Google Calendar booking is canceled',
+      payloadSchema: z.object({
+        email: z.string().email(),
+        name: z.string().optional(),
+        reason: z.string().optional(),
+      }),
+      testFields: [
+        { name: 'email', label: 'Email', type: 'email', required: true },
+        { name: 'name', label: 'Name', type: 'text', required: false },
+        { name: 'reason', label: 'Cancellation Reason', type: 'text', required: false },
+      ],
+    },
+  },
+  actions: {},
+};
+
 // =============================================================================
 // REGISTRY
 // =============================================================================
@@ -1068,6 +1111,7 @@ export const ADAPTER_REGISTRY: Record<string, AdapterDefinition> = {
   agent: AGENT_ADAPTER,
   pipedrive: PIPEDRIVE_ADAPTER,
   actionflow: ACTIONFLOW_ADAPTER,
+  google_calendar: GOOGLE_CALENDAR_ADAPTER,
 };
 
 // =============================================================================

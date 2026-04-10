@@ -61,6 +61,23 @@ export type { PipedrivePersonResult, PipedrivePerson, PipedriveField } from './p
 export { ActionFlowAdapter } from './actionflow.adapter';
 export type { ActionFlowCustomerResult, ActionFlowJob, ActionFlowCalc, CreateCustomerOptions } from './actionflow.adapter';
 
+export { CalendlyAdapter } from './calendly.adapter';
+export type {
+  CalendlyUser,
+  CalendlyEventType,
+  CalendlyAvailableTime,
+  CalendlyScheduledEvent,
+  CalendlyInvitee,
+} from './calendly.adapter';
+
+export { GoogleCalendarAdapter } from './google-calendar.adapter';
+export type {
+  GoogleCalendarEvent,
+  GoogleCalendarAttendee,
+  GoogleFreeBusyResponse,
+  InsertEventParams,
+} from './google-calendar.adapter';
+
 // Integration config - single source of truth
 export {
   INTEGRATION_TYPES,

@@ -17,7 +17,7 @@
  */
 export const INTEGRATION_TYPES = [
   'MAILERLITE',
-  'STRIPE', 
+  'STRIPE',
   'CALENDLY',
   'MANYCHAT',
   'ABC_IGNITE',
@@ -28,6 +28,7 @@ export const INTEGRATION_TYPES = [
   'ANTHROPIC',
   'PIPEDRIVE',
   'ACTIONFLOW',
+  'GOOGLE_CALENDAR',
 ] as const;
 
 export type IntegrationTypeId = typeof INTEGRATION_TYPES[number];
@@ -150,6 +151,12 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
         name: 'Webhook Secret',
         placeholder: 'your_signing_key_from_calendly',
         description: 'From Integrations → Webhooks → Your endpoint',
+        required: true,
+      },
+      {
+        name: 'API Key',
+        placeholder: 'your_personal_access_token',
+        description: 'Personal Access Token from Calendly → Integrations → API & Webhooks',
         required: true,
       },
     ],
@@ -501,6 +508,54 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
     warnings: [
       'All four credentials (Client ID, Client Secret, Username, Password) are required',
       'Credentials are encrypted at rest and never exposed to the client',
+    ],
+  },
+  GOOGLE_CALENDAR: {
+    id: 'GOOGLE_CALENDAR',
+    name: 'google_calendar',
+    displayName: 'Google Calendar',
+    color: 'text-blue-500',
+    hasStructuredEditor: true,
+    secrets: [
+      {
+        name: 'Client ID',
+        placeholder: 'xxxxxxxxxxxx.apps.googleusercontent.com',
+        description: 'OAuth2 Client ID from Google Cloud Console',
+        required: true,
+      },
+      {
+        name: 'Client Secret',
+        placeholder: 'GOCSPX-xxxxxxxxxxxxx',
+        description: 'OAuth2 Client Secret from Google Cloud Console',
+        required: true,
+      },
+      {
+        name: 'Refresh Token',
+        placeholder: '1//xxxxxxxxxxxxxxxxxx',
+        description: 'OAuth2 Refresh Token obtained during authorization flow',
+        required: true,
+      },
+    ],
+    metaTemplate: {
+      calendarId: 'primary',
+      timezone: 'America/New_York',
+      defaultDuration: 30,
+    },
+    metaDescription: 'Configure calendar, timezone, and default appointment duration',
+    metaFields: [
+      { key: 'calendarId', description: 'Google Calendar ID (default: "primary")', required: true },
+      { key: 'timezone', description: 'IANA timezone (e.g., "America/New_York")', required: true },
+      { key: 'defaultDuration', description: 'Default appointment duration in minutes', required: true },
+    ],
+    tips: [
+      'Set up OAuth2 credentials in Google Cloud Console',
+      'Use the OAuth2 playground to obtain a refresh token',
+      'The "primary" calendar ID uses the account\'s main calendar',
+      'Timezone must be a valid IANA timezone string',
+    ],
+    warnings: [
+      'All three OAuth2 credentials (Client ID, Client Secret, Refresh Token) are required',
+      'Refresh tokens can expire if not used for extended periods',
     ],
   },
 };

@@ -840,13 +840,33 @@ export interface ActionFlowMeta {
 }
 
 /**
+ * Google Calendar integration metadata
+ * Calendar configuration and default appointment settings
+ *
+ * @example
+ * {
+ *   "calendarId": "primary",
+ *   "timezone": "America/New_York",
+ *   "defaultDuration": 30
+ * }
+ */
+export interface GoogleCalendarMeta {
+  /** Google Calendar ID (default: "primary") */
+  calendarId: string;
+  /** IANA timezone for the calendar (e.g., "America/New_York") */
+  timezone: string;
+  /** Default appointment duration in minutes */
+  defaultDuration: number;
+}
+
+/**
  * Union of all integration meta types
  */
-export type IntegrationMeta = 
-  | MailerLiteMeta 
-  | StripeMeta 
-  | CalendlyMeta 
-  | ManyChatMeta 
+export type IntegrationMeta =
+  | MailerLiteMeta
+  | StripeMeta
+  | CalendlyMeta
+  | ManyChatMeta
   | AbcIgniteMeta
   | RevlineMeta
   | ResendMeta
@@ -855,6 +875,7 @@ export type IntegrationMeta =
   | AnthropicMeta
   | PipedriveMeta
   | ActionFlowMeta
+  | GoogleCalendarMeta
   | Record<string, unknown>;
 
 /**
@@ -910,6 +931,11 @@ export function isPipedriveMeta(meta: IntegrationMeta | null): meta is Pipedrive
 export function isActionFlowMeta(meta: IntegrationMeta | null): meta is ActionFlowMeta {
   if (!meta) return false;
   return 'enterpriseId' in meta;
+}
+
+export function isGoogleCalendarMeta(meta: IntegrationMeta | null): meta is GoogleCalendarMeta {
+  if (!meta) return false;
+  return 'calendarId' in meta && 'timezone' in meta && 'defaultDuration' in meta;
 }
 
 // =============================================================================
