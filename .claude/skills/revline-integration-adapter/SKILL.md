@@ -46,9 +46,9 @@ If you find yourself writing `if (integrationType === 'PIPEDRIVE')` in `engine.t
 
 Older adapters (Stripe, Resend, Twilio, MailerLite) predate this pattern. They mix concerns and use SDKs directly. **Don't copy from them** unless you're matching an existing pattern in that specific adapter.
 
-## The 8–9 file checklist (when adding a new integration)
+## The 10–11 file checklist (when adding a new integration)
 
-For a full new adapter, you must touch all of these. Missing any one causes runtime errors like `ReferenceError: isYourIntegration is not defined`.
+For a full new adapter, you must touch all of these. Missing any one causes runtime errors or visible UI gaps.
 
 1. **`prisma/schema.prisma`** — add the integration name to the `IntegrationType` enum
 2. **`app/_lib/types/index.ts`** — define `{Name}Meta` interface, add to `IntegrationMeta` union, write `is{Name}Meta()` type guard
@@ -59,6 +59,8 @@ For a full new adapter, you must touch all of these. Missing any one causes runt
 7. **`app/api/v1/{name}-webhook/route.ts`** — webhook handler if event-driven (validate source, register with `WebhookProcessor` for dedup, verify signature with `timingSafeEqual`, replay window check, emit trigger via `emitTrigger`, always return 200)
 8. **`app/(dashboard)/workspaces/[id]/`** — config editor component + wire it into `add-integration-form.tsx` and `integration-actions.tsx`
 9. **`app/_lib/workflow/executors/{name}.ts`** — outbound action executors (optional, only if the integration has workflow actions)
+10. **`app/_lib/workflow/integration-config.ts`** — add entry to `INTEGRATION_CONFIG` (name, color, bgClass, borderClass, textClass, icon, logo) so workflow UI renders branded styling instead of generic gray fallback
+11. **`app/_lib/workflow/integration-config.ts`** — add entries to `OPERATION_LABELS` for all triggers and actions so the workflow UI shows human-readable names instead of raw operation keys
 
 The full step-by-step is in `docs/workflows/INTEGRATION-ONBOARDING.md`. Read that, don't reinvent the order.
 
@@ -77,7 +79,7 @@ After step 1, run `npm run db:migrate -- --name add_{integration}_type` to gener
 
 What `standards-auditor` checks on integration changes:
 
-- [ ] All 8–9 touch-points present (no missing files)
+- [ ] All 10–11 touch-points present (no missing files/entries)
 - [ ] No `if (integrationType === ...)` special cases in `engine.ts` or other core modules
 - [ ] Adapter extends `BaseIntegrationAdapter` and uses `forWorkspace()`
 - [ ] Public ops return `IntegrationResult<T>`
@@ -97,3 +99,5 @@ What `standards-auditor` checks on integration changes:
 - Webhook route that compares signatures with `===` — security blocker
 - Webhook route that returns non-200 on partial failure — provider retry storm
 - New integration where the dashboard form doesn't have the conditional editor — `ReferenceError` waiting to happen
+- New integration missing `INTEGRATION_CONFIG` entry — workflow UI renders with generic gray styling
+- New integration missing `OPERATION_LABELS` entries — workflow UI shows raw operation keys instead of human-readable names

@@ -969,6 +969,85 @@ export const PIPEDRIVE_ADAPTER: AdapterDefinition = {
 };
 
 // =============================================================================
+// ACTIONFLOW
+// =============================================================================
+
+const ActionFlowCustomerPayloadSchema = z.object({
+  email: z.string().email().optional(),
+  name: z.string(),
+  phone: z.string().optional(),
+}).passthrough();
+
+/**
+ * ActionFlow Adapter
+ * Countertop/stone fabrication ERP — customer and job management (outbound only)
+ */
+export const ACTIONFLOW_ADAPTER: AdapterDefinition = {
+  id: 'actionflow',
+  name: 'ActionFlow',
+  requiresIntegration: true,
+  requirements: {
+    secrets: ['Client ID', 'Client Secret', 'Username', 'Password'],
+    metaKeys: ['enterpriseId'],
+  },
+  triggers: {},
+  actions: {
+    create_customer_with_lead: {
+      name: 'create_customer_with_lead',
+      label: 'Create Customer with Lead',
+      description: 'Create a customer in ActionFlow with a lead notification action that alerts ActionFlow users.',
+      payloadSchema: ActionFlowCustomerPayloadSchema,
+      paramsSchema: z.object({
+        jobName: z.string().optional(),
+        jobNotes: z.string().optional(),
+        actionComment: z.string().optional(),
+        street1: z.string().optional(),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        zip: z.string().optional(),
+      }),
+      testFields: [
+        { name: 'name', label: 'Customer Name', type: 'text', required: true },
+        { name: 'email', label: 'Email', type: 'email', required: false },
+        { name: 'phone', label: 'Phone', type: 'text', required: false },
+      ],
+    },
+    create_customer: {
+      name: 'create_customer',
+      label: 'Create Customer',
+      description: 'Create a customer in ActionFlow without a lead notification.',
+      payloadSchema: ActionFlowCustomerPayloadSchema,
+      paramsSchema: z.object({
+        jobName: z.string().optional(),
+        jobNotes: z.string().optional(),
+        street1: z.string().optional(),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        zip: z.string().optional(),
+      }),
+      testFields: [
+        { name: 'name', label: 'Customer Name', type: 'text', required: true },
+        { name: 'email', label: 'Email', type: 'email', required: false },
+        { name: 'phone', label: 'Phone', type: 'text', required: false },
+      ],
+    },
+    get_job: {
+      name: 'get_job',
+      label: 'Get Job',
+      description: 'Read job details from ActionFlow for use in customer communications.',
+      payloadSchema: CommonPayloadSchema,
+      paramsSchema: z.object({
+        jobId: z.coerce.number(),
+        includeCompleted: z.coerce.boolean().optional(),
+      }),
+      testFields: [
+        { name: 'jobId', label: 'ActionFlow Job ID', type: 'number', required: true },
+      ],
+    },
+  },
+};
+
+// =============================================================================
 // REGISTRY
 // =============================================================================
 
@@ -988,6 +1067,7 @@ export const ADAPTER_REGISTRY: Record<string, AdapterDefinition> = {
   anthropic: ANTHROPIC_ADAPTER,
   agent: AGENT_ADAPTER,
   pipedrive: PIPEDRIVE_ADAPTER,
+  actionflow: ACTIONFLOW_ADAPTER,
 };
 
 // =============================================================================

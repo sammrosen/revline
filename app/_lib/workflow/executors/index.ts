@@ -15,6 +15,7 @@ import { openaiExecutors } from './openai';
 import { anthropicExecutors } from './anthropic';
 import { agentExecutors } from './agent';
 import { pipedriveExecutors } from './pipedrive';
+import { actionflowExecutors } from './actionflow';
 
 // =============================================================================
 // EXECUTOR REGISTRY
@@ -33,6 +34,7 @@ const EXECUTORS: Record<string, Record<string, ActionExecutor>> = {
   anthropic: anthropicExecutors,
   agent: agentExecutors,
   pipedrive: pipedriveExecutors,
+  actionflow: actionflowExecutors,
 };
 
 // =============================================================================

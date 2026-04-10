@@ -27,6 +27,7 @@ export const INTEGRATION_TYPES = [
   'OPENAI',
   'ANTHROPIC',
   'PIPEDRIVE',
+  'ACTIONFLOW',
 ] as const;
 
 export type IntegrationTypeId = typeof INTEGRATION_TYPES[number];
@@ -448,6 +449,58 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
     warnings: [
       'API tokens have full access to your Pipedrive account — treat like a password',
       'Rate limit: ~80 requests per 2 seconds (Professional plan)',
+    ],
+  },
+
+  ACTIONFLOW: {
+    id: 'ACTIONFLOW',
+    name: 'actionflow',
+    displayName: 'ActionFlow',
+    color: 'text-sky-400',
+    hasStructuredEditor: false,
+    secrets: [
+      {
+        name: 'Client ID',
+        placeholder: 'your_client_id',
+        description: 'OAuth2 client_id from ActionFlow support',
+        required: true,
+      },
+      {
+        name: 'Client Secret',
+        placeholder: 'your_client_secret',
+        description: 'OAuth2 client_secret from ActionFlow support',
+        required: true,
+      },
+      {
+        name: 'Username',
+        placeholder: 'your_username',
+        description: 'ActionFlow API username',
+        required: true,
+      },
+      {
+        name: 'Password',
+        placeholder: '********',
+        description: 'ActionFlow API password',
+        required: true,
+      },
+    ],
+    metaTemplate: {
+      enterpriseId: '',
+      fieldMap: {},
+    },
+    metaDescription: 'Configure ActionFlow EnterpriseID and optional field mappings',
+    metaFields: [
+      { key: 'enterpriseId', description: 'ActionFlow EnterpriseID (required for all API calls)', required: true },
+      { key: 'fieldMap.*', description: 'Map RevLine lead properties to ActionFlow customer fields' },
+    ],
+    tips: [
+      'Contact ActionFlow support to get your Client ID, Client Secret, and EnterpriseID',
+      'Token management is automatic — credentials are exchanged for a Bearer token on each session',
+      'EnterpriseID is sent as a header on every API call and is required',
+    ],
+    warnings: [
+      'All four credentials (Client ID, Client Secret, Username, Password) are required',
+      'Credentials are encrypted at rest and never exposed to the client',
     ],
   },
 };
