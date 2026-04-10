@@ -153,11 +153,15 @@ async function generateAIVariables(
   const metaPrompt = buildMetaPrompt(aiVars, referenceContent);
 
   try {
-    const result = await adapter.chatCompletion({
+    const aiPromise = adapter.chatCompletion({
       messages: [{ role: 'user', content: metaPrompt }],
       temperature: 0.4,
       maxTokens: 2000,
     });
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('AI generation timed out after 30s')), 30_000)
+    );
+    const result = await Promise.race([aiPromise, timeout]);
 
     if (!result.success || !result.data?.content) return null;
 
@@ -193,9 +197,7 @@ function fillSkeleton(
     const value = mergedVars[variable.key];
     const placeholder = `{${variable.key}}`;
     // Replace all occurrences (some vars like businessName appear multiple times)
-    while (result.includes(placeholder)) {
-      result = result.replace(placeholder, value);
-    }
+    result = result.replaceAll(placeholder, value);
   }
 
   return result;
