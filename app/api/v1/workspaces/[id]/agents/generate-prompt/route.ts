@@ -13,6 +13,7 @@ import { ApiResponse, ErrorCodes } from '@/app/_lib/utils/api-response';
 import { validateBody } from '@/app/_lib/utils/validation';
 import { listTemplates } from '@/app/_lib/agent/prompt-templates';
 import { generatePrompt } from '@/app/_lib/agent/prompt-generator';
+import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 
 // =============================================================================
 // SCHEMAS
@@ -21,7 +22,7 @@ import { generatePrompt } from '@/app/_lib/agent/prompt-generator';
 const GeneratePromptSchema = z.object({
   templateId: z.string().min(1, 'templateId is required'),
   variables: z.record(z.string(), z.string()).default({}),
-  referenceContent: z.string().optional(),
+  referenceContent: z.string().max(50000).optional(),
 });
 
 // =============================================================================
@@ -96,11 +97,18 @@ export async function POST(
       suggestedTools: result.suggestedTools,
     });
   } catch (err) {
-    console.error('[GeneratePrompt] POST failed:', {
-      workspaceId,
-      templateId,
-      error: err instanceof Error ? err.message : 'Unknown',
-    });
+    const errorMessage = err instanceof Error ? err.message : 'Unknown';
+    console.error('[GeneratePrompt] POST failed:', { workspaceId, templateId, error: errorMessage });
+    try {
+      await emitEvent({
+        workspaceId,
+        system: EventSystem.AGENT,
+        eventType: 'agent_prompt_generation_failed',
+        success: false,
+        errorMessage,
+        metadata: { templateId },
+      });
+    } catch { /* never break main flow */ }
     return ApiResponse.error('Failed to generate prompt', 500);
   }
 }

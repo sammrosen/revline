@@ -9,6 +9,7 @@
 
 import { prisma } from '@/app/_lib/db';
 import { resolveAI } from './adapter-registry';
+import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
 import { getTemplate } from './prompt-templates';
 import type { PromptTemplate, PromptTemplateVariable } from './prompt-templates';
 
@@ -109,6 +110,7 @@ function parseAIJson(raw: string): Record<string, string> | null {
     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
       // Coerce all values to strings
       const result: Record<string, string> = {};
+      // Safe: validated above as non-null, non-array object
       for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
         result[key] = String(value);
       }
@@ -160,7 +162,16 @@ async function generateAIVariables(
     if (!result.success || !result.data?.content) return null;
 
     return parseAIJson(result.data.content);
-  } catch {
+  } catch (error) {
+    // Emit event so silent AI failures are visible in the event ledger
+    emitEvent({
+      workspaceId,
+      system: EventSystem.AGENT,
+      eventType: 'agent_prompt_generation_failed',
+      success: false,
+      errorMessage: error instanceof Error ? error.message : 'Unknown AI error',
+      metadata: { aiProvider: aiIntegration.integration },
+    }).catch(() => {}); // Fire-and-forget — never break main flow
     return null;
   }
 }
