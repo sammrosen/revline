@@ -116,13 +116,13 @@ export async function POST(request: NextRequest) {
     const result = await emitTrigger(
       client.id,
       { adapter: 'revline', operation: 'contact-submitted' },
-      { 
-        email, 
-        name, 
+      {
+        ...(metadata ?? {}),
+        email,
+        name,
         phone,
         source,
         correlationId: registration.correlationId,
-        ...(metadata && { metadata }),
       }
     );
 

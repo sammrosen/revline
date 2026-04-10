@@ -13,7 +13,7 @@
 
 import { IntegrationType } from '@prisma/client';
 import { BaseIntegrationAdapter } from './base';
-import { RevlineMeta, IntegrationResult } from '@/app/_lib/types';
+import { RevlineMeta, IntegrationResult, LandingFormField } from '@/app/_lib/types';
 import { prisma } from '@/app/_lib/db';
 
 /**
@@ -62,6 +62,10 @@ export class RevlineAdapter extends BaseIntegrationAdapter<RevlineMeta> {
     return Object.entries(this.meta.forms)
       .filter(([, config]) => config.enabled)
       .map(([formId]) => formId);
+  }
+
+  getFormFields(): LandingFormField[] {
+    return this.meta?.copy?.landing?.formFields ?? [];
   }
 
   isFormEnabled(formId: string): boolean {
