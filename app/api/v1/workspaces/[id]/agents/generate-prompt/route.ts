@@ -14,6 +14,7 @@ import { validateBody } from '@/app/_lib/utils/validation';
 import { listTemplates } from '@/app/_lib/agent/prompt-templates';
 import { generatePrompt } from '@/app/_lib/agent/prompt-generator';
 import { emitEvent, EventSystem } from '@/app/_lib/event-logger';
+import { rateLimitByIdentifier } from '@/app/_lib/middleware/rate-limit';
 
 // =============================================================================
 // SCHEMAS
@@ -70,6 +71,11 @@ export async function POST(
     return ApiResponse.error('Insufficient permissions', 403);
   }
 
+  const rateLimit = rateLimitByIdentifier(`generate_prompt:${userId}`, { requests: 10, windowMs: 60_000 });
+  if (!rateLimit.allowed) {
+    return ApiResponse.error('Rate limit exceeded', 429);
+  }
+
   const validation = await validateBody(request, GeneratePromptSchema);
   if (!validation.success) return validation.response;
 
@@ -90,6 +96,14 @@ export async function POST(
         ErrorCodes.VALIDATION_FAILED,
       );
     }
+
+    emitEvent({
+      workspaceId,
+      system: EventSystem.AGENT,
+      eventType: 'agent_prompt_generated',
+      success: true,
+      metadata: { templateId, aiGenerated: !!referenceContent },
+    }).catch(() => {});
 
     return ApiResponse.success({
       prompt: result.prompt,
