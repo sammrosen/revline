@@ -89,16 +89,14 @@ export async function scheduleFollowUp(
 export async function cancelPendingFollowUps(
   conversationId: string,
   reason: string = 'lead_responded',
-  workspaceId?: string
+  workspaceId: string
 ): Promise<number> {
-  const where: { conversationId: string; status: FollowUpStatus; workspaceId?: string } = {
-    conversationId,
-    status: FollowUpStatus.PENDING,
-  };
-  if (workspaceId) where.workspaceId = workspaceId;
-
   const result = await prisma.followUp.updateMany({
-    where,
+    where: {
+      conversationId,
+      workspaceId,
+      status: FollowUpStatus.PENDING,
+    },
     data: { status: FollowUpStatus.CANCELLED, skipReason: reason },
   });
 
@@ -106,7 +104,7 @@ export async function cancelPendingFollowUps(
     logStructured({
       correlationId: crypto.randomUUID(),
       event: 'follow_up_cancelled',
-      workspaceId: workspaceId || '',
+      workspaceId,
       provider: 'agent',
       success: true,
       metadata: { conversationId, cancelledCount: result.count, reason },
@@ -127,8 +125,8 @@ export async function processFollowUp(
   const correlationId = crypto.randomUUID();
 
   // Pre-send check 1: conversation still ACTIVE?
-  const conversation = await prisma.conversation.findUnique({
-    where: { id: followUp.conversationId },
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: followUp.conversationId, workspaceId: followUp.workspaceId },
     select: { status: true, lastMessageAt: true, channel: true, channelIntegration: true },
   });
 
@@ -171,7 +169,7 @@ export async function processFollowUp(
   } else {
     const step = agent.followUpSequence[followUp.stepIndex];
     if (step?.variants && step.variants.length > 0) {
-      const picked = await selectVariant(step.variants, followUp.conversationId, followUp.stepIndex);
+      const picked = await selectVariant(step.variants, followUp.conversationId, followUp.stepIndex, followUp.workspaceId);
       if (picked) {
         messageText = await interpolateFollowUpTemplate(picked, followUp);
       }
@@ -372,6 +370,7 @@ async function interpolateFollowUpTemplate(
 ): Promise<string> {
   const lead = await prisma.lead.findFirst({
     where: {
+      workspaceId: followUp.workspaceId,
       conversations: { some: { id: followUp.conversationId } },
     },
     select: { email: true, properties: true },
@@ -401,13 +400,14 @@ async function interpolateFollowUpTemplate(
 async function selectVariant(
   variants: string[],
   conversationId: string,
-  stepIndex: number
+  stepIndex: number,
+  workspaceId: string
 ): Promise<string | null> {
   if (variants.length === 0) return null;
   if (variants.length === 1) return variants[0];
 
   const sent = await prisma.followUp.findMany({
-    where: { conversationId, stepIndex, status: FollowUpStatus.SENT },
+    where: { conversationId, stepIndex, workspaceId, status: FollowUpStatus.SENT },
     select: { messageText: true },
   });
   const usedTexts = new Set(sent.map((s) => s.messageText));

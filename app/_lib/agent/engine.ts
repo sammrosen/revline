@@ -6,7 +6,7 @@
  * - Loading message history and building AI requests
  * - Calling the configured AI adapter (OpenAI or Anthropic)
  * - Storing messages and updating conversation state
- * - Sending replies via the configured channel adapter (Twilio)
+ * - Sending replies via the configured channel adapter (Twilio, Resend, etc.)
  * - Emitting events into the workflow system
  *
  * Channel-agnostic and AI-agnostic: the agent config determines which
@@ -130,8 +130,8 @@ export async function handleInboundMessage(
           },
         });
 
-        const agentRecord = await prisma.agent.findUnique({
-          where: { id: params.agentId },
+        const agentRecord = await prisma.agent.findFirst({
+          where: { id: params.agentId, workspaceId: params.workspaceId },
           select: { channelType: true },
         });
         await revokeConsent(params.workspaceId, params.contactAddress, agentRecord?.channelType || params.channel);
@@ -441,8 +441,8 @@ export async function handleInboundMessage(
         let workspaceName = '';
 
         if (params.leadId) {
-          const leadRecord = await prisma.lead.findUnique({
-            where: { id: params.leadId },
+          const leadRecord = await prisma.lead.findFirst({
+            where: { id: params.leadId, workspaceId: params.workspaceId },
             select: { email: true, source: true, stage: true, properties: true },
           });
           if (leadRecord) lead = leadRecord;
@@ -484,7 +484,8 @@ export async function handleInboundMessage(
 
         await withTransaction(async (tx) => {
           await tx.conversationMessage.create({
-            data: { conversationId: conversation.id, role: 'ASSISTANT', content: faqMatch, turnLog: turnLog.length > 0 ? (turnLog as unknown as Prisma.InputJsonValue) : undefined },
+            // turnLog is a JSON-serializable array; Prisma's InputJsonValue type is too narrow
+          data: { conversationId: conversation.id, role: 'ASSISTANT', content: faqMatch, turnLog: turnLog.length > 0 ? (turnLog as unknown as Prisma.InputJsonValue) : undefined },
           });
           await tx.conversation.update({
             where: { id: conversation.id },
@@ -598,6 +599,7 @@ export async function handleInboundMessage(
         : agent.guardrails.offTopicRefusal;
 
       await prisma.conversationMessage.create({
+        // turnLog is a JSON-serializable array; Prisma's InputJsonValue type is too narrow
         data: { conversationId: conversation.id, role: 'ASSISTANT', content: refusalText, turnLog: turnLog.length > 0 ? (turnLog as unknown as Prisma.InputJsonValue) : undefined },
       });
       await prisma.conversation.update({
@@ -637,6 +639,7 @@ export async function handleInboundMessage(
 
     // 9. Load reference files and build hardened system prompt
     const basePrompt = params.systemPromptOverride || agent.systemPrompt;
+    // AgentFile has no direct workspaceId — scoped implicitly via agent FK (agent is workspace-isolated)
     const refFiles = await prisma.agentFile.findMany({
       where: { agentId: agent.id },
       select: { filename: true, textContent: true },
@@ -910,6 +913,7 @@ export async function handleInboundMessage(
           content: cleanedReply || 'Let me connect you with a team member.',
           promptTokens: completion.usage.promptTokens,
           completionTokens: completion.usage.completionTokens,
+          // turnLog is a JSON-serializable array; Prisma's InputJsonValue type is too narrow
           turnLog: turnLog.length > 0 ? (turnLog as unknown as Prisma.InputJsonValue) : undefined,
         },
       });
@@ -1002,6 +1006,7 @@ export async function handleInboundMessage(
           content: replyText,
           promptTokens: completion.usage.promptTokens,
           completionTokens: completion.usage.completionTokens,
+          // turnLog is a JSON-serializable array; Prisma's InputJsonValue type is too narrow
           turnLog: turnLog.length > 0 ? (turnLog as unknown as Prisma.InputJsonValue) : undefined,
         },
       });
@@ -1214,8 +1219,8 @@ export async function initiateConversation(
     }
 
     // 3. Resolve contact address from lead properties via registry
-    const lead = await prisma.lead.findUnique({
-      where: { id: params.leadId },
+    const lead = await prisma.lead.findFirst({
+      where: { id: params.leadId, workspaceId: params.workspaceId },
       select: { email: true, source: true, stage: true, properties: true },
     });
     if (!lead) {
@@ -1746,26 +1751,28 @@ export async function sendReply(
     }
   }
 
-  const segments = estimateSegments(sanitizedBody);
-  logStructured({
-    correlationId: crypto.randomUUID(),
-    event: 'agent_sms_segments',
-    workspaceId,
-    provider: chIntegration,
-    success: true,
-    metadata: {
-      agentId: agent.id,
-      encoding: segments.encoding,
-      segments: segments.segments,
-      characters: segments.characters,
-      sanitized: sanitizedBody !== body,
-    },
-  });
+  if (shouldSanitizeSms(chType)) {
+    const segments = estimateSegments(sanitizedBody);
+    logStructured({
+      correlationId: crypto.randomUUID(),
+      event: 'agent_sms_segments',
+      workspaceId,
+      provider: chIntegration,
+      success: true,
+      metadata: {
+        agentId: agent.id,
+        encoding: segments.encoding,
+        segments: segments.segments,
+        characters: segments.characters,
+        sanitized: sanitizedBody !== body,
+      },
+    });
+  }
 
   let metadata: ChannelMessageMetadata | undefined;
   if (chType?.toUpperCase() === 'EMAIL' && conversationId) {
-    const convo = await prisma.conversation.findUnique({
-      where: { id: conversationId },
+    const convo = await prisma.conversation.findFirst({
+      where: { id: conversationId, workspaceId },
       select: { metadata: true, messageCount: true },
     });
     const convoMeta = (convo?.metadata as Record<string, unknown>) || {};
@@ -1808,10 +1815,11 @@ export async function sendReply(
   }
 
   if (chType?.toUpperCase() === 'EMAIL' && conversationId && result.data) {
+    // ResendChannelAdapter returns SendEmailResult which includes messageId
     const sendResult = result.data as { messageId?: string };
     if (sendResult.messageId) {
-      const convo = await prisma.conversation.findUnique({
-        where: { id: conversationId },
+      const convo = await prisma.conversation.findFirst({
+        where: { id: conversationId, workspaceId },
         select: { metadata: true },
       });
       const existingMeta = (convo?.metadata as Record<string, unknown>) || {};
@@ -1937,6 +1945,7 @@ function matchFaq(
   return null;
 }
 
+// ConversationMessage has no direct workspaceId — scoped implicitly via conversation FK
 async function buildConversationSummary(conversationId: string): Promise<string> {
   const messages = await prisma.conversationMessage.findMany({
     where: { conversationId },

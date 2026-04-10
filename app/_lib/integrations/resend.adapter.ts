@@ -18,6 +18,7 @@ import { Resend } from 'resend';
 import { Webhook } from 'svix';
 import { BaseIntegrationAdapter } from './base';
 import { ResendMeta, ResendTemplate, IntegrationResult, WebhookVerification } from '@/app/_lib/types';
+import { logStructured } from '@/app/_lib/reliability';
 
 /** Default secret name for Resend API key */
 export const RESEND_API_KEY_SECRET = 'API Key';
@@ -106,7 +107,14 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
 
     // Ensure API key secret exists
     if (data.secrets.length === 0) {
-      console.warn('Resend integration has no secrets configured:', { workspaceId });
+      logStructured({
+        correlationId: crypto.randomUUID(),
+        event: 'resend_config_missing',
+        workspaceId,
+        provider: 'RESEND',
+        success: false,
+        error: 'Resend integration has no secrets configured',
+      });
       return null;
     }
     
@@ -202,8 +210,12 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
       });
 
       if (error) {
-        console.error('Resend API error:', {
+        logStructured({
+          correlationId: crypto.randomUUID(),
+          event: 'resend_send_email_failed',
           workspaceId: this.workspaceId,
+          provider: 'RESEND',
+          success: false,
           error: error.message,
         });
         await this.markUnhealthy();
@@ -216,9 +228,13 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
       });
 
     } catch (error) {
-      console.error('Resend sendEmail error:', {
+      logStructured({
+        correlationId: crypto.randomUUID(),
+        event: 'resend_send_email_failed',
         workspaceId: this.workspaceId,
-        error: error instanceof Error ? error.message : 'Unknown',
+        provider: 'RESEND',
+        success: false,
+        error: error instanceof Error ? error.message : 'Network error or API unavailable',
       });
       await this.markUnhealthy();
       return this.error(
@@ -296,10 +312,14 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
       const { data, error } = await client.emails.send(sendPayload);
 
       if (error) {
-        console.error('Resend template API error:', {
+        logStructured({
+          correlationId: crypto.randomUUID(),
+          event: 'resend_send_template_failed',
           workspaceId: this.workspaceId,
-          templateId,
+          provider: 'RESEND',
+          success: false,
           error: error.message,
+          metadata: { templateId },
         });
         await this.markUnhealthy();
         return this.error(error.message, false);
@@ -311,10 +331,14 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
       });
 
     } catch (error) {
-      console.error('Resend sendTemplate error:', {
+      logStructured({
+        correlationId: crypto.randomUUID(),
+        event: 'resend_send_template_failed',
         workspaceId: this.workspaceId,
-        templateId,
-        error: error instanceof Error ? error.message : 'Unknown',
+        provider: 'RESEND',
+        success: false,
+        error: error instanceof Error ? error.message : 'Network error or API unavailable',
+        metadata: { templateId },
       });
       await this.markUnhealthy();
       return this.error(
@@ -334,8 +358,12 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
       const { data, error } = await client.templates.list();
 
       if (error) {
-        console.error('Resend list templates error:', {
+        logStructured({
+          correlationId: crypto.randomUUID(),
+          event: 'resend_list_templates_failed',
           workspaceId: this.workspaceId,
+          provider: 'RESEND',
+          success: false,
           error: error.message,
         });
         return this.error(error.message, false);
@@ -352,9 +380,13 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
       return this.success(templates);
 
     } catch (error) {
-      console.error('Resend listRemoteTemplates error:', {
+      logStructured({
+        correlationId: crypto.randomUUID(),
+        event: 'resend_list_templates_failed',
         workspaceId: this.workspaceId,
-        error: error instanceof Error ? error.message : 'Unknown',
+        provider: 'RESEND',
+        success: false,
+        error: error instanceof Error ? error.message : 'Network error or API unavailable',
       });
       return this.error(
         error instanceof Error ? error.message : 'Network error or API unavailable',
@@ -373,10 +405,14 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
       const { data, error } = await client.templates.get(templateId);
 
       if (error) {
-        console.error('Resend get template error:', {
+        logStructured({
+          correlationId: crypto.randomUUID(),
+          event: 'resend_get_template_failed',
           workspaceId: this.workspaceId,
-          templateId,
+          provider: 'RESEND',
+          success: false,
           error: error.message,
+          metadata: { templateId },
         });
         return this.error(error.message, false);
       }
@@ -388,7 +424,7 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
       const template: RemoteResendTemplate = {
         id: data.id,
         name: data.name,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Resend SDK types omit variables from template detail response
         variables: (data as any).variables,
       };
 
@@ -396,10 +432,14 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
       return this.success(template);
 
     } catch (error) {
-      console.error('Resend getRemoteTemplate error:', {
+      logStructured({
+        correlationId: crypto.randomUUID(),
+        event: 'resend_get_template_failed',
         workspaceId: this.workspaceId,
-        templateId,
-        error: error instanceof Error ? error.message : 'Unknown',
+        provider: 'RESEND',
+        success: false,
+        error: error instanceof Error ? error.message : 'Network error or API unavailable',
+        metadata: { templateId },
       });
       return this.error(
         error instanceof Error ? error.message : 'Network error or API unavailable',
