@@ -598,6 +598,105 @@ export function normalizeMemberPayload(member: AbcIgniteMember): Record<string, 
 }
 
 // =============================================================================
+// PAYMENT PLAN & AGREEMENT TYPES
+// =============================================================================
+
+/**
+ * ABC payment plan from GET /{clubNumber}/clubs/plans
+ */
+export interface AbcPlan {
+  paymentPlanId: string;
+  name: string;
+  description?: string;
+  planType?: string;
+  term?: string;
+  paymentFrequency?: string;
+  downPaymentAmount?: string;
+  recurringPaymentAmount?: string;
+  totalAmount?: string;
+}
+
+/**
+ * ABC payment plan detail from GET /{clubNumber}/clubs/plans/{paymentPlanId}
+ * Includes planValidationHash needed for agreement creation
+ */
+export interface AbcPlanDetail extends AbcPlan {
+  planValidationHash: string;
+  membershipType?: string;
+  membershipTypeAbcCode?: string;
+  renewalType?: string;
+}
+
+/**
+ * Plans response from GET /{clubNumber}/clubs/plans
+ */
+interface AbcPlansResponse {
+  status?: AbcApiStatus;
+  plans?: AbcPlan[];
+}
+
+/**
+ * Plan detail response from GET /{clubNumber}/clubs/plans/{paymentPlanId}
+ */
+interface AbcPlanDetailResponse {
+  status?: AbcApiStatus;
+  plan?: AbcPlanDetail;
+}
+
+/**
+ * PayPage billing info for Create Agreement
+ * Uses transaction IDs from PayPage iframe tokenization
+ */
+export interface AbcPayPageBillingInfo {
+  /** PayPage transaction ID for recurring draft payments (credit card) */
+  payPageDraftCreditCard?: string;
+  /** PayPage transaction ID for recurring draft payments (bank account / EFT) */
+  payPageDraftBankAccount?: string;
+  /** PayPage transaction ID for due-today payment (credit card) */
+  payPageDueTodayCreditCard?: string;
+}
+
+/**
+ * Create Agreement request body
+ * POST /{clubNumber}/members/agreements
+ */
+export interface AbcCreateAgreementRequest {
+  agreementContactInfo: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    gender?: string;
+    dateOfBirth?: string;
+  };
+  agreementAddressInfo?: {
+    addressLine1?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    countryCode?: string;
+  };
+  agreementSalesInfo: {
+    paymentPlanId: string;
+    planValidationHash: string;
+    sendAgreementEmail?: string;
+    beginDate?: string;
+  };
+  payPageBillingInfo: AbcPayPageBillingInfo;
+}
+
+/**
+ * Create Agreement response
+ * POST /{clubNumber}/members/agreements
+ */
+export interface AbcCreateAgreementResponse {
+  status?: AbcApiStatus;
+  agreementNumber?: string;
+  memberId?: string;
+  barcode?: string;
+}
+
+// =============================================================================
 // ADAPTER CLASS
 // =============================================================================
 
@@ -1802,6 +1901,74 @@ export class AbcIgniteAdapter extends BaseIntegrationAdapter<AbcIgniteMeta> {
       valid: missing.length === 0,
       missing,
     };
+  }
+
+  // ===========================================================================
+  // PAYMENT PLAN & AGREEMENT METHODS
+  // ===========================================================================
+
+  /**
+   * Get the configured PayPage Service ID
+   */
+  getPpsId(): string | null {
+    return this.meta?.ppsId ?? null;
+  }
+
+  /**
+   * Whether ABC should send an agreement email to the new member (default true)
+   */
+  getSendAgreementEmail(): boolean {
+    return this.meta?.sendAgreementEmail !== false;
+  }
+
+  /**
+   * Fetch available payment plans from ABC
+   * GET /{clubNumber}/clubs/plans
+   */
+  async getPlans(): Promise<IntegrationResult<AbcPlan[]>> {
+    const result = await this.apiRequest<AbcPlansResponse>('GET', '/clubs/plans');
+    if (!result.success) return result as IntegrationResult<AbcPlan[]>;
+
+    const plans = result.data?.plans ?? [];
+    return this.success(plans);
+  }
+
+  /**
+   * Fetch payment plan details including planValidationHash
+   * GET /{clubNumber}/clubs/plans/{paymentPlanId}
+   */
+  async getPlanDetails(paymentPlanId: string): Promise<IntegrationResult<AbcPlanDetail>> {
+    const result = await this.apiRequest<AbcPlanDetailResponse>(
+      'GET',
+      `/clubs/plans/${encodeURIComponent(paymentPlanId)}`
+    );
+    if (!result.success) return result as IntegrationResult<AbcPlanDetail>;
+
+    const plan = result.data?.plan;
+    if (!plan) {
+      return {
+        success: false,
+        error: `Payment plan ${paymentPlanId} not found`,
+      };
+    }
+    return this.success(plan);
+  }
+
+  /**
+   * Create a membership agreement via ABC's Create Agreement API
+   * POST /{clubNumber}/members/agreements
+   *
+   * Uses PayPage transaction IDs for payment — card/bank numbers never touch our servers.
+   */
+  async createAgreement(
+    request: AbcCreateAgreementRequest
+  ): Promise<IntegrationResult<AbcCreateAgreementResponse>> {
+    const result = await this.apiRequest<AbcCreateAgreementResponse>(
+      'POST',
+      '/members/agreements',
+      request
+    );
+    return result;
   }
 
   /**

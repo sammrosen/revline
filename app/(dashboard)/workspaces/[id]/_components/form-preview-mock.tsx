@@ -253,6 +253,7 @@ export function FormPreviewMock({
           showPoweredBy: signupConfig?.features?.showPoweredBy ?? DEFAULT_SIGNUP_FEATURES.showPoweredBy,
           requireSmsConsent: signupConfig?.features?.requireSmsConsent ?? DEFAULT_SIGNUP_FEATURES.requireSmsConsent,
         }}
+        ppsId={null}
       />
     );
   }

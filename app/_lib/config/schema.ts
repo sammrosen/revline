@@ -161,6 +161,7 @@ const PaymentDetailsSchema = z.object({
 
 const SignupPlanSchema = z.object({
   id: z.string().min(1).max(60),
+  abcPaymentPlanId: z.string().max(60).optional(),
   name: z.string().min(1).max(80),
   price: z.number().min(0),
   period: z.enum(['month', 'year']),

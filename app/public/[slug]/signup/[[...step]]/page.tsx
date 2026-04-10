@@ -16,6 +16,7 @@ import { notFound } from 'next/navigation';
 import { WorkspaceStatus } from '@prisma/client';
 import { WorkspaceConfigService } from '@/app/_lib/config';
 import { getWorkspaceBySlug } from '@/app/_lib/public-page';
+import { AbcIgniteAdapter } from '@/app/_lib/integrations/abc-ignite.adapter';
 import { SignupClient } from '../client';
 
 interface SignupPageProps {
@@ -53,7 +54,11 @@ export default async function PublicSignupPage({ params }: SignupPageProps) {
     );
   }
 
-  const config = await WorkspaceConfigService.resolveForSignup(workspace.id);
+  const [config, abcAdapter] = await Promise.all([
+    WorkspaceConfigService.resolveForSignup(workspace.id),
+    AbcIgniteAdapter.forClient(workspace.id),
+  ]);
+  const ppsId = abcAdapter?.getPpsId() ?? null;
 
   if (!config.enabled) {
     return (
@@ -93,6 +98,7 @@ export default async function PublicSignupPage({ params }: SignupPageProps) {
       logoSize={config.logoSize}
       features={config.features}
       signupFeatures={config.signupFeatures}
+      ppsId={ppsId}
     />
   );
 }

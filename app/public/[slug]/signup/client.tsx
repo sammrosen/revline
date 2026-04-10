@@ -87,15 +87,9 @@ export interface SignupFormState {
   gender: string;
   homePhone: string;
   
-  // Step 5: Payment
-  paymentMethod: 'card' | 'bank';
-  cardFirstName: string;
-  cardLastName: string;
-  cardNumber: string;
-  cardExpMonth: string;
-  cardExpYear: string;
-  cardCvv: string;
-  cardZip: string;
+  // Step 5: Payment (PayPage tokens — no raw card data)
+  payPageTransactionId: string | null;
+  payPagePaymentType: string | null;
   agreeToPayment: boolean;
   agreeToTerms: boolean;
 }
@@ -116,6 +110,7 @@ interface SignupClientProps {
   features: ResolvedFeatures;
   signupFeatures: ResolvedSignupFeatures;
   previewMode?: boolean;
+  ppsId: string | null;
 }
 
 // =============================================================================
@@ -174,15 +169,9 @@ const initialFormState: SignupFormState = {
   gender: '',
   homePhone: '',
   
-  // Step 5
-  paymentMethod: 'card',
-  cardFirstName: '',
-  cardLastName: '',
-  cardNumber: '',
-  cardExpMonth: '',
-  cardExpYear: '',
-  cardCvv: '',
-  cardZip: '',
+  // Step 5 (PayPage tokens)
+  payPageTransactionId: null,
+  payPagePaymentType: null,
   agreeToPayment: false,
   agreeToTerms: false,
 };
@@ -217,6 +206,7 @@ export function SignupClient({
   features,
   signupFeatures,
   previewMode = false,
+  ppsId,
 }: SignupClientProps) {
   // features.showPoweredBy available for global branding; signupFeatures.showPoweredBy used for signup-specific
   void features;
@@ -333,21 +323,9 @@ export function SignupClient({
         }
         break;
         
-      case 5: // Payment - mock submission
-        if (!formState.cardFirstName.trim() || !formState.cardLastName.trim()) {
-          setError('Please enter the cardholder name');
-          return;
-        }
-        if (!formState.cardNumber.trim() || formState.cardNumber.replace(/\D/g, '').length < 15) {
-          setError('Please enter a valid card number');
-          return;
-        }
-        if (!formState.cardExpMonth || !formState.cardExpYear) {
-          setError('Please enter the card expiration date');
-          return;
-        }
-        if (!formState.cardCvv.trim() || formState.cardCvv.length < 3) {
-          setError('Please enter the security code');
+      case 5: // Payment — real API submission
+        if (!formState.payPageTransactionId) {
+          setError('Please complete the payment form');
           return;
         }
         if (!formState.agreeToPayment) {
@@ -358,19 +336,61 @@ export function SignupClient({
           setError('Please agree to the terms and conditions');
           return;
         }
-        
-        // Mock submission
+
+        // Build DOB string if all parts present
+        const dob = formState.birthMonth && formState.birthDay && formState.birthYear
+          ? `${formState.birthMonth}/${formState.birthDay}/${formState.birthYear}`
+          : undefined;
+
         setLoading(true);
-        setTimeout(() => {
-          setLoading(false);
-          goToStep(6);
-        }, 2000);
+        setError(null);
+        fetch(`/api/v1/signup/${encodeURIComponent(workspaceSlug)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            personalInfo: {
+              firstName: formState.firstName,
+              lastName: formState.lastName,
+              email: formState.email,
+              phone: formState.phone || undefined,
+              dateOfBirth: dob,
+              gender: formState.gender || undefined,
+            },
+            addressInfo: {
+              address: formState.address || undefined,
+              city: formState.city || undefined,
+              state: formState.state || undefined,
+              zip: formState.zipCode || undefined,
+            },
+            planId: formState.selectedPlanId,
+            payPageTransactionId: formState.payPageTransactionId,
+            payPagePaymentType: formState.payPagePaymentType || 'creditcard',
+            smsConsent: formState.smsConsent,
+            termsAccepted: formState.agreeToTerms,
+            paymentAuthorized: formState.agreeToPayment,
+            promoCode: formState.promoCode || undefined,
+          }),
+        })
+          .then(async (res) => {
+            const json = await res.json();
+            if (!res.ok) {
+              setError(json.error || 'Failed to create membership. Please try again.');
+              setLoading(false);
+              return;
+            }
+            setLoading(false);
+            goToStep(6);
+          })
+          .catch(() => {
+            setError('Network error. Please check your connection and try again.');
+            setLoading(false);
+          });
         return;
     }
     
     // Proceed to next step
     goToStep(currentStep + 1);
-  }, [currentStep, formState, signupFeatures.requireSmsConsent, goToStep, previewMode]);
+  }, [currentStep, formState, signupFeatures.requireSmsConsent, goToStep, previewMode, workspaceSlug]);
   
   // Go back to previous step
   const handleBack = useCallback(() => {
@@ -379,6 +399,15 @@ export function SignupClient({
     }
   }, [currentStep, goToStep]);
   
+  // Handle successful PayPage tokenization
+  const handlePayPageSuccess = useCallback((transactionId: string, paymentType: string) => {
+    setFormState(prev => ({
+      ...prev,
+      payPageTransactionId: transactionId,
+      payPagePaymentType: paymentType,
+    }));
+  }, []);
+
   // Reset form and start over
   const handleReset = useCallback(() => {
     setFormState(initialFormState);
@@ -512,6 +541,7 @@ export function SignupClient({
             updateForm={updateForm}
             onSubmit={handleNext}
             onBack={handleBack}
+            onPayPageSuccess={handlePayPageSuccess}
             loading={loading}
             brand={brand}
             typo={typo}
@@ -519,6 +549,7 @@ export function SignupClient({
             selectedPlan={selectedPlan}
             policies={policies}
             copy={copy}
+            ppsId={ppsId}
           />
         )}
 

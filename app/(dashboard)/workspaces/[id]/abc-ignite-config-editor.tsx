@@ -34,9 +34,9 @@ interface AbcIgniteMeta {
   clubNumber: string;
   defaultEventTypeId?: string;
   defaultEmployeeId?: string;
-  eventTypes?: Record<string, { 
-    id: string; 
-    name: string; 
+  eventTypes?: Record<string, {
+    id: string;
+    name: string;
     category: string;
     duration?: number;
     levelId?: string;
@@ -50,6 +50,13 @@ interface AbcIgniteMeta {
     enabled: boolean;
     excludedMemberTypes?: string[];
   };
+  ppsId?: string;
+  sendAgreementEmail?: boolean;
+  paymentPlans?: Record<string, {
+    id: string;
+    name: string;
+    description?: string;
+  }>;
 }
 
 interface AbcIgniteConfigEditorProps {
@@ -89,6 +96,9 @@ function parseMeta(value: string): AbcIgniteMeta {
       eventTypes: parsed.eventTypes || {},
       employees: parsed.employees || {},
       memberSync: parsed.memberSync || undefined,
+      ppsId: parsed.ppsId || undefined,
+      sendAgreementEmail: parsed.sendAgreementEmail,
+      paymentPlans: parsed.paymentPlans || undefined,
     };
   } catch {
     return DEFAULT_CONFIG;
@@ -241,6 +251,10 @@ export function AbcIgniteConfigEditor({
   const [deleteEmployeeKey, setDeleteEmployeeKey] = useState<string | null>(null);
   const [deleteEmployeeConfirm, setDeleteEmployeeConfirm] = useState('');
 
+  // Payment plan sync state
+  const [planSyncing, setPlanSyncing] = useState(false);
+  const [planSyncError, setPlanSyncError] = useState<string | null>(null);
+
   // Sync structured editor to parent
   useEffect(() => {
     if (!isJsonMode) {
@@ -261,6 +275,15 @@ export function AbcIgniteConfigEditor({
       }
       if (meta.memberSync) {
         output.memberSync = meta.memberSync;
+      }
+      if (meta.ppsId) {
+        output.ppsId = meta.ppsId;
+      }
+      if (meta.sendAgreementEmail !== undefined) {
+        output.sendAgreementEmail = meta.sendAgreementEmail;
+      }
+      if (meta.paymentPlans && Object.keys(meta.paymentPlans).length > 0) {
+        output.paymentPlans = meta.paymentPlans;
       }
       const newJson = JSON.stringify(output, null, 2);
       onChange(newJson);
@@ -286,6 +309,15 @@ export function AbcIgniteConfigEditor({
     }
     if (meta.memberSync) {
       output.memberSync = meta.memberSync;
+    }
+    if (meta.ppsId) {
+      output.ppsId = meta.ppsId;
+    }
+    if (meta.sendAgreementEmail !== undefined) {
+      output.sendAgreementEmail = meta.sendAgreementEmail;
+    }
+    if (meta.paymentPlans && Object.keys(meta.paymentPlans).length > 0) {
+      output.paymentPlans = meta.paymentPlans;
     }
     setJsonText(JSON.stringify(output, null, 2));
     setIsJsonMode(true);
@@ -806,6 +838,127 @@ export function AbcIgniteConfigEditor({
             Find this in your ABC Ignite admin dashboard
           </p>
         </div>
+      </div>
+
+      {/* PayPage & Signup Config */}
+      <div className="p-4 bg-zinc-950 rounded border border-zinc-800 space-y-4">
+        <h4 className="text-sm font-medium text-zinc-300">Signup & Payment</h4>
+        <p className="text-xs text-zinc-500 -mt-2">
+          Configure PayPage for PCI-compliant payment collection during online signup.
+        </p>
+
+        <div>
+          <label className="text-xs text-zinc-400 block mb-1.5">
+            PayPage Service ID (ppsId)
+          </label>
+          <input
+            type="text"
+            value={meta.ppsId || ''}
+            onChange={(e) => setMeta(prev => ({ ...prev, ppsId: e.target.value || undefined }))}
+            placeholder="e.g., 4D77F12E7F112D15E0633CE114AC9543"
+            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-sm font-mono text-white focus:border-orange-500/50 outline-none transition-colors"
+          />
+          <p className="text-xs text-zinc-600 mt-1">
+            PayPage Service ID from ABC. Required for online signup payment processing.
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="text-xs text-zinc-400 block">Send Agreement Email</label>
+            <p className="text-xs text-zinc-600 mt-0.5">
+              ABC emails the member a copy of their agreement
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMeta(prev => ({
+              ...prev,
+              sendAgreementEmail: prev.sendAgreementEmail === false ? true : false,
+            }))}
+            className={`w-10 h-5 rounded-full relative transition-colors ${
+              meta.sendAgreementEmail !== false ? 'bg-orange-500' : 'bg-zinc-700'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                meta.sendAgreementEmail !== false ? 'left-5' : 'left-0.5'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Sync Plans button */}
+        {integrationId && (
+          <div>
+            <button
+              type="button"
+              onClick={async () => {
+                setPlanSyncing(true);
+                setPlanSyncError(null);
+                try {
+                  const res = await fetch(`/api/v1/integrations/${integrationId}/test`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      method: 'GET',
+                      endpoint: `/${meta.clubNumber}/clubs/plans`,
+                    }),
+                  });
+                  const json = await res.json();
+                  if (!res.ok) {
+                    setPlanSyncError(json.error || 'Failed to fetch plans');
+                    return;
+                  }
+                  const plans = json.data?.plans || json.data?.data?.plans || [];
+                  if (!Array.isArray(plans) || plans.length === 0) {
+                    setPlanSyncError('No payment plans found');
+                    return;
+                  }
+                  const mapped: Record<string, { id: string; name: string; description?: string }> = {};
+                  for (const p of plans) {
+                    mapped[p.paymentPlanId || p.id] = {
+                      id: p.paymentPlanId || p.id,
+                      name: p.name || 'Unnamed Plan',
+                      description: p.description,
+                    };
+                  }
+                  setMeta(prev => ({ ...prev, paymentPlans: mapped }));
+                } catch {
+                  setPlanSyncError('Network error syncing plans');
+                } finally {
+                  setPlanSyncing(false);
+                }
+              }}
+              disabled={planSyncing || !meta.clubNumber}
+              className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded border border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {planSyncing ? (
+                <>
+                  <div className="animate-spin w-3 h-3 border-2 border-zinc-500 border-t-orange-500 rounded-full" />
+                  Syncing...
+                </>
+              ) : (
+                <>Sync Plans from ABC</>
+              )}
+            </button>
+            {planSyncError && (
+              <p className="text-xs text-red-400 mt-1">{planSyncError}</p>
+            )}
+            {meta.paymentPlans && Object.keys(meta.paymentPlans).length > 0 && (
+              <div className="mt-2 space-y-1">
+                <p className="text-xs text-zinc-400">
+                  {Object.keys(meta.paymentPlans).length} plan{Object.keys(meta.paymentPlans).length !== 1 ? 's' : ''} synced:
+                </p>
+                {Object.entries(meta.paymentPlans).map(([key, plan]) => (
+                  <div key={key} className="text-xs text-zinc-500 font-mono pl-2">
+                    {plan.id}: {plan.name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Member Sync */}

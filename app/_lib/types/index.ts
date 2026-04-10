@@ -316,6 +316,16 @@ export interface AbcIgniteMeta {
      */
     excludedMemberTypes?: string[];
   };
+  /** PayPage Service ID for payment tokenization iframe */
+  ppsId?: string;
+  /** Whether ABC sends agreement email to new member (default true) */
+  sendAgreementEmail?: boolean;
+  /** Synced payment plans from ABC (key → { id, name, description }) */
+  paymentPlans?: Record<string, {
+    id: string;
+    name: string;
+    description?: string;
+  }>;
 }
 
 // =============================================================================
@@ -520,6 +530,8 @@ export interface SignupPaymentDetails {
 export interface SignupPlan {
   /** Unique plan identifier */
   id: string;
+  /** ABC payment plan ID (maps to ABC's paymentPlanId for agreement creation) */
+  abcPaymentPlanId?: string;
   /** Display name (e.g., "Premier All Location") */
   name: string;
   /** Price amount */

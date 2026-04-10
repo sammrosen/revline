@@ -764,6 +764,7 @@ export class WorkspaceConfigService {
 
       return {
         id: plan.id || `plan-${Date.now()}`,
+        abcPaymentPlanId: plan.abcPaymentPlanId,
         name: sanitizeCopyText(plan.name || 'Membership', 100),
         price: typeof plan.price === 'number' ? plan.price : 0,
         period: plan.period === 'year' ? 'year' : 'month',
