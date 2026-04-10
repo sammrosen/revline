@@ -119,21 +119,24 @@ async function buildTriggersWithDynamic(
     if (revlineAdapter) {
       const enabledForms = revlineAdapter.getEnabledForms();
 
-      // Build testFields from workspace form config (falls back to defaults)
-      const formFields = revlineAdapter.getFormFields();
-      const testFields: TestField[] = formFields.length > 0
-        ? formFields.map(f => ({
-            name: f.id,
-            label: f.label,
-            type: (f.type === 'email' ? 'email' : 'text') as TestField['type'],
-            required: f.required ?? false,
-          }))
-        : DEFAULT_REVLINE_TEST_FIELDS;
-
-      // For each enabled form, get all its declared triggers
+      // For each enabled form, get its declared triggers with per-form testFields
       revlineTriggers = enabledForms.flatMap(formId => {
         const triggers = getFormTriggers(formId);
         const formLabel = getFormLabel(formId);
+
+        // Build testFields from this form's configured fields
+        // Landing page fields come from workspace pagesConfig; other forms use defaults
+        const formFields = formId === 'landing-page'
+          ? revlineAdapter.getFormFields()
+          : [];
+        const testFields: TestField[] = formFields.length > 0
+          ? formFields.map(f => ({
+              name: f.id,
+              label: f.label,
+              type: (f.type === 'email' ? 'email' : 'text') as TestField['type'],
+              required: f.required ?? false,
+            }))
+          : DEFAULT_REVLINE_TEST_FIELDS;
 
         return triggers.map(t => ({
           name: t.id, // Trigger ID is the workflow operation

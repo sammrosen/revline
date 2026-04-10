@@ -5,7 +5,7 @@ import { getWorkspaceAccess } from '@/app/_lib/workspace-access';
 import {
   checkTriggerCompatibility,
   checkTriggerCompatibilityWithDynamicFields,
-  extractCustomFormFields,
+  extractFormFieldsForTrigger,
 } from '@/app/_lib/services/payload-compatibility';
 import type { LeadPropertyDefinition } from '@/app/_lib/types';
 
@@ -57,11 +57,11 @@ export async function GET(
 
   const leadPropertySchema = (workspace.leadPropertySchema as LeadPropertyDefinition[] | null) ?? [];
 
-  // RevLine triggers may have dynamic custom form fields from workspace config
+  // RevLine triggers may have dynamic form fields from workspace config
   const result = adapter === 'revline'
     ? checkTriggerCompatibilityWithDynamicFields(
         adapter, operation, leadPropertySchema,
-        extractCustomFormFields(workspace.pagesConfig)
+        extractFormFieldsForTrigger(workspace.pagesConfig, operation)
       )
     : checkTriggerCompatibility(adapter, operation, leadPropertySchema);
 

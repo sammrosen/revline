@@ -82,8 +82,6 @@ function typoStyle(role?: { size?: string; weight?: string }): React.CSSProperti
   };
 }
 
-const KNOWN_FIELDS = new Set(['name', 'email', 'phone']);
-
 // =============================================================================
 // COMPONENT
 // =============================================================================
@@ -132,28 +130,28 @@ export function LandingClient({
     setFormError(null);
 
     try {
-      const metadata: Record<string, string> = {};
+      // Collect all form field values into a flat data object
+      const data: Record<string, string> = {};
       for (const field of copy.formFields) {
-        if (!KNOWN_FIELDS.has(field.id) && formValues[field.id]) {
-          metadata[field.id] = formValues[field.id];
+        if (formValues[field.id]) {
+          data[field.id] = formValues[field.id];
         }
       }
 
-      const res = await fetch('/api/v1/subscribe', {
+      const res = await fetch('/api/v1/form-submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: emailValue,
-          name: formValues['name'] || undefined,
-          phone: formValues['phone'] || undefined,
+          formId: 'landing-page',
+          trigger: 'contact-submitted',
           source: workspaceSlug,
-          ...(Object.keys(metadata).length > 0 && { metadata }),
+          data,
         }),
       });
 
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || 'Something went wrong');
+        const errBody = await res.json().catch(() => null);
+        throw new Error(errBody?.error || 'Something went wrong');
       }
 
       setFormSuccess(true);
