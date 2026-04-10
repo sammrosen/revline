@@ -59,6 +59,15 @@ export async function buildConversationNotification(
   });
 
   if (!conversation) {
+    emitEvent({
+      workspaceId,
+      system: EventSystem.AGENT,
+      eventType: 'agent_summary_not_found',
+      success: false,
+      errorMessage: `Conversation ${conversationId} not found`,
+      metadata: { conversationId },
+    }).catch(() => {}); // Fire-and-forget — never break notification flow
+
     return {
       summary: 'Conversation not found.',
       outcome: 'completed',

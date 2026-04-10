@@ -27,11 +27,13 @@ const notifyOwner: ActionExecutor = {
     ctx: WorkflowContext,
     params: Record<string, unknown>
   ): Promise<ActionResult> {
+    // Params pre-validated by paramsSchema in registry.ts
     const conversationId = (ctx.trigger.payload.conversationId ?? params.conversationId) as string | undefined;
     if (!conversationId) {
       return { success: false, error: 'Missing conversationId in trigger payload' };
     }
 
+    // Params pre-validated by paramsSchema in registry.ts
     const notifyTarget = (params.notifyTarget as string) || 'owner';
     const includeTranscript = params.includeTranscript !== false;
 
@@ -53,7 +55,7 @@ const notifyOwner: ActionExecutor = {
           eventType: 'agent_notify_skipped',
           success: true,
           metadata: { reason: 'no_recipients', notifyTarget },
-        });
+        }).catch(() => {}); // Fire-and-forget — don't lose result if emit fails
 
         return {
           success: true,
@@ -68,7 +70,7 @@ const notifyOwner: ActionExecutor = {
       // 4. Build email
       const email = buildConversationNotifyEmail(summaryData, dashboardUrl);
 
-      // Override subject if provided in params
+      // Override subject if provided in params — pre-validated by paramsSchema in registry.ts
       const customSubject = params.subject as string | undefined;
       if (customSubject) {
         email.subject = customSubject;
@@ -135,7 +137,7 @@ const notifyOwner: ActionExecutor = {
         success: false,
         errorMessage: message,
         metadata: { conversationId },
-      });
+      }).catch(() => {}); // Fire-and-forget — don't lose error result if emit fails
 
       return { success: false, error: `Notification failed: ${message}` };
     }
