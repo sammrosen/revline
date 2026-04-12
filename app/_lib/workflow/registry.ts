@@ -814,6 +814,25 @@ export const AGENT_ADAPTER: AdapterDefinition = {
         { name: 'messageText', label: 'Message', type: 'text' as const, required: false, placeholder: 'Override initial message (optional)' },
       ],
     },
+    notify_owner: {
+      name: 'notify_owner',
+      label: 'Notify Owner',
+      description: 'Send the workspace owner an email summary of the conversation',
+      payloadSchema: z.object({
+        agentId: z.string(),
+        conversationId: z.string(),
+        reason: z.string().optional(),
+        leadId: z.string().optional(),
+      }),
+      paramsSchema: z.object({
+        notifyTarget: z.enum(['owner', 'admin', 'all']).default('owner'),
+        includeTranscript: z.boolean().default(true),
+        subject: z.string().optional(),
+      }),
+      testFields: [
+        { name: 'conversationId', label: 'Conversation ID', type: 'text' as const, required: true },
+      ],
+    },
   },
 };
 
