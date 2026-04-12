@@ -146,6 +146,10 @@ export function LandingClient({
           trigger: 'contact-submitted',
           source: workspaceSlug,
           data,
+          ...(copy.consentText && consentChecked ? {
+            consentGiven: true,
+            consentText: copy.consentText,
+          } : {}),
         }),
       });
 
