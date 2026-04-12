@@ -132,16 +132,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return ApiResponse.webhookAck({ warning: 'Resend not configured' });
     }
 
-    if (!resendAdapter.isWebhookConfigured()) {
-      await WebhookProcessor.markFailed(registration.id, 'Webhook secret not configured');
-      return ApiResponse.webhookAck({ warning: 'Webhook secret not configured' });
+    if (!resendAdapter.isWebhookConfigured('inbound')) {
+      await WebhookProcessor.markFailed(registration.id, 'Inbound webhook secret not configured');
+      return ApiResponse.webhookAck({ warning: 'Inbound webhook secret not configured' });
     }
 
     const verification = resendAdapter.verifyWebhook(rawBody, {
       svixId,
       svixTimestamp,
       svixSignature,
-    });
+    }, 'inbound');
 
     if (!verification.valid) {
       await WebhookProcessor.markFailed(registration.id, verification.error || 'Signature verification failed');

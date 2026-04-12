@@ -22,8 +22,14 @@ import { logStructured } from '@/app/_lib/reliability';
 
 /** Default secret name for Resend API key */
 export const RESEND_API_KEY_SECRET = 'API Key';
-/** Secret name for Resend webhook signing secret */
+/** Legacy secret name for Resend webhook signing secret (backward compat) */
 export const RESEND_WEBHOOK_SECRET = 'Webhook Secret';
+/** Secret name for delivery/event webhook signing secret */
+export const RESEND_WEBHOOK_SECRET_DELIVERY = 'Webhook Secret - Delivery';
+/** Secret name for inbound email webhook signing secret */
+export const RESEND_WEBHOOK_SECRET_INBOUND = 'Webhook Secret - Inbound';
+
+export type ResendWebhookType = 'delivery' | 'inbound';
 
 /**
  * Result of sending an email
@@ -453,26 +459,40 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
   // ===========================================================================
 
   /**
-   * Get the configured webhook signing secret from secrets store
+   * Get the configured webhook signing secret from secrets store.
+   * Legacy method — prefers type-specific secrets, falls back to legacy name.
    */
-  getWebhookSecret(): string | null {
+  getWebhookSecret(type?: ResendWebhookType): string | null {
+    if (type === 'delivery') {
+      return this.getSecret(RESEND_WEBHOOK_SECRET_DELIVERY)
+        || this.getSecret(RESEND_WEBHOOK_SECRET)
+        || null;
+    }
+    if (type === 'inbound') {
+      return this.getSecret(RESEND_WEBHOOK_SECRET_INBOUND)
+        || this.getSecret(RESEND_WEBHOOK_SECRET)
+        || null;
+    }
+    // No type specified — try legacy name
     return this.getSecret(RESEND_WEBHOOK_SECRET) || null;
   }
 
   /**
    * Verify and parse a Resend webhook payload using Svix signature verification.
-   * 
+   *
    * @param rawBody - The raw request body string (must NOT be parsed/stringified)
    * @param headers - The svix headers from the request
+   * @param type - Which webhook endpoint to verify against (delivery or inbound)
    * @returns Verified payload or error
    */
   verifyWebhook(
     rawBody: string,
-    headers: { svixId: string; svixTimestamp: string; svixSignature: string }
+    headers: { svixId: string; svixTimestamp: string; svixSignature: string },
+    type?: ResendWebhookType
   ): WebhookVerification {
-    const secret = this.getWebhookSecret();
+    const secret = this.getWebhookSecret(type);
     if (!secret) {
-      return { valid: false, error: 'Webhook secret not configured in Resend integration meta' };
+      return { valid: false, error: `Webhook secret not configured for ${type || 'default'} endpoint` };
     }
 
     try {
@@ -501,10 +521,10 @@ export class ResendAdapter extends BaseIntegrationAdapter<ResendMeta> {
   }
 
   /**
-   * Check if webhook verification is configured
+   * Check if webhook verification is configured for a specific endpoint type.
    */
-  isWebhookConfigured(): boolean {
-    return !!this.getWebhookSecret();
+  isWebhookConfigured(type?: ResendWebhookType): boolean {
+    return !!this.getWebhookSecret(type);
   }
 
   /**

@@ -276,9 +276,15 @@ export const INTEGRATIONS: Record<IntegrationTypeId, IntegrationConfig> = {
         required: true,
       },
       {
-        name: 'Webhook Secret',
+        name: 'Webhook Secret - Delivery',
         placeholder: 'whsec_xxxxxxxxxxxxx',
-        description: 'From Resend → Webhooks → Your endpoint → Signing secret',
+        description: 'Signing secret for the delivery/event webhook endpoint (bounces, opens, clicks)',
+        required: false,
+      },
+      {
+        name: 'Webhook Secret - Inbound',
+        placeholder: 'whsec_xxxxxxxxxxxxx',
+        description: 'Signing secret for the inbound email webhook endpoint',
         required: false,
       },
     ],
