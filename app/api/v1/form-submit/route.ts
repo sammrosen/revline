@@ -216,6 +216,16 @@ export async function POST(request: NextRequest) {
         consentTargets.push({ address: phoneValue, channel: 'SMS' });
       }
 
+      if (consentTargets.length === 0) {
+        logStructured({
+          correlationId: registration.correlationId,
+          event: 'consent_record_skipped',
+          workspaceId: client.id,
+          provider: 'revline',
+          metadata: { formId, reason: 'no_contact_address_found' },
+        });
+      }
+
       for (const { address, channel } of consentTargets) {
         recordConsent({
           workspaceId: client.id,
