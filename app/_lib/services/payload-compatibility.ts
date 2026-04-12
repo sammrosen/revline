@@ -20,6 +20,7 @@
 
 import { z } from 'zod';
 import { getTrigger, ADAPTER_REGISTRY } from '@/app/_lib/workflow/registry';
+import { getFormByTriggerId } from '@/app/_lib/forms/registry';
 import type { LeadPropertyDefinition, LeadPropertyType, LandingFormField } from '@/app/_lib/types';
 
 // =============================================================================
@@ -31,7 +32,7 @@ export interface CompatibilityResult {
   matched: { key: string; label: string; type: LeadPropertyType }[];
   /** Fields from the payload that could be captured but aren't in the schema */
   available: { key: string; suggestion: LeadPropertyDefinition }[];
-  /** Total non-email fields in the payload schema */
+  /** Total fields in the payload schema */
   totalPayloadFields: number;
   /** Number of matched fields */
   totalMatched: number;
@@ -141,12 +142,12 @@ function keyToLabel(key: string): string {
 }
 
 /**
- * Extract non-email field keys from a Zod payload schema.
+ * Extract field keys from a Zod payload schema.
  */
 function extractPayloadKeys(payloadSchema: z.ZodSchema): string[] {
   const shape = getZodObjectShape(payloadSchema);
   if (!shape) return [];
-  return Object.keys(shape).filter(k => k !== 'email');
+  return Object.keys(shape);
 }
 
 // =============================================================================
@@ -168,8 +169,7 @@ export function getPayloadCompatibility(
   const existingKeys = new Set(leadPropertySchema.map(d => d.key));
   const existingDefs = new Map(leadPropertySchema.map(d => [d.key, d]));
 
-  // Skip 'email' — it's always the lead identifier, not a property
-  const payloadKeys = Object.keys(shape).filter(k => k !== 'email');
+  const payloadKeys = Object.keys(shape);
 
   const matched: CompatibilityResult['matched'] = [];
   const available: CompatibilityResult['available'] = [];
@@ -224,12 +224,10 @@ export function checkTriggerCompatibility(
   return getPayloadCompatibility(schema, leadPropertySchema);
 }
 
-// Known fields handled by the static schema — mirrors KNOWN_FIELDS in client.tsx:85
-const STATIC_PAYLOAD_KEYS = new Set(['email', 'name', 'phone', 'source']);
-
 /**
- * Extract custom form fields from workspace pagesConfig.
- * Filters out fields already covered by the static payload schema.
+ * Extract form fields from workspace pagesConfig for the landing page.
+ * Filters out email (always the lead identifier, never a property).
+ * All other configured fields are returned so they surface in Lead Properties.
  */
 export function extractCustomFormFields(pagesConfig: unknown): LandingFormField[] {
   if (!pagesConfig || typeof pagesConfig !== 'object') return [];
@@ -243,8 +241,30 @@ export function extractCustomFormFields(pagesConfig: unknown): LandingFormField[
     (f): f is LandingFormField =>
       typeof f === 'object' && f !== null &&
       typeof f.id === 'string' && typeof f.label === 'string' &&
-      typeof f.type === 'string' && !STATIC_PAYLOAD_KEYS.has(f.id)
+      typeof f.type === 'string' && f.id !== 'email'
   );
+}
+
+/**
+ * Extract form fields for a specific trigger operation.
+ * Maps the trigger back to its owning form, then reads the appropriate
+ * field configuration. For landing-page triggers, reads from pagesConfig.
+ * Returns empty array for unrecognized triggers or forms without dynamic fields.
+ */
+export function extractFormFieldsForTrigger(
+  pagesConfig: unknown,
+  operation: string
+): LandingFormField[] {
+  const form = getFormByTriggerId(operation);
+  if (!form) return [];
+
+  // Landing page fields are user-configurable via pagesConfig
+  if (form.id === 'landing-page') {
+    return extractCustomFormFields(pagesConfig);
+  }
+
+  // Other forms have static payloads — no dynamic fields to add
+  return [];
 }
 
 function formFieldTypeToPropertyType(type: string): LeadPropertyType {

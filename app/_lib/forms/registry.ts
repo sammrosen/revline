@@ -242,3 +242,11 @@ export function getFormIntegrationDependencies(formId: string): string[] {
   const ops = getFormOperations(formId);
   return [...new Set(ops.map(op => op.adapter))];
 }
+
+/**
+ * Reverse lookup: find the form that owns a given trigger ID.
+ * Returns undefined if no form declares that trigger.
+ */
+export function getFormByTriggerId(triggerId: string): FormRegistryEntry | undefined {
+  return FORM_REGISTRY.find(f => f.triggers.some(t => t.id === triggerId));
+}
