@@ -28,6 +28,7 @@ import {
   logStructured,
 } from '@/app/_lib/reliability';
 import { RevlineAdapter } from '@/app/_lib/integrations/revline.adapter';
+import { recordConsent, ConsentType, ConsentMethod } from '@/app/_lib/services/consent.service';
 
 /**
  * Form submission request body
@@ -38,6 +39,10 @@ interface FormSubmissionBody {
   trigger: string;
   source: string;
   data: Record<string, unknown>;
+  /** True when user checked the consent checkbox */
+  consentGiven?: boolean;
+  /** Verbatim consent text displayed to the user (regulatory: store what was presented) */
+  consentText?: string;
 }
 
 /**
@@ -52,7 +57,7 @@ function validateSubmissionBody(body: unknown): {
     return { success: false, error: 'Invalid request body' };
   }
 
-  const { formId, trigger, source, data } = body as Record<string, unknown>;
+  const { formId, trigger, source, data, consentGiven, consentText } = body as Record<string, unknown>;
 
   if (!formId || typeof formId !== 'string') {
     return { success: false, error: 'Missing or invalid formId' };
@@ -77,6 +82,10 @@ function validateSubmissionBody(body: unknown): {
       trigger,
       source,
       data: data as Record<string, unknown>,
+      ...(consentGiven === true && typeof consentText === 'string'
+          && consentText.length > 0 && consentText.length <= 2000
+        ? { consentGiven: true, consentText }
+        : {}),
     },
   };
 }
@@ -191,6 +200,44 @@ export async function POST(request: NextRequest) {
 
     // 10. Claim for processing
     await WebhookProcessor.markProcessing(registration.id);
+
+    // 10b. Record consent if granted (fire-and-forget, never blocks submission)
+    if (validation.data.consentGiven && validation.data.consentText) {
+      const consentTargets: Array<{ address: string; channel: string }> = [];
+
+      const emailValue = typeof data.email === 'string' ? data.email : undefined;
+      const rawPhone = data.phone ?? data.phoneNumber ?? data.mobile;
+      const phoneValue = typeof rawPhone === 'string' ? rawPhone : undefined;
+
+      if (emailValue) {
+        consentTargets.push({ address: emailValue, channel: 'EMAIL' });
+      }
+      if (phoneValue) {
+        consentTargets.push({ address: phoneValue, channel: 'SMS' });
+      }
+
+      if (consentTargets.length === 0) {
+        logStructured({
+          correlationId: registration.correlationId,
+          event: 'consent_record_skipped',
+          workspaceId: client.id,
+          provider: 'revline',
+          metadata: { formId, reason: 'no_contact_address_found' },
+        });
+      }
+
+      for (const { address, channel } of consentTargets) {
+        recordConsent({
+          workspaceId: client.id,
+          contactAddress: address,
+          channel,
+          consentType: ConsentType.MARKETING,
+          method: ConsentMethod.WEB_FORM,
+          languagePresented: validation.data.consentText,
+          ipAddress: clientIP || undefined,
+        }).catch(() => {}); // recordConsent logs failures internally
+      }
+    }
 
     // 11. Build payload - flatten form data into payload
     const payload = {

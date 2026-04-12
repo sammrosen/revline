@@ -21,6 +21,8 @@ import {
   X,
   ShieldAlert,
 } from 'lucide-react';
+import { PromptTemplatePicker } from './_components/prompt-template-picker';
+import type { GenerateResult } from './_components/prompt-template-picker';
 
 interface AgentChannelEntry {
   channel: string;
@@ -178,6 +180,7 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
     index: number;
     triggerStart: number;
   }>({ open: false, filter: '', index: 0, triggerStart: 0 });
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
   const fetchWorkspaceData = useCallback(async () => {
     try {
@@ -853,6 +856,19 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
         {/* System Prompt */}
         <Section icon={FileText} title="System Prompt">
           <div className="space-y-2">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs text-zinc-600">
+                The AI&apos;s personality and instructions — sent as the system/developer message on every turn.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowTemplatePicker(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-400 border border-violet-500/30 rounded hover:bg-violet-500/10 transition-colors shrink-0 ml-3"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Use Template
+              </button>
+            </div>
             <textarea
               value={data.systemPrompt}
               onChange={(e) => setData({ ...data, systemPrompt: e.target.value })}
@@ -860,11 +876,24 @@ export function AgentEditor({ workspaceId, agentId, onClose, onSave }: AgentEdit
               rows={8}
               className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder:text-zinc-600 focus:border-violet-500 focus:outline-none resize-y font-mono"
             />
-            <p className="text-xs text-zinc-600">
-              This is the AI&apos;s personality and instructions. It&apos;s sent as the system/developer message on every turn.
-            </p>
           </div>
         </Section>
+
+        {showTemplatePicker && (
+          <PromptTemplatePicker
+            workspaceId={workspaceId}
+            onGenerate={(result: GenerateResult) => {
+              setData((prev) => ({
+                ...prev,
+                systemPrompt: result.prompt,
+                ...(result.initialMessage ? { initialMessage: result.initialMessage } : {}),
+                ...(result.suggestedTools?.length ? { enabledTools: result.suggestedTools } : {}),
+              }));
+              setShowTemplatePicker(false);
+            }}
+            onClose={() => setShowTemplatePicker(false)}
+          />
+        )}
 
         {/* Reference Files */}
         {agentId && (
