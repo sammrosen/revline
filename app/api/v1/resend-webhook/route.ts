@@ -18,7 +18,7 @@
  * - Non-destructive: only sets errorState, never changes stage or properties
  */
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getActiveClient } from '@/app/_lib/client-gate';
 import {
   ResendAdapter,
@@ -46,7 +46,7 @@ const EVENT_TO_TRIGGER: Record<string, string> = {
   'email.delivery_delayed': 'email_delivery_delayed',
 };
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   // 1. Read raw body FIRST (can only read once in Next.js)
   const rawBody = await request.text();
 
@@ -153,10 +153,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (!resendAdapter.isWebhookConfigured()) {
-      await WebhookProcessor.markFailed(registration.id, 'Webhook secret not configured');
+    if (!resendAdapter.isWebhookConfigured('delivery')) {
+      await WebhookProcessor.markFailed(registration.id, 'Delivery webhook secret not configured');
       return ApiResponse.webhookAck({
-        warning: 'Webhook secret not configured',
+        warning: 'Delivery webhook secret not configured',
       });
     }
 
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
       svixId,
       svixTimestamp,
       svixSignature,
-    });
+    }, 'delivery');
 
     if (!verification.valid) {
       await WebhookProcessor.markFailed(registration.id, verification.error || 'Signature verification failed');

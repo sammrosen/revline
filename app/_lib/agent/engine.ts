@@ -1315,12 +1315,18 @@ export async function initiateConversation(
     });
     const workspaceName = workspace?.name || '';
 
-    const rawText = params.messageText || agent.initialMessage;
-    if (!rawText) {
-      return errorResponse(
-        'No message to send: agent has no initialMessage and no messageText was provided',
-        correlationId
-      );
+    const rawText = params.messageText
+      || agent.initialMessage
+      || `Hi! I'm reaching out from ${workspaceName || 'our team'}.`;
+
+    if (!params.messageText && !agent.initialMessage) {
+      logStructured({
+        correlationId,
+        event: 'agent_initiate_default_greeting',
+        workspaceId: params.workspaceId,
+        provider: 'agent',
+        metadata: { agentId: agent.id, reason: 'no initialMessage configured' },
+      });
     }
 
     const outboundText = interpolateLeadVariables(rawText, lead, workspaceName);

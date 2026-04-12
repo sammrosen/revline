@@ -91,10 +91,13 @@ class ResendChannelAdapter implements ChannelAdapter {
     if (metadata?.inReplyTo) headers['In-Reply-To'] = metadata.inReplyTo;
     if (metadata?.references) headers['References'] = metadata.references;
 
+    // Wrap plain-text AI response in HTML so email clients render line breaks properly
+    const html = `<div style="font-family: sans-serif; font-size: 14px; line-height: 1.5; white-space: pre-wrap;">${body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`;
+
     return this.adapter.sendEmail({
       to: toAddress,
       subject: metadata?.subject || 'New message',
-      html: body,
+      html,
       replyTo: fromAddress,
       fromEmail: fromAddress,
       headers: Object.keys(headers).length > 0 ? headers : undefined,
